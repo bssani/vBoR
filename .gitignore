@@ -73,3 +73,7 @@ Plugins/**/Intermediate/*
 
 # Cache files for the editor to use
 DerivedDataCache/*
+
+# Meta XR plugin (Meta Platforms, from Fab) — third-party SDK, not redistributed in this public repo.
+# Install per PC from Fab: Meta XR plugin 1.205.0 → Plugins/MetaXR/
+Plugins/MetaXR/
