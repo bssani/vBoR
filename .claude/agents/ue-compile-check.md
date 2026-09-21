@@ -31,8 +31,9 @@ Review only what changed. Start with `git diff --name-only $(git merge-base HEAD
 - Signatures that differ between declaration and definition, `override` without a matching virtual, missing `Super::` calls in lifecycle overrides (`BeginPlay`, `EndPlay`, `Tick`, `GetLifetimeReplicatedProps`), `const` mismatches, and templates used on incomplete types.
 - Engine APIs that were renamed or deprecated as errors by UE 5.7. Flag these only when you are confident, and say how confident you are.
 
-**Third-party plugins that are not in this checkout**
-- The Meta XR plugin (`OculusXR*` modules) is gitignored, so its headers are absent. Any call into it cannot be verified here. List each one as "needs local verification" instead of guessing whether it is right.
+**Meta XR plugin calls**
+- The Meta XR plugin 1.205.0 is committed under `Plugins/MetaXR/` (`OculusXRHMD`, `OculusXRInput`, `OculusXRMovement`, `MRUtilityKit`, and more). Check every `OculusXR*` or `MRUK*` call against the headers there: the function exists, the signature and enum values match, and the module is listed in `vBoR.Build.cs`. Do not judge these calls from memory.
+- If `Plugins/MetaXR/` is missing from the checkout, list each such call as "needs local verification" instead of guessing.
 
 ## Report
 

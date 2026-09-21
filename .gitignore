@@ -74,6 +74,10 @@ Plugins/**/Intermediate/*
 # Cache files for the editor to use
 DerivedDataCache/*
 
-# Meta XR plugin (Meta Platforms, from Fab) — third-party SDK, not redistributed in this public repo.
-# Install per PC from Fab: Meta XR plugin 1.205.0 → Plugins/MetaXR/
-Plugins/MetaXR/
+# Meta XR plugin 1.205.0 (Meta Platforms, from Fab) is committed so every clone builds, and so
+# sessions without the plugin installed can read its headers. This repo must stay private: parts of
+# the plugin are under the Oculus SDK License. Its prebuilt third-party libraries would be dropped
+# by the *.dll / *.lib / *.so rules above, which would leave a clone that cannot link.
+!Plugins/MetaXR/Source/Thirdparty/**/*.dll
+!Plugins/MetaXR/Source/Thirdparty/**/*.lib
+!Plugins/MetaXR/Source/Thirdparty/**/*.so

@@ -105,7 +105,7 @@ elif [ -n "$target_name" ]; then
 fi
 
 if [ "$metaxr_present" = "false" ]; then
-  # The Meta XR plugin is gitignored (third-party SDK), so clones don't have its headers.
+  # The Meta XR plugin is normally committed; this only fires if a checkout lacks it.
   context="$context The Meta XR plugin (OculusXR* modules) is not in this checkout, so its API cannot be read here."
   context="$context Do not write OculusXR calls from memory: prefer engine-level XR APIs (OpenXR / HeadMountedDisplay),"
   context="$context and if a Meta-specific call is unavoidable, isolate it in one small file and flag it for local verification."
