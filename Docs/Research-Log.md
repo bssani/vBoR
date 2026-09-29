@@ -1,0 +1,224 @@
+# 조사·결정 기록
+
+문서 셋에서 이 파일의 자리:
+
+- **[Dev-Plan-50pct-VR.md](Dev-Plan-50pct-VR.md)** — 무엇을 만들 것인가. 범위·결정 상태·시나리오 표·개발 단계·시험 계획.
+- **[../CLAUDE.md](../CLAUDE.md)** — 코드를 쓸 때 매번 필요한 규칙.
+- **이 파일** — 그 결정들이 **무엇을 근거로** 내려졌는가. 확인한 플러그인 헤더·버전·외부 사실과, 검토했지만 채택하지 않은 것들.
+
+결정을 나중에 재검토할 때 같은 조사를 다시 하지 않기 위한 기록이다. 근거가 바뀌면(플러그인 버전 교체 등) 해당 항목을 갱신한다.
+
+---
+
+## 2026-09 — 인터랙션 어휘·장비 확정
+
+### 1. 확정된 결정
+
+| 결정 | 내용 | 기록 위치 |
+|---|---|---|
+| U-03 | 핸드 트래킹 조작을 **1축 제약까지** 허용. 자유 6DoF·손가락 물리·자체 제스처 인식기·던지기는 계속 제외 | 계획서 §2, §5 / CLAUDE.md |
+| U-03 | 장비는 **Meta Quest 3 단독**. 데이터 글로브·외부 트래커 없음 | 계획서 §2 / CLAUDE.md |
+| U-03 | **VR이다. 실물은 좌석뿐이고 나머지는 허공.** 손은 가상 형상을 통과한다 | CLAUDE.md / 계획서 §5 |
+| U-04 | 몰린 버튼에서 평가하는 것은 **찾기·읽기·도달성**. 오조작 빈도·간격 적정성은 평가 대상 아님 → **조준 보조 허용** | 계획서 §2, §5 |
+| U-04 | 아이 트래킹을 위한 장비 전환(Varjo XR-4 등) 하지 않음 | 계획서 §2 |
+
+핵심 원칙 두 개:
+
+- **도달은 참가자가, 조준은 시스템이 돕는다.** 도달성은 평가 대상이므로 손을 실제로 뻗어야 하지만, "어느 버튼인지"는 보조해도 평가가 훼손되지 않는다.
+- **촉감이 없으므로 시각·청각 피드백이 접촉을 대신한다.** 참가자는 닿았는지 스스로 알 수 없다.
+
+### 2. 현재 프로젝트에 들어 있는 것 — MetaXR 1.205.0
+
+`Plugins/MetaXR/`에서 직접 확인했다. 경로는 `Plugins/MetaXR/Source/OculusXRInput/` 기준.
+
+#### 쓸 수 있는 신호
+
+| 기능 | 심볼 | 위치 |
+|---|---|---|
+| 손 추적 신뢰도 | `GetTrackingConfidence(EOculusXRHandType, int32)` | `Public/OculusXRInputFunctionLibrary.h:216` |
+| 손가락별 신뢰도 | `GetFingerTrackingConfidence(EOculusXRHandType, EOculusXRFinger, int32)` | 같은 파일 `:226` |
+| 반환 타입 | `EOculusXRTrackingConfidence` — **`Low` / `High` 2단계뿐** | 같은 파일 `:31` |
+| 본 회전 | `GetBoneRotation(...)` — **회전만. 위치를 주는 함수는 없다** | 같은 파일 `:189` |
+| 본 이름 | `GetBoneName(EOculusXRBone)` → `FString` | 같은 파일 `:275` |
+| 손끝 본 | `EOculusXRBone::Thumb_Tip`, `Index_Tip` | 같은 파일 `:74`, `:76` |
+| 손가락별 pinch 5종 | `OculusHand_{Left,Right}_{Thumb,Index,Middle,Ring,Pinky}Pinch` | `Private/OculusXRInputState.h:159` 이하 |
+| pinch 강도 10종 (0~1) | `..._{Finger}PinchStrength` | 같은 파일 `:174` 이하 |
+| 마이크로제스처 5종 | `..._MicrogestureSwipe{Left,Right,Forward,Back}`, `..._MicrogestureTapThumb` | 같은 파일 `:186`–`:196` |
+
+pinch·마이크로제스처는 **입력 키/축**이므로 Enhanced Input에서 바로 쓸 수 있다. 별도 플러그인이 필요 없다.
+
+#### 손끝 **위치**를 얻는 경로
+
+공개 API에 본 위치 함수가 없지만 우회로가 있다:
+
+- `UOculusXRHandComponent`는 **`UPoseableMeshComponent` 상속** (`Public/OculusXRHandComponent.h:28`)
+- → 표준 UE `GetBoneLocation(BoneName, EBoneSpaces::WorldSpace)` 사용 가능
+- 본 이름은 `GetBoneName(EOculusXRBone::Thumb_Tip)` 등으로 얻는다
+
+#### 함정 — 주석이 타입과 어긋난다
+
+`Private/OculusXRInputHandTrackingTypes.h:220-227`의 주석은 신뢰도가 `Range [0,1]`이라고 적혀 있지만, 실제 필드 타입은 위와 같은 **2단계 enum**이다. 주석을 믿지 말 것. "신뢰도가 떨어질수록 서서히 약화" 같은 연속 처리는 이 값만으로 안 된다.
+
+#### 아이 트래킹 — 모듈은 있으나 Quest 3에서 안 된다
+
+`Plugins/MetaXR/Source/OculusXREyeTracker/`가 존재해서 오해하기 쉽다. 플러그인이 Quest Pro까지 커버하기 때문이고, 코드 자체가 런타임에 확인한다:
+
+- `OculusXRMovement::IsEyeTrackingSupported()` 로 분기 (`Private/OculusXREyeTracker.cpp:86`)
+- 미지원이면 `return FVector::ZeroVector; // Not supported` (`:161`)
+
+**Quest 3 / 3S에는 아이 트래킹 하드웨어가 없다.** 아이 트래킹은 Quest Pro에만 있다. Quest 3에서 "gaze"라고 부를 수 있는 것은 **머리 방향**뿐이며, 이는 U-04에서 금지했다(손을 뻗지 않고 선택하면 13번 도달성 평가가 사라진다).
+
+### 3. 없는 것 — 인터랙션 레이어
+
+MetaXR가 주는 것은 **신호**이고, 다음은 직접 만들어야 한다:
+
+- hover → select → release 상태 기계
+- 잡기·누르기 후보 선택 (여러 대상 중 하나, 무관한 손 접근 배제)
+- 1축 제약 변환 (각도 clamp, 축 투영)
+- 추적 손실·복구 처리 — CLAUDE.md의 "누적 이동을 한 번에 적용하지 않는다"를 직접 구현
+- 손가락이 대상을 관통해 들어가는 것을 막는 시각 보조
+- 손 떨림 저감 필터
+
+이 레이어를 직접 만드는 것은 정의상 프레임워크이므로 **"범용 프레임워크부터 만들지 않는다"에 어긋난다.** 그래서 검증된 인터랙션 플러그인 도입을 검토했다(아래 §5).
+
+### 4. ISDK(MetaXRInteraction)에 있는 것
+
+근거: `bssani/LiftgateStudy`(UE 5.5, ISDK **1.78.0**)를 클론해 헤더를 읽었다. **경로와 API는 그 버전 기준이며 207.0에서 달라질 수 있다.** 실제 도입 후 재확인이 필요하다.
+
+#### 쓸 것 (U-03 허용 범위 안)
+
+| 용도 | 클래스 |
+|---|---|
+| poke 버튼 | `IsdkPokeInteractor`, `IsdkPokeInteractable`, `IsdkPokeButtonVisual`, `IsdkPokeLimiterVisual`(관통 방지) |
+| 1축 회전 (콘솔 뚜껑·노브) | `IsdkGrabbableComponent` + `IsdkOneGrabRotateTransformer` |
+| 1축 직선 (서랍) | `IsdkOneGrabTranslateTransformer` |
+| 손바닥 잡기 (문·손잡이) | `IsdkHandPalmGrabRecognizer` |
+| pinch 잡기 | `IsdkHandFingerPinchGrabRecognizer` |
+| 떨림 저감 | `IsdkOneEuroFilterDataModifier` |
+| 물체별 잡기 포즈 | `IsdkHandGrabPose`, `IsdkGrabPoseCollection` |
+| 위젯 직접 조작 | `IsdkPointableWidget`, `IsdkPointablePlane`, `IsdkPointableBox` |
+
+1축 회전 제약의 실제 구조 (`Interaction/Grabbable/IsdkOneGrabRotateTransformer.h`):
+
+- `FOneGrabRotationConstraint` — `RotationAxis`(`EAxis::X/Y/Z`), `AxisAngleRange`(`FIsdkAxisConstraints`: `bUseConstraint`/`Min`/`Max`), `MaxAngleFromAxis`, `bUseAngleFromAxisConstraint`
+
+#### 안 쓸 것
+
+| 제외 | 이유 |
+|---|---|
+| `IsdkRayInteractor` (레이 포인팅) | 13번 도달성 평가를 무의미하게 만든다 |
+| `IsdkDistanceGrabDetector` (원거리 잡기) | 05번의 팔 뻗음·자세 부담이 사라진다 |
+| `IsdkGrabFreeTransformer` (자유 6DoF·양손) | U-03 제외 범위 |
+| `IsdkThrowable` (던지기) | "추적 복구 시 짐이 던져지지 않아야 한다"와 충돌 |
+| `IsdkSyntheticHand` (손을 표면에 고정) | 손이 가상 형상을 관통하는 것을 **시각적으로 숨긴다**. 관통 문제의 정석 해법이기도 해서 **평가 담당자와 협의할 항목**으로 남긴다 |
+| 포즈 인식기 4종 (`IsdkHandPoseDetectionProfile`, `HandDigitRecognizer`, `HandFingerRecognizer`, `HandThumbRecognizer`) | false positive, 평가자 학습 부담, 손 크기별 일관성 결여 |
+
+#### ISDK에 **없는** 것
+
+- **detent(단계 클릭) 기능이 없다.** `detent`/`step`/`notch` 전부 검색했으나 없고, 회전은 연속값 + 각도 min/max뿐이다. 에어컨 팬 1-2-3-4단 같은 단계 스냅은 직접 얹어야 한다.
+- **손가락 구동 회전이 없다.** 모든 transformer가 grab point 기반이라, pinch로 잡고 돌리면 실질적으로 **손목 회전**이 된다. 실제 노브를 손가락으로 굴리는 동작과 다르다 (아래 §6 노브 항목).
+
+#### 외부 손 데이터 입력 지점
+
+`DataSources/IsdkExternalHandDataSource.h`:
+
+- `SetHandData(const UIsdkHandData* InHandData, const FTransform& WorldTransform)` (`:71`)
+- `SetHandJointMappings(ThumbJointMappings, FingerJointMappings)` (`:83`)
+
+손목 포즈와 손가락 조인트를 **분리해서** 받는 구조다. 글로브를 도입했다면 이것이 통합 지점이었을 것이다. Quest 3 단독으로 결정했으므로 현재는 사용하지 않는다.
+
+### 5. 버전·호환성
+
+| 항목 | 현재 | 최신 | 비고 |
+|---|---|---|---|
+| UE | 5.7 (`vBoR.uproject`) | — | `Plugins/MetaXR/OculusXR.uplugin`의 `"EngineVersion": "5.7.0"` |
+| MetaXR | **1.205.0** | **207.0** (2026-09-23) | 교체 검토 필요 |
+| MetaXRInteraction (ISDK) | **없음** | **207.0** (2026-09-22) | UE **5.7·5.8 모두 지원**, `.uasset`은 5.7 형식 직렬화 |
+
+- ISDK 207.0은 **UE 5.7을 지원하므로 이 프로젝트에 도입 가능하다.**
+- MetaXR와 ISDK가 **하루 차이로 함께 릴리스**됐다. `205 코어 + 207 ISDK`는 Meta가 시험한 조합이 아니므로 MetaXR도 함께 올리는 것이 안전하다.
+- 도입 시 설정: **`Project Settings > Plugins > MetaXR > XR API = Epic Native OpenXR`** (ISDK 기본 샘플이 요구).
+- 알려진 이슈(207.0): UE 5.7+에서 Fixed Foveated Rendering 런타임 변경 불가(프로젝트 설정으로 대체), Dynamic Resolution은 엔진 GitHub 포크에서만.
+
+**미확인 (다운로드 페이지 직접 확인 필요):** `developers.meta.com`이 클라우드 세션 프록시에 막혀 페이지를 열지 못했다. ① MetaXR 최신 버전 번호가 정말 `207.0`인지 ② `VersionName: 1.<NNN>.0` ↔ 패키지 `<NNN>.0` 대응이 맞는지 ③ ISDK 207.0의 MetaXR 최소 버전 요구사항.
+
+### 6. 미해결 설계 문제
+
+#### 노브 (라디오·에어컨)
+
+1축 회전 자체는 U-03 범위 안이지만 세 가지가 남는다:
+
+- **조작 방식 미정** — (A) 손가락 굴림: 실제에 가깝지만 굴릴 실물이 없어 동작 유도가 어렵다. (B) 손목 회전(ISDK 기본): 큰 다이얼에는 자연스러우나 작은 노브엔 부적합하고 한 번에 돌릴 범위가 좁다. (C) 회전 포기, 단계만: 정확한 회전량을 요구하지 않아 **VR 전제에서 가장 현실적**이다. (D) 실물 노브 병용: Quest 3 결정과 무관하게 가능하다.
+- **각도 wrap** — 노브는 여러 바퀴 돌 수 있고 180°를 넘으면 부호가 뒤집혀 시계 회전이 반시계로 읽힌다. 누적 회전각을 unwrap해서 따로 들고 있어야 한다.
+- **추적 손실 복구** — 다른 각도에서 재인식되면 노브가 확 돌아간다. 재인식 시점의 손 각도를 새 기준으로 다시 잡아야(rebase) 한다. 문보다 증상이 눈에 띈다.
+
+**평가 타당성:** 노브의 조작력·detent 느낌·표면 질감은 VR로 평가할 수 없다. 위치·시인성·라벨 판독·회전 방향 직관성까지가 한계다.
+
+**시나리오 배치:** 원본 19개 항목에 노브 조작이 없다(12번은 관찰, 13번은 버튼 도달, 16번은 시트 폴딩). 17번을 만들 수 없으므로 12번에 포함하거나 **자유모드**로 보내야 한다. 자유모드가 적절해 보인다 — 순차 안내에 없는 조작을 12번에 끼우면 단계 완료 판정이 모호해진다.
+
+#### 몰린 버튼 — 방식은 정해졌고 세부는 P0에서
+
+정해진 것: 가장 가까운 것 하나만 활성 + 히스테리시스 + 시각 표시 + 판정 영역은 키우되 보이는 크기는 실제 그대로 + 13번은 판정 영역 확대 없음.
+
+P0에서 정할 것: 확정을 **poke로 할지 pinch로 할지**. pinch 확정은 정확한 깊이까지 손을 밀어넣지 않아도 되므로 깊이 판단 부담이 없다.
+
+### 7. 검토했지만 채택하지 않은 것
+
+| 검토 대상 | 확인한 사실 | 결론 |
+|---|---|---|
+| **Manus Metagloves Pro Haptic** | 25 DoF EMF 손가락 추적(가림·드리프트 없음), 손가락당 LRA 진동 5개(120 Hz·256단계), 9DOF IMU는 **방향만** — 손목 위치는 외부 트래커 필요. **Quest에서 PC 필수, standalone 미지원.** 공식 Quest 3 경로는 **Quest 컨트롤러를 글로브에 장착**하는 것 | 미채택. PCVR 강제 + 스택 4개 + 참가자별 착용·보정·위생. 진동은 접촉 단서일 뿐 **힘 피드백이 아니라** 조작력 평가는 여전히 불가. 결정적으로 **VR이라 가릴 실물이 없어 글로브의 최대 장점인 "가림 없음"이 거의 무의미** |
+| **Varjo XR-4** | 아이 트래킹 200 Hz 내장, 핸드 트래킹 내장(`XR_EXT_hand_tracking` 26 랜드마크, `XR_EXT_hand_interaction`의 aim·pinch·grasp·poke), **테더드 Windows PC 필수** | 미채택. 평가 목적이 찾기·읽기·도달성으로 정해지면서 **아이 트래킹이 필요 없어졌다.** 오히려 시선 조준은 도달성 평가를 없애므로 있어도 쓰면 안 된다. 전환하면 MetaXR·ISDK·U-03 조작 어휘 결정이 전부 무효가 되고 테더가 고정된다 |
+| **아이 트래킹 / gaze 조준** | Quest 3·3S에 하드웨어 없음(Quest Pro 전용). ISDK 207.0에 gaze 기능이 추가됐으나 Quest 3에서는 머리 방향 | 미채택 + **금지로 확정.** 손을 뻗지 않고 선택하면 13번 도달성 평가가 사라진다 |
+| **MR 전환** | XR-4로 가면 실물 대시보드를 만지며 조작할 수 있어 촉감·깊이 판단 문제가 근본적으로 해결된다 | 이번 범위 밖(CLAUDE.md 확정 제약). 다만 **오조작·간격 적정성을 평가하려면 VR 단독으로는 타당성이 약하므로**, 그 평가가 필요해지면 별도 범위 안건으로 올릴 것 |
+
+### 8. LiftgateStudy에서 가져올 것
+
+`bssani/LiftgateStudy` (public, UE 5.5, MetaXR 1.110.0 + ISDK 1.78.0).
+
+- **C++에 ISDK 의존이 전혀 없다.** `LiftGateStudy.Build.cs`의 private 의존성은 비어 있고(주석만), `Liftgate.h:25`의 ISDK 언급은 주석이다. ISDK는 전부 Blueprint에 배선돼 있다. → **리프트게이트 C++ 이식은 ISDK 도입 여부와 무관하게 가능하다.**
+- 대상: `Liftgate.h`(276줄) / `Liftgate.cpp`(407줄) / `LiftgateTypes.h`(54줄) / `HeightZone.h`(66줄) = 803줄
+- **`.uasset`은 이식 대상이 아니다** — UE 5.5 형식이다. 에셋은 로컬에서 다시 만들어야 한다.
+- `ELiftgateMode` 4종(Manual-Full / Manual-Assist / Power-Auto / Power-Hybrid)은 그 프로젝트의 **모드 비교 평가** 설계다. vBoR 04·06은 "간단한 조작에 의한 개방"이라 4종이 다 필요해 보이지 않는다. **이식 범위 미정.**
+- `HeightZone`은 vBoR에 대응 항목이 없어 제외 예정.
+- 참고할 만한 결정 문서: `Docs/decisions/ADR_001`(ISDK 기반 grab), `ADR_007`(confirm = button poke, 자체 제스처 금지). 후자는 "ISDK pinch detection은 false positive가 잦다"를 기록하고 있다.
+
+### 9. 아직 열린 결정
+
+| # | 결정할 것 | 막고 있는 것 |
+|---|---|---|
+| 1 | ISDK 도입 여부 | 도입 시 **UE 5.7용 플러그인을 로컬에서 `Plugins/MetaXRInteraction/`에 배치**해야 한다. 클라우드 세션에서는 다운로드·검증이 불가능하다 |
+| 2 | 리프트게이트 이식 범위 | 모드 4종 전부 vs Manual-Assist 하나 |
+| 3 | 노브 방식 (A/B/C/D) | P0 실측 후 판단이 나을 수 있다 |
+| 4 | PCVR(Link) vs Quest 독립 실행(Android) | P0. 글로브를 뺐으므로 독립 실행이 다시 유력하다 |
+| 5 | 노브 조작을 12번에 넣을지 자유모드로 보낼지 | 자유모드 쪽이 적절해 보인다 |
+
+### 10. P0에서 실측할 것
+
+VR 전제가 확정되면서 항목이 바뀌었다. 실물이 없으므로 "실물에 가려지는지"는 확인 대상이 아니다.
+
+1. 허공에서 **가상 버튼·노브에 손을 맞출 수 있는지** (깊이 판단)
+2. 확정을 **poke로 할 때와 pinch로 할 때** 어느 쪽이 참가자에게 자연스러운지
+3. 히스테리시스 없이 가장 가까운 대상이 안정적으로 유지되는지
+4. 시야 경계(무릎 근처·좌석 옆·등 뒤)와 **실물 좌석에 의한** 가림에서 트래킹 거동
+5. 접촉 피드백을 어떤 방식으로 줄 때 참가자가 "닿았다"고 인지하는지
+6. 마이크로제스처·pinch 강도 입력 키가 **Epic Native OpenXR 백엔드에서도** 동작하는지
+
+### 11. 이 기간의 커밋
+
+브랜치 `philip/peaceful-brahmagupta-9syieh`. 전부 문서 변경이며 **C++은 아직 작성하지 않았다.**
+
+| 커밋 | 내용 |
+|---|---|
+| `aa035b2` | 핸드 트래킹 조작 범위를 1축 제약까지로 확정 (U-03), 조작 어휘 8종 표 |
+| `e150e73` | 장비를 Meta Quest 3 단독으로 확정 |
+| `b71a22d` | VR 전제 명시 + 잘못된 가림 근거 정정 (패스스루를 전제한 오류였다) |
+| `609fbf0` | 몰린 버튼 선택 방식 (U-04), XR-4 미전환 |
+| `0f903a0` | 클라우드 세션 테스트 파일 삭제 |
+
+### 12. 조사 방법 메모
+
+클라우드 세션(claude.ai/code)에서 진행했다. 다음 세션에서 같은 조사를 할 때 참고:
+
+- **플러그인 API는 기억이 아니라 `Plugins/` 아래 헤더를 직접 읽어 확인했다.** CLAUDE.md의 지시대로다. 주석이 타입과 어긋나는 사례가 실제로 있었다(§2 함정).
+- ISDK API는 리포에 없어서 `bssani/LiftgateStudy`를 클론해 읽었다. `git clone --depth 1` 로 받는다.
+- 외부 사실(하드웨어 스펙·플러그인 버전)은 웹 검색으로 확인했다. **`developers.meta.com`, `manus-meta.com`은 이 환경의 프록시에 막혀 직접 열리지 않는다.** 검색 결과 스니펫으로 대체했으므로, 중요한 수치는 사용자가 원문에서 대조해야 한다.
