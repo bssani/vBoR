@@ -45,6 +45,7 @@
 
 - UE 5.7, C++ 모듈 `vBoR`. 빌드: `Engine/Build/BatchFiles/Build.bat vBoREditor Win64 Development -Project=<절대경로>\vBoR.uproject`
 - **Meta XR 플러그인 1.205.0이 `Plugins/MetaXR/`에 들어 있다** (모듈 `OculusXRHMD`, `OculusXRInput`, `OculusXRMovement`, `OculusXRPassthrough`, `MRUtilityKit` 등). OculusXR API를 쓸 때는 기억에 의존하지 말고 이 폴더의 헤더를 확인한다. 프리빌트 라이브러리(`Source/Thirdparty/**`의 dll·lib·so)도 커밋돼 있다.
+- **Meta Interaction SDK(ISDK) 1.205.0이 `Plugins/MetaXRInteraction/`에 들어 있다** (모듈 `OculusInteraction`, `OculusInteractionPrebuilts`, `IsdkDataSourcesMetaXR`/`IsdkDataSourcesOpenXR`). 쓸 클래스와 금지 클래스(레이·원거리 잡기·자유 6DoF·던지기 등)는 조사 기록 §4. 프리빌트는 `Source/ThirdParty/**`에 있다 — MetaXR와 철자가 다르다. ISDK의 잡기는 추적 신뢰도를 보지 않고, 네트워크 복제도 없다.
 - 에디터는 `.uasset`을 잠근다. git 브랜치 전환·머지·C++ 리빌드 전에 Unreal Editor를 닫는다.
 
 ## 클라우드 세션 (claude.ai/code, Claude 앱)
