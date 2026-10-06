@@ -7,6 +7,7 @@
 | 베이스 브랜치 | `main` (ISDK 브랜치 머지 후) |
 | 작업 브랜치 | `codex/P0-a-hand-signal-probe` |
 | 상태 | 명세 — 구현 전. 시험 상태 `not-tested` |
+| 개정 | 2026-10-07 흔들림 정의(창 지름)와 새끼손가락 키 문자열(`Pink`) 확정 — Codex 질문 반영 |
 
 ## 1. 왜 만드는가
 
@@ -36,11 +37,11 @@ P1(골프백)과 P2(문)의 설계는 아직 모르는 값 몇 개에 달려 있
 | 손 위치 유효 여부 | `UOculusXRInputFunctionLibrary::IsHandPositionValid` — `Plugins/MetaXR/Source/OculusXRInput/Public/OculusXRInputFunctionLibrary.h:258` |
 | 추적 신뢰도 (`Low`/`High` 2단계) | `GetTrackingConfidence` — 같은 파일 `:216`. 주석은 `[0,1]`이라 적혀 있지만 실제 타입은 2단계 enum이다(조사 기록 2026-09 §2) |
 | 검지 끝·엄지 끝 월드 위치 | `UOculusXRHandComponent`(`Public/OculusXRHandComponent.h:28`, `UPoseableMeshComponent` 상속)의 `GetBoneLocation(..., EBoneSpaces::WorldSpace)`. 본 이름은 `GetBoneName(EOculusXRBone::Index_Tip / Thumb_Tip)` — `OculusXRInputFunctionLibrary.h:275` |
-| 검지 끝 흔들림 | 최근 1초 동안 검지 끝 위치의 최대 편차(mm) |
+| 검지 끝 흔들림 | 최근 1초 창 안에서 **검지 끝 샘플 두 개 사이의 최대 거리(mm)**, 즉 창의 지름. 창에 든 샘플 수도 같이 표시 |
 | 신뢰도 하락·복구 | High→Low 시각, Low→High 시각, 지속 시간 |
 | 위치 무효·복구 | 유효→무효 시각, 무효→유효 시각, 지속 시간, **마지막 유효 위치와 복구 첫 위치 사이 거리(mm)** |
-| pinch 5손가락 눌림·뗌 | 키 `OculusHand_{Left,Right}_{Thumb,Index,Middle,Ring,Pinky}Pinch` |
-| pinch 강도 (0~1) | 키 `OculusHand_{Left,Right}_{Finger}PinchStrength`. 손가락별 현재 값 |
+| pinch 5손가락 눌림·뗌 | 키 `OculusHand_{Left,Right}_{Thumb,Index,Middle,Ring,Pink}Pinch` |
+| pinch 강도 (0~1) | 키 `OculusHand_{Left,Right}_{Thumb,Index,Middle,Ring,Pink}PinchStrength`. 손가락별 현재 값 |
 | 마이크로제스처 5종 | 키 `OculusHand_{Left,Right}_MicrogestureSwipe{Left,Right,Forward,Back}`, `..._MicrogestureTapThumb` |
 
 손과 무관하게 표시할 것:
@@ -50,7 +51,9 @@ P1(골프백)과 P2(문)의 설계는 아직 모르는 값 몇 개에 달려 있
 | 키보드 | 아무 키 눌림 → 키 이름 |
 | 활성 XR 시스템 | `GEngine->XRSystem`의 시스템 이름. OpenXR인지 OculusXR(OVRPlugin)인지 구분되게 |
 
-키 이름에 관해: `FOculusKey`는 Private 헤더(`Plugins/MetaXR/Source/OculusXRInput/Private/OculusXRInputState.h:159` 이하)에 있어 include할 수 없다. 이름으로 `FKey`를 만들되, 문자열은 정의된 곳(`Private/OculusXRInput.cpp:88` 부근의 `const FKey FOculusKey::...` 정의)에서 그대로 옮긴다. 추측해서 쓰지 않는다. pinch 눌림 키는 `FKeyDetails::NotBlueprintBindableKey`로 등록돼 있다(`OculusXRInput.cpp:273`). 고른 바인딩 방식에서 이 키가 실제로 들어오는지 코드로 확인하고 보고한다.
+흔들림을 지름으로 재는 이유: 몰린 버튼에서 활성 대상이 바뀌는지는 손끝이 훑은 범위 전체에 달려 있다. 지름은 히스테리시스 폭과 바로 비교할 수 있다. 평균 위치에서의 거리는 평균 자체가 흔들림 쪽으로 끌려가므로 범위를 작게 보이게 한다. 샘플은 1초에 100개 안팎이라 매 프레임 모든 쌍을 비교해도 된다.
+
+키 이름에 관해: 새끼손가락은 `Pinky`가 아니라 **`Pink`**다. C++ 변수명은 `PinkyPinch`인데 키 문자열은 `"OculusHand_Left_PinkPinch"`다(`Private/OculusXRInput.cpp:91`, 강도는 `:106`). `FOculusKey`는 Private 헤더(`Plugins/MetaXR/Source/OculusXRInput/Private/OculusXRInputState.h:159` 이하)에 있어 include할 수 없다. 이름으로 `FKey`를 만들되, 문자열은 정의된 곳(`Private/OculusXRInput.cpp:88` 부근의 `const FKey FOculusKey::...` 정의)에서 그대로 옮긴다. 추측해서 쓰지 않는다. pinch 눌림 키는 `FKeyDetails::NotBlueprintBindableKey`로 등록돼 있다(`OculusXRInput.cpp:273`). 고른 바인딩 방식에서 이 키가 실제로 들어오는지 코드로 확인하고 보고한다.
 
 ### 손 표시
 
