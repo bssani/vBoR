@@ -68,6 +68,18 @@
 - git-lfs는 설치돼 있으나 `.gitattributes`에 LFS 규칙이 없다. ISDK는 가장 큰 파일이 6.3 MB라 일반 git으로 넣었다. 차량 에셋을 처음 커밋하기 전에 LFS 사용 여부를 정해야 한다.
 - 로컬 LiftGateStudy 사본(UE 5.5)에는 2026-09 §8이 다룬 Liftgate 외에 `Calibration/`(HMD 높이 + 바닥 레이캐스트 검증)과 `Session/`(GameInstanceSubsystem 진행 상태기계)이 있다. Buck 정렬(T-01)과 P3 단계 진행의 참고 대상. GitHub 원격과 같은 버전인지는 확인하지 않았다.
 
+#### 로컬 빌드·에디터 확인 (2026-10-06, 헤드셋 미연결)
+
+| 항목 | 결과 |
+|---|---|
+| 빌드 | `vBoREditor Win64 Development` 성공, 경고·오류 0. VS 2022 14.44, Windows SDK 10.0.22621. MetaXR 모듈 18개와 ISDK 모듈 6개가 처음으로 함께 컴파일됐다 |
+| 에디터 | 18초 만에 열림. `OculusXR`·`OculusInteraction`이 프로젝트 플러그인으로 마운트됨. `.uproject`에 명시하지 않아도 프로젝트 플러그인은 기본으로 켜진다 |
+| PC OpenXR 런타임 | Oculus **1.207.0**. 지원 목록에 `XR_EXT_hand_tracking`, `XR_FB_hand_tracking_aim`, `XR_EXT_hand_tracking_data_source`, **`XR_META_hand_tracking_microgestures`**가 있다. 없는 것: `XR_META_hand_tracking_wide_motion_mode`(1·2), `unextrapolated_poses`, `frequency_hint`. 목록에 있다는 것이고 Link에서 실제로 들어오는지는 P0-a 실측 대상이다 |
+| XR 백엔드 | OVRPlugin을 먼저 시도해 `xrGetSystem() failed`(헤드셋 미연결)로 실패한 뒤 Epic OpenXR로 넘어갔다. **XR API 설정이 아직 기본값**이므로 헤드셋을 연결하면 OVRPlugin으로 뜰 수 있다. ISDK가 요구하는 Epic Native OpenXR로 바꾸는 일은 P0-a 명세 §5에 있다 |
+| ISDK 오류 | `IsdkInfoCardComponent`의 CDO 생성자가 리포에 없는 `/OculusInteractionSamples/Widgets/InfoCardWidget`을 찾다 실패한다. 이 컴포넌트는 쓰지 않는다 |
+| 첫 실행 창 | Meta XR 플러그인 설문 창이 모달로 떠서 에디터 정상 종료를 막는다 |
+| 확인 못 한 것 | VR Preview, 핸드 트래킹 입력 — 헤드셋 연결 후 P0-a에서 |
+
 ### 4. 검토했지만 지금 하지 않는 것 — 멀티
 
 | 형태 | 확인한 것 | 판단 |
@@ -97,7 +109,10 @@
 | 커밋 | 내용 |
 |---|---|
 | `d103db0` | ISDK 1.205.0 포함 + `.gitignore` 프리빌트 예외 |
-| 다음 커밋 | 이 기록, 계획서 §2·§4·§5, CLAUDE.md 갱신 |
+| `c9c1a57` | 이 기록, 계획서 §2·§4·§5, CLAUDE.md 갱신 |
+| `70c4eec` | Codex 로컬 설정(`.codex/`) |
+| `26b0b02` | AGENTS.md를 규칙 원본으로, 명세·리뷰 작업 방식, P0-a 명세 |
+| 다음 커밋 | §3의 로컬 빌드·에디터 확인 결과 |
 
 ---
 
