@@ -3,10 +3,116 @@
 문서 셋에서 이 파일의 자리:
 
 - **[Dev-Plan-50pct-VR.md](Dev-Plan-50pct-VR.md)** — 무엇을 만들 것인가. 범위·결정 상태·시나리오 표·개발 단계·시험 계획.
-- **[../CLAUDE.md](../CLAUDE.md)** — 코드를 쓸 때 매번 필요한 규칙.
+- **[../AGENTS.md](../AGENTS.md)** — 코드를 쓸 때 매번 필요한 규칙과 작업 방식. Codex·Claude 공통 원본이며 `CLAUDE.md`는 이것을 가져온다. 2026-10-06 이전 기록의 "CLAUDE.md"는 이 규칙을 가리킨다.
+- **[Specs/](Specs/)** — 구현 단위 명세. Claude가 쓰고 Codex가 구현한다.
 - **이 파일** — 그 결정들이 **무엇을 근거로** 내려졌는가. 확인한 플러그인 헤더·버전·외부 사실과, 검토했지만 채택하지 않은 것들.
 
 결정을 나중에 재검토할 때 같은 조사를 다시 하지 않기 위한 기록이다. 근거가 바뀌면(플러그인 버전 교체 등) 해당 항목을 갱신한다.
+
+---
+
+## 2026-10 — ISDK 1.205.0 포함·문 개폐 모델
+
+로컬 세션(Windows)에서 리포를 직접 확인했다. 2026-09 기록 중 바뀐 항목은 그 자리에도 표시했다.
+
+### 1. 확정된 결정
+
+| 결정 | 내용 | 기록 위치 |
+|---|---|---|
+| U-05 | Meta Interaction SDK **1.205.0**을 `Plugins/MetaXRInteraction/`에 포함(`d103db0`). 2026-09 §9의 열린 결정 #1 해결 | 계획서 §2, §5 / CLAUDE.md |
+| U-05 | **문 개폐 모델:** 문은 닫힌 상태로 시작하고, 닫혀 있으면 밀어도 당겨도 움직이지 않는다. 손잡이를 조작해야 풀리고, 풀린 뒤에는 밀기·당기기를 둘 다 받는다. 다시 닫히면 잠긴다 | 계획서 §2, §5 |
+
+문 모델에 따른 단계별 동작:
+
+| 단계 | 위치 | 동작 |
+|---|---|---|
+| 07 → 08 | 밖 | 바깥 손잡이로 해제 → 당겨서 열기 |
+| 11 | 안 | 당겨서 닫기. 안에서 밀면 여는 방향이다 |
+| 18 | 안 | 안쪽 손잡이로 해제 → 밀어서 열기 |
+| 20 | 밖 | 밀어서 닫기. 잡고 돌려 닫기도 가능 |
+
+계획서 §4의 11번 구현 항목이 "손 밀기"였던 것을 이 모델에 맞춰 고쳤다.
+
+### 2. ISDK 1.205.0에서 확인한 것
+
+경로는 `Plugins/MetaXRInteraction/Source/` 기준.
+
+| 항목 | 사실 | 위치 |
+|---|---|---|
+| 버전 | `VersionName 1.205.0`, `EngineVersion 5.7.0`, `IsExperimentalVersion: true`. MetaXR 코어와 같은 버전이라 2026-09 §5의 205+207 조합 우려는 해당 없음 | `../OculusInteraction.uplugin` |
+| 클래스 | 2026-09 §4(1.78.0 기준)의 쓸 것·안 쓸 것 클래스가 모두 있다 | `OculusInteraction/Public/` |
+| 손 리그 | C++ 컴포넌트 `UIsdkHandRigComponentLeft` / `Right` | `OculusInteractionPrebuilts/Public/Rig/IsdkHandRigComponent.h` |
+| 커스텀 변환 | `IIsdkITransformer`(`BeginTransform`/`UpdateTransform`/`EndTransform`), 기반 `UIsdkTransformer`. 골프백·문의 제약 이동을 얹을 자리 | `OculusInteraction/Public/Interaction/Grabbable/IsdkITransformer.h`, `IsdkTransformer.h` |
+| 포인터 이벤트 | `EIsdkPointerEventType`에 `Cancel`이 있다 | `OculusInteraction/Public/StructTypes.h:102` |
+| 백엔드별 데이터 소스 | `IsdkDataSourcesMetaXR` / `IsdkDataSourcesOpenXR` 모듈, 둘 다 `LoadingPhase: None` | `../OculusInteraction.uplugin` |
+| 프리빌트 | `ThirdParty/OculusInteractionLibrary/Lib/{Win64,arm64-v8a}`, `ThirdParty/EngineTelemetry/lib/Win64`. 철자가 MetaXR의 `Thirdparty`와 다르다 | `.gitignore` 예외 |
+
+#### 함정 1 — "관통 방지"는 손을 표면에 고정하는 것이다
+
+- `IsdkPokeLimiterVisual`은 **v79부터 deprecated**이고, 헤더 설명이 "사용자가 얼마나 더 밀어넣든 손 비주얼을 눌린 표면에 스냅한다"이다 (`OculusInteraction/Public/Interaction/IsdkPokeLimiterVisual.h:45-57`).
+- 후속 `IsdkPokeLimiterRigModifier`(`OculusInteractionPrebuilts/Public/Rig/`)도 pose override로 같은 일을 한다.
+- 2026-09 §4에서 협의 항목으로 둔 `IsdkSyntheticHand`와 같은 범주인데, 같은 절에서 "쓸 것"으로 분류돼 있었다. 13번에서 손가락이 버튼 면에 멈춰 보이면 참가자가 닿았다고 인지할 수 있다. **분류 재검토 필요 — 사용자 결정 대기.**
+
+#### 함정 2 — grab은 추적 신뢰도를 보지 않는다
+
+- `OculusInteraction/Private/Interaction/IsdkGrabberComponent.cpp`에 신뢰도 처리가 없다. 잡은 채 추적이 끊겼다 돌아올 때의 거동은 데이터 소스 층에 달려 있고, 실측 전에는 모른다.
+- → CLAUDE.md의 "추적 손실은 보류, 복구 시 누적 이동 미적용"은 직접 얹어야 한다. P0·P1 실측 항목.
+
+#### 네트워크 복제가 없다
+
+- ISDK 소스 전체에 `GetLifetimeReplicatedProps`·`ReplicatedUsing`이 0건이다. 손 상호작용은 그 손이 연결된 PC에서만 계산된다. 멀티를 재검토할 때의 전제다(§4).
+
+### 3. 프로젝트 상태 (2026-10-03)
+
+- `Config/DefaultEngine.ini`는 데스크톱 템플릿 값 그대로다: DX12 SM6, Lumen GI·반사, 레이트레이싱, VSM, Substrate. XR 설정이 없고 기본 맵은 `/Engine/Maps/Templates/OpenWorld`, `Content/`는 비어 있다. 실행 방식을 정한 직후 정리할 대상이다.
+- git-lfs는 설치돼 있으나 `.gitattributes`에 LFS 규칙이 없다. ISDK는 가장 큰 파일이 6.3 MB라 일반 git으로 넣었다. 차량 에셋을 처음 커밋하기 전에 LFS 사용 여부를 정해야 한다.
+- 로컬 LiftGateStudy 사본(UE 5.5)에는 2026-09 §8이 다룬 Liftgate 외에 `Calibration/`(HMD 높이 + 바닥 레이캐스트 검증)과 `Session/`(GameInstanceSubsystem 진행 상태기계)이 있다. Buck 정렬(T-01)과 P3 단계 진행의 참고 대상. GitHub 원격과 같은 버전인지는 확인하지 않았다.
+
+#### 로컬 빌드·에디터 확인 (2026-10-06, 헤드셋 미연결)
+
+| 항목 | 결과 |
+|---|---|
+| 빌드 | `vBoREditor Win64 Development` 성공, 경고·오류 0. VS 2022 14.44, Windows SDK 10.0.22621. MetaXR 모듈 18개와 ISDK 모듈 6개가 처음으로 함께 컴파일됐다 |
+| 에디터 | 18초 만에 열림. `OculusXR`·`OculusInteraction`이 프로젝트 플러그인으로 마운트됨. `.uproject`에 명시하지 않아도 프로젝트 플러그인은 기본으로 켜진다 |
+| PC OpenXR 런타임 | Oculus **1.207.0**. 지원 목록에 `XR_EXT_hand_tracking`, `XR_FB_hand_tracking_aim`, `XR_EXT_hand_tracking_data_source`, **`XR_META_hand_tracking_microgestures`**가 있다. 없는 것: `XR_META_hand_tracking_wide_motion_mode`(1·2), `unextrapolated_poses`, `frequency_hint`. 목록에 있다는 것이고 Link에서 실제로 들어오는지는 P0-a 실측 대상이다 |
+| XR 백엔드 | OVRPlugin을 먼저 시도해 `xrGetSystem() failed`(헤드셋 미연결)로 실패한 뒤 Epic OpenXR로 넘어갔다. **XR API 설정이 아직 기본값**이므로 헤드셋을 연결하면 OVRPlugin으로 뜰 수 있다. ISDK가 요구하는 Epic Native OpenXR로 바꾸는 일은 P0-a 명세 §5에 있다 |
+| ISDK 오류 | `IsdkInfoCardComponent`의 CDO 생성자가 리포에 없는 `/OculusInteractionSamples/Widgets/InfoCardWidget`을 찾다 실패한다. 이 컴포넌트는 쓰지 않는다 |
+| 첫 실행 창 | Meta XR 플러그인 설문 창이 모달로 떠서 에디터 정상 종료를 막는다 |
+| 확인 못 한 것 | VR Preview, 핸드 트래킹 입력 — 헤드셋 연결 후 P0-a에서 |
+
+### 4. 검토했지만 지금 하지 않는 것 — 멀티
+
+| 형태 | 확인한 것 | 판단 |
+|---|---|---|
+| 진행자 PC ↔ 참가자 Quest | PCVR이면 앱이 진행자 PC에서 돌아 필요 없다. 독립 실행일 때만 의미가 있다 | 실행 방식 결정에 종속 |
+| 1명 조작 + N명 관전, 조작자 전환 | 기술적으로 가능: 진행자 PC가 서버, 조작자 PC가 손 조작을 계산해 서버로 보낸다. 전환 순간의 잡기 취소는 추적 손실 처리와 같게. 위험: 순차 시나리오 중간 전환은 사람별 19단계 수행을 깨고, 관전자는 찾기·읽기 평가가 오염되며, 같은 공간에서 서로의 몸이 보이지 않는다 | **지금 하지 않음(제안).** 50% 범위 밖. 1인용으로 진행하되 상태를 값으로 두어 나중에 옮기는 비용만 낮춘다. 재검토는 P5 이후 |
+| 같은 차량 공동 조작 | ISDK에 복제가 없어 잡기 소유권 중재를 직접 만들어야 한다. Buck이 1개다 | 비용이 크고 평가 의미가 바뀐다 |
+
+- MetaXR에 `OculusXRColocation`, `OculusXRAnchors`(공유 앵커) 모듈이 있다. 이번 VR 구성에서 쓸 수 있는지는 확인하지 않았다. 헤드셋마다 같은 Buck에 정렬하면 공유 앵커 없이도 서로 맞는다.
+
+### 5. 열린 결정 (2026-09 §9 갱신)
+
+| # | 결정할 것 | 상태 |
+|---|---|---|
+| 1 | ISDK 도입 여부 | **해결** — 1.205.0 포함 (U-05) |
+| 4 | PCVR vs 독립 실행 | 개발은 Link(에디터 VR Preview)로 제안. 최종 실행 방식의 판단 축: 진행자 키보드·화면(Link 유리), 차량 데이터 최적화 부담(Link 유리), 01–06 보행 중 케이블(독립 실행 또는 Air Link 안정성). 2026-09의 "독립 실행 유력"은 글로브 제외만 근거였다 |
+| 6 | poke 관통 방지(§2 함정 1)를 협의 항목으로 옮길지 | 사용자 결정 대기 |
+| 7 | 순차 모드에서 현재 단계 대상만 활성화할지 | 사용자 결정 대기. 문 모델(닫힘 = 잠김)로 12·13번에서 문이 밀리는 문제는 줄었지만, 문이 열려 있는 08–11·18–20 구간에는 남는다 |
+| 8 | 문 재잠금 조건(닫힘 근처에서 스냅할지), 손잡이를 잡은 손이 다시 잡지 않고 그대로 문을 당기게 할지 | P2 실험으로 결정 |
+| 9 | Buck 정렬 방법 — 진행자 정렬 단계에 컨트롤러를 써도 되는지 | 사용자 결정 대기 |
+| 10 | git LFS 사용 여부 | 차량 에셋 첫 커밋 전 |
+
+### 6. 이 기간의 커밋
+
+브랜치 `philip/add-isdk-1.205`.
+
+| 커밋 | 내용 |
+|---|---|
+| `d103db0` | ISDK 1.205.0 포함 + `.gitignore` 프리빌트 예외 |
+| `c9c1a57` | 이 기록, 계획서 §2·§4·§5, CLAUDE.md 갱신 |
+| `70c4eec` | Codex 로컬 설정(`.codex/`) |
+| `26b0b02` | AGENTS.md를 규칙 원본으로, 명세·리뷰 작업 방식, P0-a 명세 |
+| 다음 커밋 | §3의 로컬 빌드·에디터 확인 결과 |
 
 ---
 
@@ -85,6 +191,8 @@ MetaXR가 주는 것은 **신호**이고, 다음은 직접 만들어야 한다:
 
 근거: `bssani/LiftgateStudy`(UE 5.5, ISDK **1.78.0**)를 클론해 헤더를 읽었다. **경로와 API는 그 버전 기준이며 207.0에서 달라질 수 있다.** 실제 도입 후 재확인이 필요하다.
 
+> 2026-10 갱신: 리포에 들어온 1.205.0에 아래 클래스가 모두 있다. 단 `IsdkPokeLimiterVisual`은 deprecated이고 손을 표면에 고정하는 기능이다 — 2026-10 §2 함정 1.
+
 #### 쓸 것 (U-03 허용 범위 안)
 
 | 용도 | 클래스 |
@@ -133,10 +241,10 @@ MetaXR가 주는 것은 **신호**이고, 다음은 직접 만들어야 한다:
 |---|---|---|---|
 | UE | 5.7 (`vBoR.uproject`) | — | `Plugins/MetaXR/OculusXR.uplugin`의 `"EngineVersion": "5.7.0"` |
 | MetaXR | **1.205.0** | **207.0** (2026-09-23) | 교체 검토 필요 |
-| MetaXRInteraction (ISDK) | **없음** | **207.0** (2026-09-22) | UE **5.7·5.8 모두 지원**, `.uasset`은 5.7 형식 직렬화 |
+| MetaXRInteraction (ISDK) | **1.205.0** (2026-10 포함, 당시에는 없음) | **207.0** (2026-09-22) | UE **5.7·5.8 모두 지원**, `.uasset`은 5.7 형식 직렬화 |
 
 - ISDK 207.0은 **UE 5.7을 지원하므로 이 프로젝트에 도입 가능하다.**
-- MetaXR와 ISDK가 **하루 차이로 함께 릴리스**됐다. `205 코어 + 207 ISDK`는 Meta가 시험한 조합이 아니므로 MetaXR도 함께 올리는 것이 안전하다.
+- MetaXR와 ISDK가 **하루 차이로 함께 릴리스**됐다. `205 코어 + 207 ISDK`는 Meta가 시험한 조합이 아니므로 MetaXR도 함께 올리는 것이 안전하다. → 2026-10: 실제로는 ISDK 1.205.0이 들어와 코어와 버전이 같으므로 해당 없음.
 - 도입 시 설정: **`Project Settings > Plugins > MetaXR > XR API = Epic Native OpenXR`** (ISDK 기본 샘플이 요구).
 - 알려진 이슈(207.0): UE 5.7+에서 Fixed Foveated Rendering 런타임 변경 불가(프로젝트 설정으로 대체), Dynamic Resolution은 엔진 GitHub 포크에서만.
 
@@ -186,10 +294,10 @@ P0에서 정할 것: 확정을 **poke로 할지 pinch로 할지**. pinch 확정�
 
 | # | 결정할 것 | 막고 있는 것 |
 |---|---|---|
-| 1 | ISDK 도입 여부 | 도입 시 **UE 5.7용 플러그인을 로컬에서 `Plugins/MetaXRInteraction/`에 배치**해야 한다. 클라우드 세션에서는 다운로드·검증이 불가능하다 |
+| 1 | ISDK 도입 여부 | **해결(2026-10):** 1.205.0을 `Plugins/MetaXRInteraction/`에 포함 |
 | 2 | 리프트게이트 이식 범위 | 모드 4종 전부 vs Manual-Assist 하나 |
 | 3 | 노브 방식 (A/B/C/D) | P0 실측 후 판단이 나을 수 있다 |
-| 4 | PCVR(Link) vs Quest 독립 실행(Android) | P0. 글로브를 뺐으므로 독립 실행이 다시 유력하다 |
+| 4 | PCVR(Link) vs Quest 독립 실행(Android) | P0. 글로브를 뺐으므로 독립 실행이 다시 유력하다 → 2026-10 §5에서 판단 축 보강 |
 | 5 | 노브 조작을 12번에 넣을지 자유모드로 보낼지 | 자유모드 쪽이 적절해 보인다 |
 
 ### 10. P0에서 실측할 것

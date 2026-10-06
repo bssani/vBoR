@@ -81,3 +81,9 @@ DerivedDataCache/*
 !Plugins/MetaXR/Source/Thirdparty/**/*.dll
 !Plugins/MetaXR/Source/Thirdparty/**/*.lib
 !Plugins/MetaXR/Source/Thirdparty/**/*.so
+
+# Meta Interaction SDK 1.205.0 (MetaXRInteraction), committed for the same reasons and under the same
+# license. Its folder is spelled "ThirdParty", not "Thirdparty" as in MetaXR.
+!Plugins/MetaXRInteraction/Source/ThirdParty/**/*.dll
+!Plugins/MetaXRInteraction/Source/ThirdParty/**/*.lib
+!Plugins/MetaXRInteraction/Source/ThirdParty/**/*.so
