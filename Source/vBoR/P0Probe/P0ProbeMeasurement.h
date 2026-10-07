@@ -23,6 +23,13 @@ struct FP0ProbeMeasurement
 	double PositionLossDuration = 0.0;
 	double RecoveryDistanceMm = 0.0;
 	bool bHasRecoveryDistance = false;
+	bool bHasLastHighPosition = false;
+	FVector LastHighPosition = FVector::ZeroVector;
+	double ConfidenceJumpMm = 0.0;
+	bool bHasConfidenceJump = false;
+	bool bHasLowStartPosition = false;
+	FVector LowStartPosition = FVector::ZeroVector;
+	double LowMaxMoveMm = 0.0;
 	double DiameterMm = 0.0;
 	TArray<FP0ProbeSample> Samples;
 

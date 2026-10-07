@@ -8,6 +8,7 @@
 | 작업 브랜치 | `codex/P0-a-hand-signal-probe` |
 | 상태 | 명세 — 구현 전. 시험 상태 `not-tested` |
 | 개정 | 2026-10-07 흔들림 정의(창 지름)와 새끼손가락 키 문자열(`Pink`) 확정 — Codex 질문 반영 |
+| 개정 | 2026-10-08 신뢰도 Low→High 복구 튐과 Low 중 최대 이동 추가 — 리뷰에서 찾은 명세 누락 |
 
 ## 1. 왜 만드는가
 
@@ -38,7 +39,7 @@ P1(골프백)과 P2(문)의 설계는 아직 모르는 값 몇 개에 달려 있
 | 추적 신뢰도 (`Low`/`High` 2단계) | `GetTrackingConfidence` — 같은 파일 `:216`. 주석은 `[0,1]`이라 적혀 있지만 실제 타입은 2단계 enum이다(조사 기록 2026-09 §2) |
 | 검지 끝·엄지 끝 월드 위치 | `UOculusXRHandComponent`(`Public/OculusXRHandComponent.h:28`, `UPoseableMeshComponent` 상속)의 `GetBoneLocation(..., EBoneSpaces::WorldSpace)`. 본 이름은 `GetBoneName(EOculusXRBone::Index_Tip / Thumb_Tip)` — `OculusXRInputFunctionLibrary.h:275` |
 | 검지 끝 흔들림 | 최근 1초 창 안에서 **검지 끝 샘플 두 개 사이의 최대 거리(mm)**, 즉 창의 지름. 창에 든 샘플 수도 같이 표시 |
-| 신뢰도 하락·복구 | High→Low 시각, Low→High 시각, 지속 시간 |
+| 신뢰도 하락·복구 | High→Low 시각, Low→High 시각, 지속 시간, **Low로 바뀌기 직전 High 위치와 복구 첫 위치 사이 거리(mm)**, **Low 중 최대 이동(mm)** — Low 구간 첫 위치에서 가장 멀어진 거리. 0 근처면 Low 동안 위치가 멈춰 있었다는 뜻 |
 | 위치 무효·복구 | 유효→무효 시각, 무효→유효 시각, 지속 시간, **마지막 유효 위치와 복구 첫 위치 사이 거리(mm)** |
 | pinch 5손가락 눌림·뗌 | 키 `OculusHand_{Left,Right}_{Thumb,Index,Middle,Ring,Pink}Pinch` |
 | pinch 강도 (0~1) | 키 `OculusHand_{Left,Right}_{Thumb,Index,Middle,Ring,Pink}PinchStrength`. 손가락별 현재 값 |
@@ -89,6 +90,9 @@ P1(골프백)과 P2(문)의 설계는 아직 모르는 값 몇 개에 달려 있
 2. 복구 거리의 기준점은 **무효로 바뀌기 직전 프레임의 유효 위치**다. 무효 프레임에서 읽은 위치(0이거나 마지막 값에 고정된 값)로 계산하지 않는다.
 3. 흔들림 1초 창에는 위치 유효·신뢰도 High인 프레임만 넣는다. 그렇지 않은 프레임이 끼면 창을 비우고 다시 채운다.
 4. 신뢰도 하락과 위치 무효는 **별개의 이벤트**로 기록한다. 둘이 같은 순간에 일어난다고 가정하지 않는다.
+   - 신뢰도 복구 거리의 기준점은 Low로 바뀌기 직전 **High 프레임**의 위치다. Low 프레임 위치로 덮어쓰지 않는다.
+   - Low 중 최대 이동에는 위치 유효·본 준비 프레임만 쓴다. 새 Low 구간이 시작되면 다시 잰다.
+   - 이유: Native OpenXR에서 High는 손목의 VALID+TRACKED, 위치 유효는 VALID뿐이다(`OculusXRInputHandTrackingExtensionPlugin.cpp:355-357`, `:392-393`). 가려짐은 대개 "Low + 위치 유효"로 나오므로 위치 무효 복구만 재면 튐을 놓친다.
 5. 모든 OculusXR 호출을 `Plugins/MetaXR/` 헤더와 대조했고, 보고에 경로:줄을 적었다. 키 이름 문자열은 정의 위치를 적었다.
 6. `ue-compile-check`를 통과했거나 로컬 빌드에 성공했다.
 7. 보고에 "로컬에서 확인할 것"이 있다.
@@ -110,7 +114,7 @@ P1(골프백)과 P2(문)의 설계는 아직 모르는 값 몇 개에 달려 있
 | 흔들림 | 손을 허공에 10초 가만히 둔다. 팔을 뻗은 자세와 몸 가까이 둔 자세로 각각 3회 | 1초 창 최대 편차(mm)의 범위 |
 | 시야 경계 | 손을 무릎 근처·좌석 옆·등 뒤로 천천히 옮긴다 | Low로 바뀌는 지점, 무효로 바뀌는 지점, Low인 동안 위치가 오는지 |
 | 실물 좌석 가림 | Buck 좌석에 앉아 손을 좌석 옆으로 내린다 | 위와 같음 |
-| 손실·복구 튐 | (a) 손을 시야 밖으로 빼서 움직인 뒤 다시 들인다 (b) 손을 그대로 두고 다른 손으로 가린다 | 지속 시간, 복구 거리 |
+| 손실·복구 튐 | (a) 손을 시야 밖으로 빼서 움직인 뒤 다시 들인다 (b) 손을 그대로 두고 다른 손으로 가린다 | 지속 시간, 위치 복구 거리, 신뢰도 복구 거리, Low 중 최대 이동 |
 | 신호 백엔드 | 손가락별 pinch, pinch 강도, 마이크로제스처 5종을 각각 시도한다 | Native OpenXR에서 들어온 것과 안 들어온 것 |
 | 키보드 | VR Preview 중 PC 키보드를 누른다 | 들어오는지, PIE 창 포커스가 필요한지 |
 

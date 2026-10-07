@@ -175,13 +175,15 @@ void AP0ProbePawn::OnKeyReleased(FKey Key)
 FString AP0ProbePawn::FormatHand(int32 HandIndex, double Time) const
 {
 	const FP0ProbeMeasurement& State = Measurements[HandIndex];
-	FString Text = FString::Printf(TEXT("%s: position %s | confidence %s | bones %s\nIndex world (cm): %s | Thumb world (cm): %s\nWindow diameter: %.2f mm | samples: %d\nConfidence lost: %s | recovered: %s | duration: %.3f s\nPosition lost: %s | recovered: %s | duration: %.3f s | jump: %s\n"),
+	FString Text = FString::Printf(TEXT("%s: position %s | confidence %s | bones %s\nIndex world (cm): %s | Thumb world (cm): %s\nWindow diameter: %.2f mm | samples: %d\nConfidence lost: %s | recovered: %s | duration: %.3f s | jump: %s | moved in Low: %s\nPosition lost: %s | recovered: %s | duration: %.3f s | jump: %s\n"),
 		HandNames[HandIndex], State.bPositionValid ? TEXT("valid") : TEXT("invalid"), State.bHighConfidence ? TEXT("High") : TEXT("Low"),
 		bBonesAvailable[HandIndex] ? TEXT("ready") : TEXT("unavailable"),
 		bBonesAvailable[HandIndex] ? *IndexPositions[HandIndex].ToString() : TEXT("n/a"),
 		bBonesAvailable[HandIndex] ? *ThumbPositions[HandIndex].ToString() : TEXT("n/a"), State.DiameterMm, State.Samples.Num(),
 		*EventTime(State.ConfidenceLostAt), *EventTime(State.ConfidenceRecoveredAt),
 		!State.bHighConfidence && State.ConfidenceLostAt >= 0.0 ? Time - State.ConfidenceLostAt : State.ConfidenceLossDuration,
+		State.bHasConfidenceJump ? *FString::Printf(TEXT("%.2f mm"), State.ConfidenceJumpMm) : TEXT("n/a"),
+		State.bHasLowStartPosition ? *FString::Printf(TEXT("%.2f mm"), State.LowMaxMoveMm) : TEXT("n/a"),
 		*EventTime(State.PositionLostAt), *EventTime(State.PositionRecoveredAt),
 		!State.bPositionValid && State.PositionLostAt >= 0.0 ? Time - State.PositionLostAt : State.PositionLossDuration,
 		State.bHasRecoveryDistance ? *FString::Printf(TEXT("%.2f mm"), State.RecoveryDistanceMm) : TEXT("n/a"));
@@ -317,6 +319,39 @@ bool FP0ProbeRecoveryTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ProbeConfidenceRecoveryTest, "vBoR.P0Probe.ConfidenceRecovery", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP0ProbeConfidenceRecoveryTest::RunTest(const FString& Parameters)
+{
+	// Low 구간 중 무효 frame 이 껴도 기준점·이동값이 오염되지 않는지 확인 (P0-a §4)
+	FP0ProbeMeasurement State;
+	State.Update(0.0, true, true, FVector(0, 0, 0), true, 10.0);
+	State.Update(0.1, true, true, FVector(1, 0, 0), true, 10.0);
+	State.Update(0.2, true, false, FVector(2, 0, 0), true, 10.0);
+	State.Update(0.3, true, false, FVector(5, 0, 0), true, 10.0);
+	State.Update(0.4, false, false, FVector(100, 0, 0), true, 10.0);
+	State.Update(0.5, true, false, FVector(3, 0, 0), true, 10.0);
+	State.Update(0.6, true, true, FVector(7, 0, 0), true, 10.0);
+	TestTrue(TEXT("Confidence jump measured"), State.bHasConfidenceJump);
+	TestEqual(TEXT("Jump uses last High frame, not Low frames"), State.ConfidenceJumpMm, 60.0);
+	TestEqual(TEXT("Max move in Low excludes invalid frame"), State.LowMaxMoveMm, 30.0);
+	State.Update(0.7, true, false, FVector(7, 0, 0), true, 10.0);
+	TestEqual(TEXT("New Low segment resets move"), State.LowMaxMoveMm, 0.0);
+
+	FP0ProbeMeasurement Frozen;
+	Frozen.Update(0.0, true, true, FVector(0, 0, 0), true, 10.0);
+	Frozen.Update(0.1, true, false, FVector(4, 0, 0), true, 10.0);
+	Frozen.Update(0.2, true, false, FVector(4, 0, 0), true, 10.0);
+	Frozen.Update(0.3, true, true, FVector(4, 0, 0), true, 10.0);
+	TestEqual(TEXT("Frozen Low position reads as zero move"), Frozen.LowMaxMoveMm, 0.0);
+	TestEqual(TEXT("Frozen case jump"), Frozen.ConfidenceJumpMm, 40.0);
+
+	FP0ProbeMeasurement InitialLow;
+	InitialLow.Update(0.0, true, false, FVector(0, 0, 0), true, 10.0);
+	InitialLow.Update(0.1, true, true, FVector(5, 0, 0), true, 10.0);
+	TestFalse(TEXT("No High reference before initial Low"), InitialLow.bHasConfidenceJump);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ProbeWindowTest, "vBoR.P0Probe.WindowDiameter", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP0ProbeWindowTest::RunTest(const FString& Parameters)
 {
@@ -347,13 +382,22 @@ TArray<FString> FP0ProbeMeasurement::Update(double Time, bool bValid, bool bHigh
 		if (!bHigh)
 		{
 			ConfidenceLostAt = Time;
+			// 새 Low 구간 시작. 이전 구간 이동값은 버림
+			bHasLowStartPosition = false;
+			LowMaxMoveMm = 0.0;
 			Events.Add(TEXT("confidence High -> Low"));
 		}
 		else
 		{
 			ConfidenceRecoveredAt = Time;
 			ConfidenceLossDuration = ConfidenceLostAt >= 0.0 ? Time - ConfidenceLostAt : 0.0;
-			Events.Add(ConfidenceLostAt >= 0.0 ? FString::Printf(TEXT("confidence Low -> High, duration %.3f s"), ConfidenceLossDuration) : TEXT("confidence Low -> High, duration n/a (initial Low)"));
+			// 가려짐은 대개 Low + 위치 유효로 옴. 무효 복구만 재면 튐을 놓침 (P0-a §2)
+			bHasConfidenceJump = bHasLastHighPosition && bValid && bBonesAvailable;
+			ConfidenceJumpMm = bHasConfidenceJump ? FVector::Distance(LastHighPosition, IndexPosition) * MmPerUnit : 0.0;
+			Events.Add(FString::Printf(TEXT("confidence Low -> High, duration %s, jump %s, moved in Low %s"),
+				ConfidenceLostAt >= 0.0 ? *FString::Printf(TEXT("%.3f s"), ConfidenceLossDuration) : TEXT("n/a (initial Low)"),
+				bHasConfidenceJump ? *FString::Printf(TEXT("%.2f mm"), ConfidenceJumpMm) : TEXT("n/a"),
+				bHasLowStartPosition ? *FString::Printf(TEXT("%.2f mm"), LowMaxMoveMm) : TEXT("n/a")));
 		}
 	}
 	if (bInitialized && bValid != bPositionValid)
@@ -382,6 +426,22 @@ TArray<FString> FP0ProbeMeasurement::Update(double Time, bool bValid, bool bHigh
 		{
 			LastValidPosition = IndexPosition;
 		}
+	}
+	// Low 동안 위치가 멈춰 있는지 따라오는지 보려는 값. 0 근처면 멈춤 (P0-a §2)
+	if (!bHigh && bValid && bBonesAvailable)
+	{
+		if (!bHasLowStartPosition)
+		{
+			bHasLowStartPosition = true;
+			LowStartPosition = IndexPosition;
+		}
+		LowMaxMoveMm = FMath::Max(LowMaxMoveMm, FVector::Distance(LowStartPosition, IndexPosition) * MmPerUnit);
+	}
+	// 신뢰도 튐 기준점은 High frame 만. Low frame 위치는 추정값일 수 있음 (P0-a §2)
+	if (bHigh && bValid && bBonesAvailable)
+	{
+		bHasLastHighPosition = true;
+		LastHighPosition = IndexPosition;
 	}
 	bPositionValid = bValid;
 	bHighConfidence = bHigh;
