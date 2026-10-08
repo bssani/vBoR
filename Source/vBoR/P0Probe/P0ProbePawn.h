@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Pawn.h"
 #include "P0ProbeMeasurement.h"
+#include "P0ProbeDialMeasurement.h"
 #include "P0ProbePawn.generated.h"
 
 class UCameraComponent;
@@ -25,6 +26,10 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "P0 Probe")
 	FTransform PanelWorldTransform = FTransform(FRotator(0, 180, 0), FVector(180, -100, 190));
+
+	// 0 이면 BeginPlay 의 Pawn 정면 방향 사용. 월드 방향이며 단위 없음 (P0-a §2)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "P0 Probe")
+	FVector DialWorldAxis = FVector::ZeroVector;
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "P0 Probe")
@@ -50,6 +55,9 @@ protected:
 
 private:
 	FP0ProbeMeasurement Measurements[2];
+	FP0ProbeDialMeasurement DialMeasurements[2];
+	bool bThumbHigh[2] = {};
+	bool bIndexHigh[2] = {};
 	FVector IndexPositions[2] = {};
 	FVector ThumbPositions[2] = {};
 	bool bBonesAvailable[2] = {};
@@ -57,6 +65,7 @@ private:
 	float PinchStrengths[2][5] = {};
 	FName IndexBone;
 	FName ThumbBone;
+	FName WristBone;
 	FString XRSystemName;
 	FString LastKeyboardKey = TEXT("none");
 	TArray<FString> RecentEvents;

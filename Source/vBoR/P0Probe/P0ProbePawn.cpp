@@ -92,6 +92,8 @@ void AP0ProbePawn::BeginPlay()
 	Panel->SetWorldTransform(PanelWorldTransform);
 	IndexBone = FName(*UOculusXRInputFunctionLibrary::GetBoneName(EOculusXRBone::Index_Tip));
 	ThumbBone = FName(*UOculusXRInputFunctionLibrary::GetBoneName(EOculusXRBone::Thumb_Tip));
+	WristBone = FName(*UOculusXRInputFunctionLibrary::GetBoneName(EOculusXRBone::Wrist_Root));
+	DialWorldAxis = DialWorldAxis.IsNearlyZero() ? GetActorForwardVector() : DialWorldAxis.GetSafeNormal();
 }
 
 double AP0ProbePawn::ProbeTime() const
@@ -135,6 +137,11 @@ void AP0ProbePawn::OnKeyPressed(FKey Key)
 			if (Key == FKey(FName(PinchKeys[HandIndex][Finger])))
 			{
 				bPinched[HandIndex][Finger] = true;
+				if (Finger == 1)
+				{
+					// 해당 손의 검지 pinch 가 다이얼 비교의 0 deg 기준 (P0-a §2)
+					DialMeasurements[HandIndex].ResetAngles();
+				}
 				RecordEvent(FString::Printf(TEXT("%s pinch %s pressed"), HandNames[HandIndex], FingerNames[Finger]));
 				return;
 			}
@@ -187,6 +194,12 @@ FString AP0ProbePawn::FormatHand(int32 HandIndex, double Time) const
 		*EventTime(State.PositionLostAt), *EventTime(State.PositionRecoveredAt),
 		!State.bPositionValid && State.PositionLostAt >= 0.0 ? Time - State.PositionLostAt : State.PositionLossDuration,
 		State.bHasRecoveryDistance ? *FString::Printf(TEXT("%.2f mm"), State.RecoveryDistanceMm) : TEXT("n/a"));
+	const FP0ProbeDialMeasurement& Dial = DialMeasurements[HandIndex];
+	Text += FString::Printf(TEXT("Finger confidence: Thumb=%s Index=%s | tip distance: %s | projected length: %s\nDial: %.2f deg | wrist twist: %.2f deg | %s | angular window: %.2f deg | samples: %d\n"),
+		bThumbHigh[HandIndex] ? TEXT("High") : TEXT("Low"), bIndexHigh[HandIndex] ? TEXT("High") : TEXT("Low"),
+		Dial.bHasDistances ? *FString::Printf(TEXT("%.2f mm"), Dial.TipDistanceMm) : TEXT("n/a"),
+		Dial.bHasDistances ? *FString::Printf(TEXT("%.2f mm"), Dial.ProjectedLengthMm) : TEXT("n/a"),
+		Dial.DialAngleDeg, Dial.WristTwistDeg, Dial.bUpdating ? TEXT("updating") : TEXT("held"), Dial.DiameterDeg, Dial.Samples.Num());
 	Text += TEXT("Pinch / strength: ");
 	for (int32 Finger = 0; Finger < 5; ++Finger)
 	{
@@ -228,13 +241,21 @@ void AP0ProbePawn::Tick(float DeltaSeconds)
 		{
 			RecordEvent(FString::Printf(TEXT("%s %s"), HandNames[HandIndex], *Event));
 		}
+		bThumbHigh[HandIndex] = UOculusXRInputFunctionLibrary::GetFingerTrackingConfidence(Hand->SkeletonType, EOculusXRFinger::Thumb) == EOculusXRTrackingConfidence::High;
+		bIndexHigh[HandIndex] = UOculusXRInputFunctionLibrary::GetFingerTrackingConfidence(Hand->SkeletonType, EOculusXRFinger::Index) == EOculusXRTrackingConfidence::High;
+		// 기존 손끝 측정의 본 준비 조건은 유지. 다이얼만 Wrist_Root 추가 확인 (P0-a §2)
+		const bool bDialBonesReady = bBonesAvailable[HandIndex] && Hand->GetBoneIndex(WristBone) != INDEX_NONE;
+		const FQuat WristRotation = bDialBonesReady ? Hand->GetBoneQuaternion(WristBone, EBoneSpaces::WorldSpace) : FQuat::Identity;
+		DialMeasurements[HandIndex].Update(Time, bValid, bThumbHigh[HandIndex], bIndexHigh[HandIndex], bDialBonesReady,
+			ThumbPositions[HandIndex], IndexPositions[HandIndex], WristRotation, DialWorldAxis, MmPerUnit);
 		for (int32 Finger = 0; Finger < 5; ++Finger)
 		{
 			PinchStrengths[HandIndex][Finger] = PC ? PC->GetInputAnalogKeyState(FKey(FName(StrengthKeys[HandIndex][Finger]))) : 0.0f;
 		}
 	}
 	// ── 3) 패널·로그 표시 (연속 로그는 초당 한 줄, P0-a §2) ──
-	const FString Status = FString::Printf(TEXT("P0-a | t=%.3f s | XR: %s | Keyboard: %s\n%s\n%s"), Time, *XRSystemName, *LastKeyboardKey, *FormatHand(0, Time), *FormatHand(1, Time));
+	const FString Status = FString::Printf(TEXT("P0-a | t=%.3f s | XR: %s | Keyboard: %s\nDial world axis: %s | projection minimum: %.2f mm\n%s\n%s"),
+		Time, *XRSystemName, *LastKeyboardKey, *DialWorldAxis.GetSafeNormal().ToString(), FP0ProbeDialMeasurement::MinProjectedLengthMm, *FormatHand(0, Time), *FormatHand(1, Time));
 	FString PanelText = Status + TEXT("\nRecent events (10):");
 	for (const FString& Event : RecentEvents)
 	{
