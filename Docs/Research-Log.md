@@ -43,7 +43,7 @@
 - 샘플 C++ 모듈이 ISDK 1.205와 함께 빌드되고, `PokeExamples`·`TransformerExamples` 맵이 오류 없이 로드된다. 2026-10 §3의 `IsdkInfoCardComponent` 오류가 사라진다. 에셋은 UE 5.6 형식으로 ISDK 1.205와 같다. `VersionName` "1.0"이라 짝 버전은 미확정.
 - **필요한 기능은 샘플이 아니라 ISDK 본체에 있다.** poke limiter `UIsdkPokeLimiterRigModifier`(샘플 BP는 상속만 한 빈 껍데기), 눌리는 버튼 `IsdkPokeInteractable`·`IsdkPointablePlane`·`IsdkClippedPlaneSurface`·`IsdkPokeButtonVisual`·`IsdkPointerEventAudioPlayer`, 1축 회전 `IsdkOneGrabRotateTransformer`, 잡기 포즈 `IsdkHandGrabPose`, 손 리그 `UIsdkHandRigComponentLeft/Right`. 샘플은 이것들을 Blueprint로 조립한 것이다.
 - `IsdkSamplePawn`에는 레이 인터랙터·레이 잡기·원거리 잡기·컨트롤러 리그가 들어 있어 그대로 쓰면 U-03·U-04 위반이다.
-- 제안(사용자 확인 대기): 샘플을 실행 의존으로 쓰지 않고, vBoR 부품을 ISDK 위에 C++로 직접 만든다. 샘플은 참고 자료와 HandPoseStudio 녹화 도구로만 쓴다. 녹화한 포즈는 vBoR `Content/` 아래에 저장한다. LiftGateStudy는 반대로 샘플 BP를 부모로 쓰는 쪽을 택했다(ADR-004·012). vBoR은 구현자가 Codex라 C++가 맞다고 판단했다.
+- **결정(2026-10-09 사용자):** 샘플을 실행 의존으로 쓰지 않고, vBoR 부품을 ISDK 위에 C++로 직접 만든다. 샘플은 참고 자료와 HandPoseStudio 녹화 도구로만 쓰고 `.gitignore`로 리포에서 뺐다. 녹화한 포즈는 vBoR `Content/` 아래에 저장한다. LiftGateStudy는 반대로 샘플 BP를 부모로 쓰는 쪽을 택했다(ADR-004·012). vBoR은 구현자가 Codex라 C++가 맞다고 판단했다. 검토한 선택지와 규칙은 [Agent-Workflow.md](Agent-Workflow.md) §5.
 
 ---
 

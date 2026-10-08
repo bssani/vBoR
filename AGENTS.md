@@ -18,6 +18,7 @@
 - 같은 보고를 그 작업 마지막 커밋 메시지의 본문에도 쓴다. 리뷰어가 `git log`로 읽는다.
 - 리뷰 지적을 반영할 때는 같은 브랜치에 새 커밋을 쌓는다. amend·rebase로 리뷰한 커밋을 고쳐 쓰지 않는다.
 - 리뷰는 Claude가 `main...<브랜치>` diff를 이 파일·계획서·명세 기준으로 한다. 리뷰 통과와 로컬 빌드 확인 전에는 `main`에 머지하지 않는다.
+- 빌드·자동화 시험·맵 로드 확인 명령, 무시해도 되는 로그 잡음, 기록을 어디에 남기는지는 [Docs/Agent-Workflow.md](Docs/Agent-Workflow.md)에 있다.
 
 ## 코드 주석 — 사용자 말투로
 
@@ -78,6 +79,7 @@
 - **Meta XR 플러그인 1.205.0이 `Plugins/MetaXR/`에 들어 있다** (모듈 `OculusXRHMD`, `OculusXRInput`, `OculusXRMovement`, `OculusXRPassthrough`, `MRUtilityKit` 등). OculusXR API를 쓸 때는 기억에 의존하지 말고 이 폴더의 헤더를 확인한다. 프리빌트 라이브러리(`Source/Thirdparty/**`의 dll·lib·so)도 커밋돼 있다.
 - **Meta Interaction SDK(ISDK) 1.205.0이 `Plugins/MetaXRInteraction/`에 들어 있다** (모듈 `OculusInteraction`, `OculusInteractionPrebuilts`, `IsdkDataSourcesMetaXR`/`IsdkDataSourcesOpenXR`). 쓸 클래스와 금지 클래스(레이·원거리 잡기·자유 6DoF·던지기 등)는 조사 기록 §4. 프리빌트는 `Source/ThirdParty/**`에 있다 — MetaXR와 철자가 다르다. ISDK의 잡기는 추적 신뢰도를 보지 않고, 네트워크 복제도 없다.
 - 에디터는 `.uasset`을 잠근다. git 브랜치 전환·머지·C++ 리빌드 전에 Unreal Editor를 닫는다.
+- **ISDK 샘플(`Plugins/OculusInteractionSamples/`)은 참고 자료와 HandPoseStudio 녹화 도구일 뿐이다.** `.gitignore`로 리포에 없다. 어떤 코드·에셋도 그 경로나 모듈을 참조하지 않는다. 필요한 기능은 ISDK 본체 클래스로 C++에서 직접 조립한다(Agent-Workflow §5).
 
 ## Unreal Engine이 없는 환경 (클라우드 VM)
 
