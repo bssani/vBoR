@@ -11,6 +11,42 @@
 
 ---
 
+## 2026-10-09 — poke limiter 필수, 다이얼 손가락 회전, ISDK 샘플
+
+### 1. 결정과 요구
+
+| ID | 내용 | 기록 위치 |
+|---|---|---|
+| U-06 | **poke limiter 필수.** 버튼을 누를 때 손 모델이 표면에 멈춰 보이게 한다. 13번 도달 판정은 추적된 실제 손끝으로 한다(limiter는 손 모델의 위치만 옮긴다) | 계획서 §2·§5, AGENTS.md |
+| U-06 | **다이얼을 엄지·검지로 돌리는 동작 요구.** pinch로 잡은 뒤 손가락으로 굴려 돌리는 것. 지금은 pinch·grab·poke만 된다 | 계획서 §2·§5, AGENTS.md |
+
+열린 결정 갱신(2026-10 §5, 2026-09 §9):
+
+- **#6 poke 관통 방지** — 해결. 버튼 poke에 한해 채택. 잡기·문 표면에 손을 고정하는 것은 여전히 평가 담당자와 협의할 항목이다.
+- **2026-09 #3 노브 방식** — 사용자 요구는 (A) 손가락 굴림. 가능 여부는 P0 실측 뒤 정한다. 실패하면 (B) 손목 회전(ISDK 기본), (C) 단계만으로 내려간다.
+
+### 2. 다이얼 손가락 회전 — 확인한 것과 방법
+
+- **HandPoseStudio로는 안 된다.** 이 도구는 지금 손 모양을 `UIsdkHandPoseData` 에셋으로 저장하는 녹화 도구다([Meta 문서](https://developers.meta.com/horizon/documentation/unreal/unreal-isdk-hand-grab-poses/)). 저장한 포즈는 (a) 물체를 잡을 때 보이는 손 모양(`UIsdkHandGrabPose`)이나 (b) 손 모양 인식(`UIsdkHandPoseSubsystem::CreateHandPoseDetectionProfileFromMesh` → `RegisterHandPoseDetection`, `OculusInteraction/Public/Subsystem/IsdkHandPoseSubsystem.h`)에 쓴다. (a)는 허용, (b)는 U-03의 자체 포즈 인식기라 금지. 어느 쪽도 "돌리는 동작"은 아니다.
+- **ISDK 변환기는 손가락을 보지 않는다.** 모든 transformer가 잡은 지점 기준이라 pinch로 잡고 돌리면 손목 회전이 된다(2026-09 §4). 놓으면 원위치로 돌아가는 기능·detent도 없다(`OculusInteraction/Public/Interaction/Grabbable/` 전체 확인).
+- **방법(제안):** 잡은 동안 엄지 끝→검지 끝 벡터를 다이얼 축에 수직인 면에 투영하고, 그 벡터가 축 둘레로 돈 각도만큼 다이얼을 돌린다. 손가락으로 굴리면 두 손끝이 반대 방향으로 움직여 이 벡터가 돌고, 손목을 비틀어도 같은 벡터가 돈다. 그래서 (A)와 (B)를 한 계산으로 받는다. 각도는 unwrap해서 누적하고(2026-09 §6), 추적이 끊겼다 돌아오면 그 순간 벡터를 새 기준으로 잡는다(AGENTS.md 추적 손실 원칙).
+- **위험:**
+  - pinch 중에는 엄지와 검지가 서로를 가린다. 손가락별 신뢰도(`GetFingerTrackingConfidence`, `OculusXRInputFunctionLibrary.h:226`)가 High일 때만 갱신한다.
+  - 다이얼을 잡은 손끝 사이 거리는 1~3 cm라 손끝 흔들림 몇 mm가 각도로는 크게 나온다. 떨림 저감 필터(허용 조작)와 dead band가 필요할 수 있다.
+  - Quest 3 광학 추적이 손가락 굴림 같은 작은 움직임을 따라오는지 모른다.
+- **실측으로 볼 것:** pinch로 정지했을 때 엄지→검지 벡터 각도의 1초 흔들림(deg), pinch 중 엄지·검지 손가락별 신뢰도, 손가락으로 굴렸을 때 각도가 따라오는지. P0-a 프로브에 붙이는 것을 제안했다.
+- **평가 타당성:** 다이얼의 조작력·detent 느낌·질감은 VR로 평가할 수 없다. 위치·시인성·라벨 판독·회전 방향 직관성까지가 한계다(2026-09 §6).
+- **시나리오 배치:** 원본 19개 항목에 다이얼 조작이 없다. 12번에 넣을지 자유모드로 보낼지는 2026-09 #5 그대로 열려 있다.
+
+### 3. OculusInteractionSamples (사용자가 로컬에 추가, 미커밋)
+
+- 샘플 C++ 모듈이 ISDK 1.205와 함께 빌드되고, `PokeExamples`·`TransformerExamples` 맵이 오류 없이 로드된다. 2026-10 §3의 `IsdkInfoCardComponent` 오류가 사라진다. 에셋은 UE 5.6 형식으로 ISDK 1.205와 같다. `VersionName` "1.0"이라 짝 버전은 미확정.
+- **필요한 기능은 샘플이 아니라 ISDK 본체에 있다.** poke limiter `UIsdkPokeLimiterRigModifier`(샘플 BP는 상속만 한 빈 껍데기), 눌리는 버튼 `IsdkPokeInteractable`·`IsdkPointablePlane`·`IsdkClippedPlaneSurface`·`IsdkPokeButtonVisual`·`IsdkPointerEventAudioPlayer`, 1축 회전 `IsdkOneGrabRotateTransformer`, 잡기 포즈 `IsdkHandGrabPose`, 손 리그 `UIsdkHandRigComponentLeft/Right`. 샘플은 이것들을 Blueprint로 조립한 것이다.
+- `IsdkSamplePawn`에는 레이 인터랙터·레이 잡기·원거리 잡기·컨트롤러 리그가 들어 있어 그대로 쓰면 U-03·U-04 위반이다.
+- **결정(2026-10-09 사용자):** 샘플을 실행 의존으로 쓰지 않고, vBoR 부품을 ISDK 위에 C++로 직접 만든다. 샘플은 참고 자료와 HandPoseStudio 녹화 도구로만 쓰고 `.gitignore`로 리포에서 뺐다. 녹화한 포즈는 vBoR `Content/` 아래에 저장한다. LiftGateStudy는 반대로 샘플 BP를 부모로 쓰는 쪽을 택했다(ADR-004·012). vBoR은 구현자가 Codex라 C++가 맞다고 판단했다. 검토한 선택지와 규칙은 [Agent-Workflow.md](Agent-Workflow.md) §5.
+
+---
+
 ## 2026-10 — ISDK 1.205.0 포함·문 개폐 모델
 
 로컬 세션(Windows)에서 리포를 직접 확인했다. 2026-09 기록 중 바뀐 항목은 그 자리에도 표시했다.
