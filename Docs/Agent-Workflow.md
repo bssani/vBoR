@@ -30,6 +30,19 @@
 - **구현은 Codex 데스크톱 앱에서 한다(2026-10-09 사용자 결정).** 사용자가 앱에서 진행을 직접 보기 위해서다. 그 전 한때(2026-10-09, P0-a 리뷰 2회차) Claude가 `codex exec`로 실행했는데, 이 방식은 앱 화면에 보이지 않는다. 지금은 쓰지 않는다(§2.9).
 - **역할을 바꿔 쓸 때가 있다.** Claude가 코드를 쓰면 리뷰는 Codex에 맡긴다(예: `8669f45`). 쓴 쪽이 자기 코드를 리뷰하면 독립 확인이 없다.
 
+### 1.1 Codex 앱 인계와 연동 확인 (2026-10-09)
+
+| 수단 | 확인 결과 |
+|---|---|
+| Codex 앱 채팅에 작업을 보내기 | **확인 안 됨.** CLI에 `codex queue --thread <세션> --message <글>`("기존 세션에 메시지를 대기열로")이 있다. 하지만 앱이 띄운 app-server에 실제로 닿는지는 보내 봐야 안다. 보내면 사용자 채팅에 메시지가 들어가므로 보내지 않았다. 시험하려면 사용자가 빈 채팅을 하나 만들고 허락한 뒤 한 번 보내 본다. |
+| Codex 작업 완료 감지 | **가능하지만 비공식.** 앱 세션 기록 `~/.codex/sessions/<날짜>/rollout-*.jsonl`(originator `Codex Desktop`)에 `task_started`·`task_complete` 이벤트가 남는다(읽기만 해서 확인). 내부 형식이라 바뀔 수 있다. 믿을 신호는 Codex가 남기는 브랜치 커밋과 `HANDOFF.md`의 "Codex 결과" 절이다. Claude Code 세션이 열려 있으면 Claude가 백그라운드로 커밋을 감시하다가 자동으로 리뷰를 시작할 수 있다. 세션이 닫혀 있으면 사용자가 리뷰 문구를 보낸다. |
+| 설치·설정이 필요한 것 (제안만 했다) | `codex remote-control start`(실험 기능, 공유 app-server 데몬). `codex queue`가 그 데몬을 통해 앱 채팅에 닿는지 볼 때 필요할 수 있다. OpenAI `codex-plugin-cc`(Claude Code 플러그인)도 있지만 CLI로 돌아서 앱 화면에는 보이지 않는다. |
+
+사용자가 보내는 문구:
+
+- Codex 앱에: `HANDOFF.md 읽고 '지금 할 일' 진행해.`
+- Claude에: `Codex 끝났어. 리뷰해.`
+
 ---
 
 ## 2. Unreal 작업 절차 (프로젝트 공통)
@@ -118,9 +131,9 @@ UnrealEditor.exe "C:\Git\vBoR\vBoR.uproject" /<플러그인 또는 Game>/<경로
 |---|---|---|---|
 | 시작 훅 `unreal-context.sh` | `.claude/hooks/`, `.codex/hooks/` | 세션 시작 때 UE 프로젝트 사실(엔진 버전, 빌드 명령, 에디터 잠금 주의)을 컨텍스트에 넣는다 | Epic Games의 unreal-engine-skills 플러그인(MIT)을 GMTCK_MR을 거쳐 가져왔다. Claude는 `$CLAUDE_PROJECT_DIR`, Codex는 절대경로로 등록. **Codex의 명령형 훅은 로컬에서만 돌고**, 프로젝트를 신뢰로 지정하고 `/hooks`에서 승인해야 실행된다 |
 | `ue-compile-check` 에이전트 | `.claude/agents/`, `.codex/agents/` | 빌드할 수 없는 환경에서 바뀐 C++의 UHT·include·모듈 의존·unity 빌드 충돌·Meta XR API를 검사한다 | 엔진이 있는 로컬에서는 이것 대신 실제 빌드(§2.3) |
-| `codex exec` (Codex 앱 내장 CLI) | `%LOCALAPPDATA%\OpenAI\Codex\bin\<해시>\codex.exe` | Claude가 Codex에 작업을 넘긴다. 끝나면 마지막 응답이 파일로 돌아온다 | 아래 참고 |
+| `codex exec` (Codex 앱 내장 CLI) | `%LOCALAPPDATA%\OpenAI\Codex\bin\<해시>\codex.exe` | Claude가 Codex에 작업을 넘긴다. 끝나면 마지막 응답이 파일로 돌아온다 | **지금은 쓰지 않는다**(구현은 앱에서, §1). 아래는 다시 쓸 때를 위한 기록 |
 
-`codex exec` 실행 방법 (2026-10-09 확인):
+`codex exec` 실행 방법 (2026-10-09 확인, 지금은 쓰지 않음):
 
 ```
 codex.exe exec -C "C:\Git\vBoR" --approve-for-me -o <마지막 응답 파일> "<지시>" < /dev/null
