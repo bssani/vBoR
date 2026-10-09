@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "InputCoreTypes.h"
 #include "P0ButtonBenchMeasurement.h"
 #include "Interaction/IsdkIInteractableState.h"
 #include "Interaction/Pointable/IsdkInteractionPointerEvent.h"
@@ -17,6 +18,14 @@ class VBOR_API AP0ButtonBench : public AActor
 	GENERATED_BODY()
 public:
 	AP0ButtonBench();
+	virtual void Tick(float DeltaSeconds) override;
+	void PlaceFromHead(const FTransform& Head);
+	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm"))
+	float ForwardDistanceCm = 45.0f;
+	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm"))
+	float BelowEyeCm = 25.0f;
+	UPROPERTY(EditAnywhere, Category = "Bench")
+	FKey RepositionKey = EKeys::R;
 	UPROPERTY(EditAnywhere, Category = "Bench")
 	TArray<float> SingleSizesMm = {10.0f, 15.0f, 20.0f};
 	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm"))
@@ -57,7 +66,7 @@ private:
 	TArray<FString> Names;
 	TArray<FP0ButtonPressMeasurement> Presses[2];
 	FP0ButtonTargetMeasurement Targets[2];
-	FP0ButtonHoverMeasurement Hovers;
+	FP0ButtonActiveMeasurement Active;
 	int32 ClusterStart = 0;
 	int32 FarIndex = 0;
 	int32 FarHoverCount = 0;
@@ -66,9 +75,13 @@ private:
 	FString LastPress = TEXT("No completed press");
 	TArray<FString> RecentEvents;
 	double LastLogAt = -1.0;
+	bool bPlaced = false;
+	void CreateButtons();
+	void Reposition();
+	bool TryPlaceFromHead();
 	void SpawnButton(const FString& Name, const FVector& Offset, float SizeMm);
 	void RecordEvent(const FString& Text);
-	void SamplePress(int32 Hand, int32 Button);
+	void SamplePress(int32 Hand, int32 Button, bool bAtSelect = false);
 	UFUNCTION()
 	void HandlePointer(const FIsdkInteractionPointerEvent& Event);
 	UFUNCTION()

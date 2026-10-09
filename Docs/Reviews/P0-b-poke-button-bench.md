@@ -23,7 +23,9 @@
 
 ## 열린 항목
 
-### R1-1 상태 색이 버튼 메시의 원래 재질을 덮는다 — 열림
+### R1-1 상태 색이 버튼 메시의 원래 재질을 덮는다 — 반영함 (fix: address P0-b first review findings)
+
+**반영 확인:** `GrabbableLit`의 `BLEND_Translucent`와 `ColorParam` 알파 → Opacity 연결을 실제 로드한 에셋에서 확인함. 원래 슬롯은 보존하고 hover·select에만 MID 하나를 덧입힘. Normal에는 없음. `OverlayMaterial`·`ButtonComponents` 시험에서 원래 슬롯 객체, 상태별 색·설정 불투명도, Normal 복귀를 확인함.
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRPokeButton.cpp:84-94` — BeginPlay에서 버튼 메시의 모든 재질 슬롯을 `GrabbableLit` 동적 재질로 바꾼다.
@@ -43,7 +45,9 @@
 - Normal → 덧입힘 없음, Hover·Select → 덧입힘 재질의 색·불투명도가 각 프로퍼티 값이다. Normal로 돌아오면 다시 없음.
 - 덧입힘 재질의 혼합 방식이 반투명이다.
 
-### R1-2 몰린 묶음의 동시 활성 수가 select 중인 버튼을 빼고 센다 — 열림
+### R1-2 몰린 묶음의 동시 활성 수가 select 중인 버튼을 빼고 센다 — 반영함 (fix: address P0-b first review findings)
+
+**반영 확인:** `CountActive`가 hover 또는 select를 셈. 패널은 `Cluster active (both hands)`로 표시함. `SimultaneousActive`에서 select+hover=2, select=1, normal/disabled=0, 2 이상 진입 전환 횟수를 확인함.
 
 **문제**
 - **위치:** `Source/vBoR/P0Probe/P0ButtonBench.cpp:166-171` — `GetCurrentState() == Hover`만 센다.
@@ -57,7 +61,9 @@
 **확인할 시험**
 - `SimultaneousHover` → `SimultaneousActive`로 바꾸고: {Select, Hover} = 2, {Select} = 1, {Normal, Disabled} = 0, 2 이상 진입 횟수는 전환 때만.
 
-### R1-3 시험대가 머리가 아니라 Pawn 원점 기준으로 놓인다 — 열림
+### R1-3 시험대가 머리가 아니라 Pawn 원점 기준으로 놓인다 — 반영함 (fix: address P0-b first review findings)
+
+**반영 확인:** GameMode는 생성만 함. 시험대가 첫 유효 HMD 추적을 기다려 Camera의 위치·Yaw로 배치함(XR가 없으면 Camera 기준). `R` 바인딩·측정 취소·`Bench re-placed` 기록, 버튼 Actor 붙임을 추가함. `HeadPlacement`의 기울어진 머리, `AttemptOutcomes`의 공유 다시 놓기 취소 함수, `ButtonComponents`의 버튼 상대 위치 유지 시험으로 확인함. 실제 HMD 대기·PIE 키 포커스는 기기 후속 확인임.
 
 **문제**
 - **위치:** `Source/vBoR/P0Probe/P0ButtonBenchGameMode.cpp:18-22` — Pawn 위치 + (45, 0, 120) cm에 생성.
@@ -78,7 +84,9 @@
 - 다시 놓기: 진행 중인 누름이 취소되고, 추적 취소 수는 그대로다.
 - 붙임: 시험대를 옮기면 버튼 Actor들이 같은 상대 위치로 따라온다.
 
-### R1-4 select 순간의 원본 깊이를 기록한다 — 열림
+### R1-4 select 순간의 원본 깊이를 기록한다 — 반영함 (fix: address P0-b first review findings)
+
+**반영 확인:** `DepthAtSelectMm`·가용 여부를 추가하고 select 순간에만 저장함. 최대값과 따로 부호를 보존하며 새 hover에서 초기화됨. Last press 및 select 이벤트 로그에 깊이/n/a를 표시함. `SelectDepth` 시험으로 음수·최대값 분리·무효/n/a·초기화를 확인함.
 
 **문제**
 - **위치:** `Source/vBoR/P0Probe/P0ButtonBench.cpp:134-137` (Select 처리).
@@ -93,7 +101,9 @@
 **확인할 시험**
 - select 순간 값이 최대값과 따로 저장된다. 음수가 그대로 남는다. 못 읽으면 n/a다. 새 누름(hover)에 초기화된다.
 
-### R1-5 버려진 측정과 놓친 시도를 센다 — 열림
+### R1-5 버려진 측정과 놓친 시도를 센다 — 반영함 (fix: address P0-b first review findings)
+
+**반영 확인:** 활성 측정의 무효 샘플은 추적 취소를 한 번 셈. select 없는 Unhover는 놓친 시도로 셈. 누름별 누적 계수를 손별로 합산하여 패널·로그에 표시함. `AttemptOutcomes`에서 무효 반복, hover만 끝난 경우, 정상 누름 뒤 Unhover, 수동 다시 놓기 취소를 확인함. ISDK Cancel은 합계에 넣지 않음.
 
 **문제**
 - **위치:** `Source/vBoR/P0Probe/P0ButtonBench.cpp:92` — 원본 손끝이 Tracked가 아닌 프레임이 한 번만 있어도 진행 중인 누름을 취소한다. 처리 자체는 맞지만 몇 번 버려졌는지 보이지 않는다.
@@ -110,7 +120,9 @@
 - hover → unhover → 놓친 시도 +1.
 - hover → select → unselect → unhover → 놓친 시도 +0.
 
-### R1-6 시험이 ISDK 내부 네이티브 API에 의존한다 — 열림
+### R1-6 시험이 ISDK 내부 네이티브 API에 의존한다 — 반영함 (fix: address P0-b first review findings)
+
+**반영 확인:** 내부 헤더·native raycast·native surface 접근과 Build.cs의 내부 모듈/경로 의존을 제거함. `ButtonComponents`가 공개 GetSize·Right/Up 벡터·법선으로 경계를 확인함. 메시 90 deg 회전 구성도 확인했고 의존 제거 후 vBoR 전체 소스를 재컴파일함.
 
 **문제**
 - **위치:** `Source/vBoR/vBoR.Build.cs`(`PrivateIncludePaths`에 `Plugins/MetaXRInteraction/Source/ThirdParty/OculusInteractionLibrary/Include` 직접 지정, `OculusInteractionLibrary` 의존), `Source/vBoR/P0Probe/P0ButtonBenchTests.cpp:96`(`isdk_api/isdk_api.hpp`), 같은 파일 `:110-122`(네이티브 raycast).

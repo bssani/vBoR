@@ -13,9 +13,8 @@ bool FP0ButtonDepthTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("In front is zero mm"), Press.MaxDepthMm, 0.0);
 	Press.Select(1.5);
 	Press.Sample(true, FVector(0, 0, -0.4), FVector::ZeroVector, FVector::UpVector, 10.0);
-	Press.Sample(false, FVector(0, 0, -100), FVector::ZeroVector, FVector::UpVector, 10.0);
 	Press.Sample(true, FVector(0, 0, -0.2), FVector::ZeroVector, FVector::UpVector, 10.0);
-	TestEqual(TEXT("Maximum persists, invalid tracking excluded"), Press.MaxDepthMm, 4.0);
+	TestEqual(TEXT("Maximum persists within a press"), Press.MaxDepthMm, 4.0);
 	TestTrue(TEXT("Only selected release completes a press"), Press.Unselect());
 	TestFalse(TEXT("Duplicate release is not a new press"), Press.Unselect());
 	Press.Sample(true, FVector(0, 0, -5), FVector::ZeroVector, FVector::UpVector, 10.0);
@@ -42,14 +41,75 @@ bool FP0ButtonTimeTest::RunTest(const FString& Parameters)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ButtonHoverTest, "vBoR.P0ButtonBench.SimultaneousHover", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-bool FP0ButtonHoverTest::RunTest(const FString& Parameters)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ButtonActiveTest, "vBoR.P0ButtonBench.SimultaneousActive", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP0ButtonActiveTest::RunTest(const FString& Parameters)
 {
-	FP0ButtonHoverMeasurement State;
+	using S = EIsdkInteractableState;
+	TestEqual(TEXT("Select and Hover both count"), FP0ButtonActiveMeasurement::CountActive(TArray<S>{S::Select, S::Hover}), 2);
+	TestEqual(TEXT("Select alone counts"), FP0ButtonActiveMeasurement::CountActive(TArray<S>{S::Select}), 1);
+	TestEqual(TEXT("Normal and Disabled do not count"), FP0ButtonActiveMeasurement::CountActive(TArray<S>{S::Normal, S::Disabled}), 0);
+	FP0ButtonActiveMeasurement State;
 	for (const int32 Count : {0, 1, 2, 2, 3, 2, 1, 2, 2}) { State.Update(Count); }
 	TestEqual(TEXT("Current count"), State.Current, 2);
 	TestEqual(TEXT("Maximum"), State.Maximum, 3);
 	TestEqual(TEXT("Counts entry into >=2, not frames or 2->3"), State.MultipleEpisodes, 2);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ButtonSelectDepthTest, "vBoR.P0ButtonBench.SelectDepth", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP0ButtonSelectDepthTest::RunTest(const FString& Parameters)
+{
+	FP0ButtonPressMeasurement Press;
+	Press.Hover(1.0);
+	Press.Select(1.5);
+	Press.Sample(true, FVector(0, 0, 0.2), FVector::ZeroVector, FVector::UpVector, 10.0, true);
+	TestTrue(TEXT("Select depth available"), Press.bHasDepthAtSelect);
+	TestEqual(TEXT("Select keeps negative depth in front of surface"), Press.DepthAtSelectMm, -2.0);
+	Press.Sample(true, FVector(0, 0, -0.5), FVector::ZeroVector, FVector::UpVector, 10.0);
+	TestEqual(TEXT("Max depth updated separately"), Press.MaxDepthMm, 5.0);
+	TestEqual(TEXT("Select snapshot does not follow max"), Press.DepthAtSelectMm, -2.0);
+	Press.Unselect();
+	Press.Hover(2.0);
+	TestFalse(TEXT("Fresh hover resets select snapshot availability"), Press.bHasDepthAtSelect);
+	Press.Select(2.1);
+	Press.Sample(false, FVector::ZeroVector, FVector::ZeroVector, FVector::UpVector, 10.0, true);
+	TestFalse(TEXT("Unavailable select sample is n/a"), Press.bHasDepthAtSelect);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ButtonAttemptTest, "vBoR.P0ButtonBench.AttemptOutcomes", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP0ButtonAttemptTest::RunTest(const FString& Parameters)
+{
+	FP0ButtonPressMeasurement Press;
+	Press.Hover(1.0);
+	TestTrue(TEXT("Invalid active sample reports tracking cancellation"), Press.Sample(false, FVector::ZeroVector, FVector::ZeroVector, FVector::UpVector, 10.0) == EP0ButtonSampleResult::TrackingCanceled);
+	Press.Sample(false, FVector::ZeroVector, FVector::ZeroVector, FVector::UpVector, 10.0);
+	TestEqual(TEXT("Repeated invalid sample counts once"), Press.TrackingCanceled, 1);
+	Press.Hover(2.0);
+	TestTrue(TEXT("Hover ending without select is missed"), Press.Unhover());
+	Press.Unhover();
+	TestEqual(TEXT("Missed episode counts once"), Press.Missed, 1);
+	Press.Hover(3.0);
+	Press.Select(3.1);
+	Press.Unselect();
+	Press.Unhover();
+	TestEqual(TEXT("Selected release is not missed"), Press.Missed, 1);
+	Press.Hover(4.0);
+	Press.Select(4.1);
+	FP0ButtonBenchPlacement::CancelMeasurements(MakeArrayView(&Press, 1));
+	TestFalse(TEXT("Re-placement cancel cannot complete"), Press.Unselect());
+	TestEqual(TEXT("Manual cancel preserves tracking count"), Press.TrackingCanceled, 1);
+	TestEqual(TEXT("Manual cancel is not missed"), Press.Missed, 1);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ButtonPlacementTest, "vBoR.P0ButtonBench.HeadPlacement", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP0ButtonPlacementTest::RunTest(const FString& Parameters)
+{
+	const FVector HeadPosition(120, -40, 165);
+	const auto Placement = FP0ButtonBenchPlacement::Calculate(FTransform(FRotator(-40, 30, 15), HeadPosition), 45, 25);
+	TestTrue(TEXT("Only head yaw carried into bench"), Placement.Rotator().Equals(FRotator(0, 30, 0)));
+	TestTrue(TEXT("Horizontal forward 45 cm and below 25 cm"), Placement.GetLocation().Equals(HeadPosition + FRotator(0, 30, 0).RotateVector(FVector(45, 0, 0)) - FVector(0, 0, 25)));
 	return true;
 }
 
@@ -82,24 +142,29 @@ bool FP0ButtonLayoutTest::RunTest(const FString& Parameters)
 #include "../Interaction/VBoRPokeButton.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
+#include "Engine/StaticMesh.h"
 #include "Interaction/IsdkClippedPlaneSurface.h"
 #include "Interaction/IsdkPokeInteractable.h"
 #include "Interaction/IsdkPokeButtonVisual.h"
 #include "Interaction/Surfaces/IsdkPointablePlane.h"
 #include "IsdkContentAssetPaths.h"
 #include "Materials/MaterialInterface.h"
+#include "Materials/Material.h"
+#include "Materials/MaterialExpressionVectorParameter.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "GameFramework/WorldSettings.h"
 #include "Kismet/GameplayStatics.h"
 #include "Components/TextRenderComponent.h"
 #include "P0ButtonBench.h"
-#include "isdk_api/isdk_api.hpp"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ButtonComponentTest, "vBoR.P0ButtonBench.ButtonComponents", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP0ButtonComponentTest::RunTest(const FString& Parameters)
 {
 	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
 	AVBoRPokeButton* Button = World->SpawnActor<AVBoRPokeButton>();
+	UMaterialInterface* OriginalMaterial = Button->ButtonMesh->GetMaterial(0);
+	Button->HoverOpacity = 0.23f;
+	Button->SelectOpacity = 0.71f;
 	const FTransform MeshBefore = Button->ButtonMesh->GetComponentTransform();
 	Button->OnConstruction(Button->GetActorTransform());
 	TestTrue(TEXT("Repeated construction keeps mesh rest position"), Button->ButtonMesh->GetComponentTransform().Equals(MeshBefore));
@@ -107,18 +172,17 @@ bool FP0ButtonComponentTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Plane normal points out of actor top"), Button->Plane->GetNormal().GetSafeNormal().Equals(FVector::UpVector, 1.e-6));
 	TestTrue(TEXT("Visual starts 3 mm above full press plane"), FMath::IsNearlyEqual(
 		Button->ButtonVisual->GetComponentLocation().Z - Button->Poke->GetComponentLocation().Z, 0.3));
-	auto* Surface = Button->Surface->GetApiClippedPlaneSurface();
-	TestNotNull(TEXT("Native clipped surface built"), Surface);
 	Button->OnConstruction(Button->GetActorTransform());
-	if (Surface)
+	for (const FRotator MeshRotation : {FRotator::ZeroRotator, FRotator(90, 0, 0)})
 	{
-		isdk_Ray Ray{};
-		Ray.direction = {0, 0, -1};
-		isdk_SurfaceHit Hit{};
-		Ray.origin = {0.74f, 0, 2};
-		TestTrue(TEXT("Ray just inside 15 mm visible width hits"), Surface->raycast(&Ray, &Hit, 10) != 0);
-		Ray.origin = {0.76f, 0, 2};
-		TestFalse(TEXT("Ray just outside 15 mm visible width misses"), Surface->raycast(&Ray, &Hit, 10) != 0);
+		Button->ButtonMesh->SetRelativeRotation(MeshRotation);
+		Button->OnConstruction(Button->GetActorTransform());
+		const FTransform MeshToActor = Button->ButtonMesh->GetComponentTransform().GetRelativeTransform(Button->GetActorTransform());
+		const auto Layout = FVBoRPokeButtonLayout::Calculate(Button->ButtonMesh->GetStaticMesh()->GetBoundingBox(), MeshToActor, Button->PressDepthMm, Button->HitAreaScale);
+		TestTrue(TEXT("Public plane half-extents match visible Actor Y/X dimensions"),
+			Button->Plane->GetSize().Equals(FVector2D(Layout.PlaneSize.Y, Layout.PlaneSize.X) / 2.0));
+		TestTrue(TEXT("Plane Right parallels Actor Y"), FMath::IsNearlyEqual(FMath::Abs(FVector::DotProduct(Button->Plane->GetRightVector(), Button->GetActorRightVector())), 1.0));
+		TestTrue(TEXT("Plane Up parallels Actor X"), FMath::IsNearlyEqual(FMath::Abs(FVector::DotProduct(Button->Plane->GetUpVector(), Button->GetActorForwardVector())), 1.0));
 	}
 	UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, IsdkContentAssetPaths::Materials::GrabbableDefault);
 	TArray<FMaterialParameterInfo> Infos;
@@ -129,30 +193,68 @@ bool FP0ButtonComponentTest::RunTest(const FString& Parameters)
 	AP0ButtonBench* Bench = World->SpawnActor<AP0ButtonBench>();
 	World->InitializeActorsForPlay(FURL());
 	World->GetWorldSettings()->NotifyBeginPlay();
+	Bench->PlaceFromHead(FTransform(FVector(100, 20, 165)));
 	TArray<AActor*> SpawnedButtons;
 	UGameplayStatics::GetAllActorsOfClass(World, AVBoRPokeButton::StaticClass(), SpawnedButtons);
 	TestEqual(TEXT("Startup spawns 3 single, 12 cluster, 1 far plus test button"), SpawnedButtons.Num(), 17);
-	TestTrue(TEXT("Startup panel displays measurements"), Bench->Panel->Text.ToString().Contains(TEXT("Cluster hover:")));
-	TestTrue(TEXT("Visual is bound to poke before play"), Button->ButtonVisual->GetPokeInteractable() == Button->Poke.Get());
-	UMaterialInstanceDynamic* Color = Cast<UMaterialInstanceDynamic>(Button->ButtonMesh->GetMaterial(0));
-	TestNotNull(TEXT("Startup creates a color material"), Color);
-	if (Color)
+	TestTrue(TEXT("Startup panel displays both-hands active measurements"), Bench->Panel->Text.ToString().Contains(TEXT("Cluster active (both hands):")));
+	TestTrue(TEXT("Panel includes tracking cancellation and missed counts"), Bench->Panel->Text.ToString().Contains(TEXT("Canceled (tracking): L=0 R=0 | Missed: L=0 R=0")));
+	TArray<FTransform> RelativeBefore;
+	for (AActor* Spawned : SpawnedButtons)
 	{
-		TestTrue(TEXT("Normal color is visible in material"), Color->K2_GetVectorParameterValue(TEXT("ColorParam")).Equals(Button->NormalColor));
-		for (const auto State : {EIsdkInteractableState::Hover, EIsdkInteractableState::Select, EIsdkInteractableState::Normal})
+		if (Spawned == Button) { continue; }
+		TestTrue(TEXT("Bench owns attachment of every trial button"), Spawned->GetAttachParentActor() == Bench);
+		RelativeBefore.Add(Spawned->GetActorTransform().GetRelativeTransform(Bench->GetActorTransform()));
+	}
+	Bench->PlaceFromHead(FTransform(FRotator(-40, 30, 15), FVector(300, -60, 170)));
+	int32 RelativeIndex = 0;
+	for (AActor* Spawned : SpawnedButtons)
+	{
+		if (Spawned == Button) { continue; }
+		TestTrue(TEXT("Re-placement keeps button relative pose"), Spawned->GetActorTransform().GetRelativeTransform(Bench->GetActorTransform()).Equals(RelativeBefore[RelativeIndex++], 1.e-5));
+	}
+	TestTrue(TEXT("Visual is bound to poke before play"), Button->ButtonVisual->GetPokeInteractable() == Button->Poke.Get());
+	TestTrue(TEXT("Startup preserves original material slot"), Button->ButtonMesh->GetMaterial(0) == OriginalMaterial);
+	TestNull(TEXT("Normal has no overlay"), Button->ButtonMesh->GetOverlayMaterial());
+	for (const auto State : {EIsdkInteractableState::Hover, EIsdkInteractableState::Select, EIsdkInteractableState::Normal})
+	{
+		FIsdkInteractableStateEvent Event;
+		Event.Interactable = Button->Poke.Get();
+		Event.Args.NewState = State;
+		Button->Poke->GetInteractableStateChangedDelegate()->Broadcast(Event);
+		UMaterialInstanceDynamic* Overlay = Cast<UMaterialInstanceDynamic>(Button->ButtonMesh->GetOverlayMaterial());
+		if (State == EIsdkInteractableState::Normal) { TestNull(TEXT("Normal removes overlay"), Overlay); }
+		else
 		{
-			FIsdkInteractableStateEvent Event;
-			Event.Interactable = Button->Poke.Get();
-			Event.Args.NewState = State;
-			Button->Poke->GetInteractableStateChangedDelegate()->Broadcast(Event);
-			const FLinearColor Expected = State == EIsdkInteractableState::Hover ? Button->HoverColor
-				: State == EIsdkInteractableState::Select ? Button->SelectColor : Button->NormalColor;
-			TestTrue(TEXT("State event updates actual material color"), Color->K2_GetVectorParameterValue(TEXT("ColorParam")).Equals(Expected));
+			TestNotNull(TEXT("Active state has overlay"), Overlay);
+			if (Overlay)
+			{
+				FLinearColor Expected = State == EIsdkInteractableState::Hover ? Button->HoverColor : Button->SelectColor;
+				Expected.A = State == EIsdkInteractableState::Hover ? Button->HoverOpacity : Button->SelectOpacity;
+				TestTrue(TEXT("Overlay color and opacity match state"), Overlay->K2_GetVectorParameterValue(TEXT("ColorParam")).Equals(Expected));
+				TestTrue(TEXT("Overlay is translucent"), Overlay->GetBlendMode() == BLEND_Translucent);
+			}
 		}
 	}
 
 	World->EndPlay(EEndPlayReason::Quit);
 	World->DestroyWorld(false);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0OverlayMaterialTest, "vBoR.P0ButtonBench.OverlayMaterial", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP0OverlayMaterialTest::RunTest(const FString& Parameters)
+{
+	UMaterialInterface* Interface = LoadObject<UMaterialInterface>(nullptr, IsdkContentAssetPaths::Materials::GrabbableDefault);
+	TestNotNull(TEXT("Existing overlay material available"), Interface);
+	if (!Interface) { return false; }
+	TestTrue(TEXT("Overlay supports translucency"), Interface->GetBlendMode() == BLEND_Translucent);
+#if WITH_EDITOR
+	const FExpressionInput& Opacity = Interface->GetMaterial()->GetEditorOnlyData()->Opacity;
+	const auto* Vector = Cast<UMaterialExpressionVectorParameter>(Opacity.Expression);
+	TestTrue(TEXT("Opacity is driven by ColorParam alpha"), Vector && Vector->ParameterName == TEXT("ColorParam") &&
+		Opacity.MaskA && !Opacity.MaskR && !Opacity.MaskG && !Opacity.MaskB);
+#endif
 	return true;
 }
 

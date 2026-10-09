@@ -81,17 +81,10 @@ void AVBoRPokeButton::PreInitializeComponents()
 void AVBoRPokeButton::BeginPlay()
 {
 	Super::BeginPlay();
-	// 메시의 모든 slot 에 상태 색을 표시함 (촉감 대신 활성 상태 표시, U-04)
+	// 원래 라벨·텍스처를 보존하고 활성 상태만 덧입힘 (P0-b R1-1, U-04)
 	UMaterialInterface* ColorMaterial = LoadObject<UMaterialInterface>(nullptr, IsdkContentAssetPaths::Materials::GrabbableDefault);
-	for (int32 Slot = 0; Slot < ButtonMesh->GetNumMaterials(); ++Slot)
-	{
-		UMaterialInstanceDynamic* Material = ButtonMesh->CreateDynamicMaterialInstance(Slot, ColorMaterial);
-		if (Material)
-		{
-			Material->SetVectorParameterValue(TEXT("ColorParam"), NormalColor);
-			ColorMaterials.Add(Material);
-		}
-	}
+	StateOverlay = ColorMaterial ? UMaterialInstanceDynamic::Create(ColorMaterial, this) : nullptr;
+	ButtonMesh->SetOverlayMaterial(nullptr);
 	Poke->GetInteractableStateChangedDelegate()->AddUniqueDynamic(this, &AVBoRPokeButton::HandleState);
 	Poke->GetInteractionPointerEventDelegate().AddUniqueDynamic(this, &AVBoRPokeButton::HandlePointer);
 }
@@ -100,6 +93,7 @@ void AVBoRPokeButton::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	Poke->GetInteractableStateChangedDelegate()->RemoveDynamic(this, &AVBoRPokeButton::HandleState);
 	Poke->GetInteractionPointerEventDelegate().RemoveDynamic(this, &AVBoRPokeButton::HandlePointer);
+	ButtonMesh->SetOverlayMaterial(nullptr);
 	Super::EndPlay(EndPlayReason);
 }
 
@@ -110,9 +104,14 @@ FVector AVBoRPokeButton::GetRestFrontWorld() const
 
 void AVBoRPokeButton::HandleState(const FIsdkInteractableStateEvent& Event)
 {
-	const FLinearColor Color = Event.Args.NewState == EIsdkInteractableState::Select ? SelectColor
-		: Event.Args.NewState == EIsdkInteractableState::Hover ? HoverColor : NormalColor;
-	for (UMaterialInstanceDynamic* Material : ColorMaterials) { Material->SetVectorParameterValue(TEXT("ColorParam"), Color); }
+	const bool bSelected = Event.Args.NewState == EIsdkInteractableState::Select;
+	const bool bActive = bSelected || Event.Args.NewState == EIsdkInteractableState::Hover;
+	if (!bActive || !StateOverlay) { ButtonMesh->SetOverlayMaterial(nullptr); return; }
+	FLinearColor Color = bSelected ? SelectColor : HoverColor;
+	// GrabbableLit 의 ColorParam alpha 가 Opacity 에 연결됨 (에셋 검사 시험, P0-b R1-1)
+	Color.A = FMath::Clamp(bSelected ? SelectOpacity : HoverOpacity, 0.0f, 1.0f);
+	StateOverlay->SetVectorParameterValue(TEXT("ColorParam"), Color);
+	ButtonMesh->SetOverlayMaterial(StateOverlay);
 }
 
 void AVBoRPokeButton::HandlePointer(const FIsdkInteractionPointerEvent& Event)

@@ -14,8 +14,6 @@ public:
 	AP0ButtonBenchGameMode();
 	UPROPERTY(EditAnywhere, Category = "Bench")
 	TSubclassOf<AP0ButtonBench> BenchClass;
-	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm"))
-	FVector BenchOffsetCm = FVector(45, 0, 120);
 protected:
 	virtual void StartPlay() override;
 };

@@ -1,15 +1,22 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "StructTypes.h"
+
+enum class EP0ButtonSampleResult { Ignored, Updated, TrackingCanceled };
 
 struct FP0ButtonPressMeasurement
 {
 	bool bHover = false;
 	bool bSelected = false;
 	bool bHasDepth = false;
+	bool bHasDepthAtSelect = false;
 	double HoverAt = -1.0;
 	double HoverToSelectSeconds = -1.0;
 	double MaxDepthMm = 0.0;
+	double DepthAtSelectMm = 0.0;
+	int32 TrackingCanceled = 0;
+	int32 Missed = 0;
 	void Hover(double Time)
 	{
 		if (bHover || bSelected) { return; }
@@ -18,12 +25,16 @@ struct FP0ButtonPressMeasurement
 		HoverToSelectSeconds = -1.0;
 		MaxDepthMm = 0.0;
 		bHasDepth = false;
+		bHasDepthAtSelect = false;
+		DepthAtSelectMm = 0.0;
 	}
-	void Select(double Time)
+	bool Select(double Time)
 	{
-		if (bSelected) { return; }
+		if (bSelected) { return false; }
 		HoverToSelectSeconds = bHover ? FMath::Max(0.0, Time - HoverAt) : -1.0;
+		bHasDepthAtSelect = false;
 		bSelected = true;
+		return true;
 	}
 	bool Unselect()
 	{
@@ -32,27 +43,63 @@ struct FP0ButtonPressMeasurement
 		bHover = false;
 		return true;
 	}
-	void Unhover() { bHover = false; }
-	void Cancel() { bHover = false; bSelected = false; }
-	void Sample(bool bValid, const FVector& Tip, const FVector& Front, const FVector& Normal, double MmPerUnit)
+	bool Unhover()
 	{
-		// 무효 추적과 완료된 누름에는 깊이를 더하지 않음 (P0-b §2, U-06)
-		if (!bValid || (!bHover && !bSelected)) { return; }
+		const bool bMissed = bHover && !bSelected;
+		if (bMissed) { ++Missed; }
+		bHover = false;
+		return bMissed;
+	}
+	void Cancel() { bHover = false; bSelected = false; }
+	EP0ButtonSampleResult Sample(bool bValid, const FVector& Tip, const FVector& Front, const FVector& Normal,
+		double MmPerUnit, bool bAtSelect = false)
+	{
+		if (!bHover && !bSelected) { return EP0ButtonSampleResult::Ignored; }
+		if (bAtSelect) { bHasDepthAtSelect = bValid; }
+		// 추적 손실은 측정 하나당 한 번만 셈 (반복 무효 frame 제외, P0-b R1-5)
+		if (!bValid) { ++TrackingCanceled; Cancel(); return EP0ButtonSampleResult::TrackingCanceled; }
+		const double SignedDepth = FVector::DotProduct(Front - Tip, Normal.GetSafeNormal()) * MmPerUnit;
+		// select 순간은 부호를 보존함 (ISDK 손끝과 원본 손끝 차이 확인, P0-b R1-4)
+		if (bAtSelect) { DepthAtSelectMm = SignedDepth; }
 		bHasDepth = true;
-		MaxDepthMm = FMath::Max(MaxDepthMm, FMath::Max(0.0, FVector::DotProduct(Front - Tip, Normal.GetSafeNormal()) * MmPerUnit));
+		MaxDepthMm = FMath::Max(MaxDepthMm, FMath::Max(0.0, SignedDepth));
+		return EP0ButtonSampleResult::Updated;
 	}
 };
 
-struct FP0ButtonHoverMeasurement
+struct FP0ButtonActiveMeasurement
 {
 	int32 Current = 0;
 	int32 Maximum = 0;
 	int32 MultipleEpisodes = 0;
-	void Update(int32 HoverCount)
+	static int32 CountActive(TConstArrayView<EIsdkInteractableState> States)
 	{
-		if (Current < 2 && HoverCount >= 2) { ++MultipleEpisodes; }
-		Current = HoverCount;
+		int32 Count = 0;
+		for (const auto State : States)
+		{
+			if (State == EIsdkInteractableState::Hover || State == EIsdkInteractableState::Select) { ++Count; }
+		}
+		return Count;
+	}
+	void Update(int32 ActiveCount)
+	{
+		if (Current < 2 && ActiveCount >= 2) { ++MultipleEpisodes; }
+		Current = ActiveCount;
 		Maximum = FMath::Max(Maximum, Current);
+	}
+};
+
+struct FP0ButtonBenchPlacement
+{
+	static void CancelMeasurements(TArrayView<FP0ButtonPressMeasurement> Presses)
+	{
+		for (auto& Press : Presses) { Press.Cancel(); }
+	}
+	static FTransform Calculate(const FTransform& Head, double ForwardCm, double BelowCm)
+	{
+		// Pitch·Roll 은 제외함 (내려다봐도 수평 정면에 고정, P0-b R1-3)
+		const FRotator Yaw(0, Head.Rotator().Yaw, 0);
+		return FTransform(Yaw, Head.GetLocation() + Yaw.RotateVector(FVector(ForwardCm, 0, 0)) - FVector(0, 0, BelowCm));
 	}
 };
 

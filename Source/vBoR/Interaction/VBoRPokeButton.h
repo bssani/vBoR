@@ -48,11 +48,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Poke Button", meta = (ClampMin = "0.01"))
 	float HitAreaScale = 1.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Poke Button")
-	FLinearColor NormalColor = FLinearColor(0.15f, 0.2f, 0.25f);
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Poke Button")
 	FLinearColor HoverColor = FLinearColor(0.0f, 0.6f, 1.0f);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Poke Button")
 	FLinearColor SelectColor = FLinearColor(0.0f, 1.0f, 0.2f);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Poke Button", meta = (ClampMin = "0", ClampMax = "1"))
+	float HoverOpacity = 0.35f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Poke Button", meta = (ClampMin = "0", ClampMax = "1"))
+	float SelectOpacity = 0.6f;
 	UPROPERTY(BlueprintAssignable, Category = "Poke Button")
 	FVBoRPokeButtonEvent OnButtonPressed;
 	UPROPERTY(BlueprintAssignable, Category = "Poke Button")
@@ -64,7 +66,7 @@ protected:
 private:
 	FVector RestFront = FVector::ZeroVector;
 	UPROPERTY()
-	TArray<TObjectPtr<UMaterialInstanceDynamic>> ColorMaterials;
+	TObjectPtr<UMaterialInstanceDynamic> StateOverlay;
 	UFUNCTION()
 	void HandleState(const FIsdkInteractableStateEvent& Event);
 	UFUNCTION()
