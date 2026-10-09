@@ -4,15 +4,19 @@ void FP0ProbeDialMeasurement::ResetAngles()
 {
 	DialAngleDeg = 0.0;
 	WristTwistDeg = 0.0;
+	ThumbLowCount = 0;
+	IndexLowCount = 0;
+	HeldCount = 0;
 	// pinch 직후 첫 측정은 새 기준만 잡음 (이전 frame 이동 미적용, P0-a §2)
 	bHasReference = false;
 	bUpdating = false;
 }
 
-void FP0ProbeDialMeasurement::Update(double Time, bool bPositionValid, bool bThumbHigh, bool bIndexHigh, bool bBonesReady,
+TArray<FString> FP0ProbeDialMeasurement::Update(double Time, bool bPositionValid, bool bThumbHighNow, bool bIndexHighNow, bool bBonesReady,
 	const FVector& ThumbPosition, const FVector& IndexPosition, const FQuat& WristRotation,
 	const FVector& WorldAxis, double MmPerUnit)
 {
+	TArray<FString> Events;
 	// ── 1) 날것의 거리·투영 측정 (신뢰도 Low 중에도 수치는 비교 가능, P0-a §2) ──
 	const FVector Axis = WorldAxis.GetSafeNormal();
 	bHasDistances = bPositionValid && bBonesReady && !ThumbPosition.ContainsNaN() && !IndexPosition.ContainsNaN();
@@ -21,16 +25,39 @@ void FP0ProbeDialMeasurement::Update(double Time, bool bPositionValid, bool bThu
 	// UE units -> mm. 기본 WorldToMeters=100 에서 10 배 (P0-a §2)
 	TipDistanceMm = TipVector.Size() * MmPerUnit;
 	ProjectedLengthMm = Projection.Size() * MmPerUnit;
-	bUpdating = bHasDistances && bThumbHigh && bIndexHigh && !Axis.IsNearlyZero()
+	bUpdating = bHasDistances && bThumbHighNow && bIndexHighNow && !Axis.IsNearlyZero()
 		&& !WristRotation.ContainsNaN() && WristRotation.SizeSquared() > UE_SMALL_NUMBER
 		&& ProjectedLengthMm >= MinProjectedLengthMm;
+	// 초기값·pinch reset 은 전환 아님. 직전 측정 상태로 비교 (P0-a §2, R2-1)
+	if (bTransitionsInitialized)
+	{
+		if (bThumbHighNow != bThumbHigh)
+		{
+			ThumbLowCount += bThumbHighNow ? 0 : 1;
+			Events.Add(FString::Printf(TEXT("Thumb confidence %s -> %s"), bThumbHigh ? TEXT("High") : TEXT("Low"), bThumbHighNow ? TEXT("High") : TEXT("Low")));
+		}
+		if (bIndexHighNow != bIndexHigh)
+		{
+			IndexLowCount += bIndexHighNow ? 0 : 1;
+			Events.Add(FString::Printf(TEXT("Index confidence %s -> %s"), bIndexHigh ? TEXT("High") : TEXT("Low"), bIndexHighNow ? TEXT("High") : TEXT("Low")));
+		}
+		if (bUpdating != bLastUpdating)
+		{
+			HeldCount += bUpdating ? 0 : 1;
+			Events.Add(FString::Printf(TEXT("dial %s -> %s"), bLastUpdating ? TEXT("updating") : TEXT("held"), bUpdating ? TEXT("updating") : TEXT("held")));
+		}
+	}
+	bThumbHigh = bThumbHighNow;
+	bIndexHigh = bIndexHighNow;
+	bLastUpdating = bUpdating;
+	bTransitionsInitialized = true;
 	DiameterDeg = 0.0;
 	if (!bUpdating)
 	{
 		// 유효하지 않은 구간 이동은 누적하지 않음. 복구 frame 에 rebase (P0-a §4-6)
 		bHasReference = false;
 		Samples.Reset();
-		return;
+		return Events;
 	}
 	const FVector Direction = Projection / Projection.Size();
 	const FQuat Wrist = WristRotation.GetNormalized();
@@ -76,4 +103,5 @@ void FP0ProbeDialMeasurement::Update(double Time, bool bPositionValid, bool bThu
 			DiameterDeg = FMath::Max(DiameterDeg, Angle);
 		}
 	}
+	return Events;
 }

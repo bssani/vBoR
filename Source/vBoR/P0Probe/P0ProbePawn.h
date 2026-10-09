@@ -56,8 +56,6 @@ protected:
 private:
 	FP0ProbeMeasurement Measurements[2];
 	FP0ProbeDialMeasurement DialMeasurements[2];
-	bool bThumbHigh[2] = {};
-	bool bIndexHigh[2] = {};
 	FVector IndexPositions[2] = {};
 	FVector ThumbPositions[2] = {};
 	bool bBonesAvailable[2] = {};

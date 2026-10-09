@@ -12,6 +12,13 @@ struct FP0ProbeDialMeasurement
 {
 	// 0 근처의 투영은 각도가 정의되지 않음. 수치 안정용이며 합격 기준 아님 (P0-a §3)
 	static constexpr double MinProjectedLengthMm = 0.1;
+	bool bTransitionsInitialized = false;
+	bool bThumbHigh = false;
+	bool bIndexHigh = false;
+	bool bLastUpdating = false;
+	int32 ThumbLowCount = 0;
+	int32 IndexLowCount = 0;
+	int32 HeldCount = 0;
 	bool bUpdating = false;
 	bool bHasReference = false;
 	bool bHasDistances = false;
@@ -26,7 +33,7 @@ struct FP0ProbeDialMeasurement
 	TArray<FP0ProbeDialSample> Samples;
 
 	void ResetAngles();
-	void Update(double Time, bool bPositionValid, bool bThumbHigh, bool bIndexHigh, bool bBonesReady,
+	TArray<FString> Update(double Time, bool bPositionValid, bool bThumbHighNow, bool bIndexHighNow, bool bBonesReady,
 		const FVector& ThumbPosition, const FVector& IndexPosition, const FQuat& WristRotation,
 		const FVector& WorldAxis, double MmPerUnit);
 };

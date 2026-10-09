@@ -195,11 +195,12 @@ FString AP0ProbePawn::FormatHand(int32 HandIndex, double Time) const
 		!State.bPositionValid && State.PositionLostAt >= 0.0 ? Time - State.PositionLostAt : State.PositionLossDuration,
 		State.bHasRecoveryDistance ? *FString::Printf(TEXT("%.2f mm"), State.RecoveryDistanceMm) : TEXT("n/a"));
 	const FP0ProbeDialMeasurement& Dial = DialMeasurements[HandIndex];
-	Text += FString::Printf(TEXT("Finger confidence: Thumb=%s Index=%s | tip distance: %s | projected length: %s\nDial: %.2f deg | wrist twist: %.2f deg | %s | angular window: %.2f deg | samples: %d\n"),
-		bThumbHigh[HandIndex] ? TEXT("High") : TEXT("Low"), bIndexHigh[HandIndex] ? TEXT("High") : TEXT("Low"),
+	Text += FString::Printf(TEXT("Finger confidence: Thumb=%s Index=%s | tip distance: %s | projected length: %s\nDial: %.2f deg | wrist twist: %.2f deg | %s | angular window: %.2f deg | samples: %d | Thumb H->L: %d | Index H->L: %d | held entries: %d\n"),
+		Dial.bThumbHigh ? TEXT("High") : TEXT("Low"), Dial.bIndexHigh ? TEXT("High") : TEXT("Low"),
 		Dial.bHasDistances ? *FString::Printf(TEXT("%.2f mm"), Dial.TipDistanceMm) : TEXT("n/a"),
 		Dial.bHasDistances ? *FString::Printf(TEXT("%.2f mm"), Dial.ProjectedLengthMm) : TEXT("n/a"),
-		Dial.DialAngleDeg, Dial.WristTwistDeg, Dial.bUpdating ? TEXT("updating") : TEXT("held"), Dial.DiameterDeg, Dial.Samples.Num());
+		Dial.DialAngleDeg, Dial.WristTwistDeg, Dial.bUpdating ? TEXT("updating") : TEXT("held"), Dial.DiameterDeg, Dial.Samples.Num(),
+		Dial.ThumbLowCount, Dial.IndexLowCount, Dial.HeldCount);
 	Text += TEXT("Pinch / strength: ");
 	for (int32 Finger = 0; Finger < 5; ++Finger)
 	{
@@ -241,13 +242,17 @@ void AP0ProbePawn::Tick(float DeltaSeconds)
 		{
 			RecordEvent(FString::Printf(TEXT("%s %s"), HandNames[HandIndex], *Event));
 		}
-		bThumbHigh[HandIndex] = UOculusXRInputFunctionLibrary::GetFingerTrackingConfidence(Hand->SkeletonType, EOculusXRFinger::Thumb) == EOculusXRTrackingConfidence::High;
-		bIndexHigh[HandIndex] = UOculusXRInputFunctionLibrary::GetFingerTrackingConfidence(Hand->SkeletonType, EOculusXRFinger::Index) == EOculusXRTrackingConfidence::High;
+		const bool bThumbHigh = UOculusXRInputFunctionLibrary::GetFingerTrackingConfidence(Hand->SkeletonType, EOculusXRFinger::Thumb) == EOculusXRTrackingConfidence::High;
+		const bool bIndexHigh = UOculusXRInputFunctionLibrary::GetFingerTrackingConfidence(Hand->SkeletonType, EOculusXRFinger::Index) == EOculusXRTrackingConfidence::High;
 		// 기존 손끝 측정의 본 준비 조건은 유지. 다이얼만 Wrist_Root 추가 확인 (P0-a §2)
 		const bool bDialBonesReady = bBonesAvailable[HandIndex] && Hand->GetBoneIndex(WristBone) != INDEX_NONE;
 		const FQuat WristRotation = bDialBonesReady ? Hand->GetBoneQuaternion(WristBone, EBoneSpaces::WorldSpace) : FQuat::Identity;
-		DialMeasurements[HandIndex].Update(Time, bValid, bThumbHigh[HandIndex], bIndexHigh[HandIndex], bDialBonesReady,
-			ThumbPositions[HandIndex], IndexPositions[HandIndex], WristRotation, DialWorldAxis, MmPerUnit);
+		for (const FString& Event : DialMeasurements[HandIndex].Update(Time, bValid, bThumbHigh, bIndexHigh, bDialBonesReady,
+			ThumbPositions[HandIndex], IndexPositions[HandIndex], WristRotation, DialWorldAxis, MmPerUnit))
+		{
+			// 짧은 전환은 로그로만 남김 (최근 이벤트 10개를 밀어내지 않게, P0-a §2)
+			UE_LOG(LogP0Probe, Log, TEXT("[%.3f s] %s %s"), Time, HandNames[HandIndex], *Event);
+		}
 		for (int32 Finger = 0; Finger < 5; ++Finger)
 		{
 			PinchStrengths[HandIndex][Finger] = PC ? PC->GetInputAnalogKeyState(FKey(FName(StrengthKeys[HandIndex][Finger]))) : 0.0f;
@@ -366,10 +371,33 @@ bool FP0ProbeConfidenceRecoveryTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Frozen Low position reads as zero move"), Frozen.LowMaxMoveMm, 0.0);
 	TestEqual(TEXT("Frozen case jump"), Frozen.ConfidenceJumpMm, 40.0);
 
+	FP0ProbeMeasurement MissingLowBones;
+	MissingLowBones.Update(0.0, true, true, FVector::ZeroVector, true, 10.0);
+	MissingLowBones.Update(0.1, true, false, FVector(100, 0, 0), false, 10.0);
+	TestFalse(TEXT("Unreadable first Low frame is not origin"), MissingLowBones.bHasLowStartPosition);
+	MissingLowBones.Update(0.2, true, false, FVector(2, 0, 0), true, 10.0);
+	MissingLowBones.Update(0.3, true, false, FVector(100, 0, 0), false, 10.0);
+	MissingLowBones.Update(0.4, true, false, FVector(5, 0, 0), true, 10.0);
+	MissingLowBones.Update(0.5, true, true, FVector(7, 0, 0), true, 10.0);
+	TestEqual(TEXT("Low move excludes missing bones"), MissingLowBones.LowMaxMoveMm, 30.0);
+	TestEqual(TEXT("Low missing bones does not overwrite High origin"), MissingLowBones.ConfidenceJumpMm, 70.0);
+
 	FP0ProbeMeasurement InitialLow;
 	InitialLow.Update(0.0, true, false, FVector(0, 0, 0), true, 10.0);
 	InitialLow.Update(0.1, true, true, FVector(5, 0, 0), true, 10.0);
 	TestFalse(TEXT("No High reference before initial Low"), InitialLow.bHasConfidenceJump);
+
+	// 직전 High frame 을 못 읽었으면 더 오래된 High 위치로 튐을 만들지 않음 (R2-4, P0-a §4-4)
+	for (int32 Missing = 0; Missing < 2; ++Missing)
+	{
+		FP0ProbeMeasurement MissingHigh;
+		MissingHigh.Update(0.0, true, true, FVector::ZeroVector, true, 10.0);
+		MissingHigh.Update(0.1, Missing != 0, true, FVector(100, 0, 0), Missing != 1, 10.0);
+		MissingHigh.Update(0.2, true, false, FVector(2, 0, 0), true, 10.0);
+		MissingHigh.Update(0.3, true, true, FVector(3, 0, 0), true, 10.0);
+		TestFalse(TEXT("Unreadable last High frame gives n/a jump"), MissingHigh.bHasConfidenceJump);
+		TestEqual(TEXT("Low movement remains independent"), MissingHigh.LowMaxMoveMm, 0.0);
+	}
 	return true;
 }
 
@@ -459,10 +487,14 @@ TArray<FString> FP0ProbeMeasurement::Update(double Time, bool bValid, bool bHigh
 		LowMaxMoveMm = FMath::Max(LowMaxMoveMm, FVector::Distance(LowStartPosition, IndexPosition) * MmPerUnit);
 	}
 	// 신뢰도 튐 기준점은 High frame 만. Low frame 위치는 추정값일 수 있음 (P0-a §2)
-	if (bHigh && bValid && bBonesAvailable)
+	if (bHigh)
 	{
-		bHasLastHighPosition = true;
-		LastHighPosition = IndexPosition;
+		// 직전 High frame 을 못 읽었으면 오래된 위치를 쓰지 않음 (P0-a §4-4, R2-4)
+		bHasLastHighPosition = bValid && bBonesAvailable;
+		if (bHasLastHighPosition)
+		{
+			LastHighPosition = IndexPosition;
+		}
 	}
 	bPositionValid = bValid;
 	bHighConfidence = bHigh;
