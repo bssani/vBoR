@@ -19,14 +19,14 @@
 1. Claude가 `Docs/Specs/<명세>.md`를 쓰고 `main`에 넣는다.
 2. Codex가 `main`에서 `codex/<명세>` 브랜치를 만들어 구현하고 커밋한다. 보고 ①~⑤는 커밋 본문에 쓴다.
 3. Claude가 `git diff main...codex/<명세>`와 `git log`의 보고를 읽고 리뷰한다. 빌드와 시험을 직접 다시 돌려 보고 내용을 재현한다. **결과는 `Docs/Reviews/<명세>.md`에 회차로 남기고**, 명세를 고쳐야 하는 지적은 명세 파일을 직접 고친다. 둘 다 그 브랜치에 커밋한다.
-4. 사용자가 Codex에 "<명세> 리뷰 반영해"라고만 전한다. Codex는 리뷰 파일의 `열림` 항목을 같은 브랜치에 **새 커밋**으로 반영하고 항목 상태를 `반영함 (<커밋>)`으로 바꾼다. amend·rebase로 리뷰한 커밋을 고쳐 쓰지 않는다.
+4. Claude가 `codex exec`로 Codex에 "<명세> 리뷰 반영해"를 보낸다(§2.9). Codex는 리뷰 파일의 `열림` 항목을 같은 브랜치에 **새 커밋**으로 반영하고 항목 상태를 `반영함 (<커밋>)`으로 바꾼다. amend·rebase로 리뷰한 커밋을 고쳐 쓰지 않는다.
 5. 로컬 빌드 확인과 리뷰 통과 뒤 사용자 승인으로 PR·머지한다.
 
 주의:
 
 - **작업 폴더 하나를 둘이 같이 쓴다.** 한 번에 한쪽만 작업한다. Codex가 브랜치를 바꿔 두므로 작업 전에 `git branch --show-current`와 `git status`를 본다.
 - **명세가 모호하면 구현자는 멈추고 묻는다.** 첫 명세(P0-a)에서 Codex가 흔들림 정의를 묻고 멈춘 것이 올바른 동작이었다.
-- **사용자는 내용을 옮기지 않는다.** 명세·리뷰·질문은 모두 파일에 있고, 사용자가 하는 일은 "<명세> 구현해" / "<명세> 리뷰 반영해" / "<명세> 리뷰해" 한 줄씩이다(2026-10-09 사용자 요청: 대화로 계속 주고받지 않는다). 이 한 줄까지 없애려면 Claude가 `codex exec`로 Codex를 직접 부르면 된다. Codex가 명세 범위를 지키는 것은 P0-a 세 차례로 확인했으므로, 사용자가 원하면 켠다.
+- **사용자는 내용을 옮기지 않는다(2026-10-09 사용자 결정).** 명세·리뷰·질문은 모두 파일에 있고, Claude가 `codex exec`로 Codex를 직접 실행한다. Codex가 끝나면 Claude가 리뷰·재현하고 다음 회차를 넘긴다. 사용자는 결정이 필요할 때만 질문을 받는다. Codex가 명세 범위를 지키는 것은 P0-a 세 차례로 확인한 뒤 켰다.
 - **역할을 바꿔 쓸 때가 있다.** Claude가 코드를 쓰면 리뷰는 Codex에 맡긴다(예: `8669f45`). 쓴 쪽이 자기 코드를 리뷰하면 독립 확인이 없다.
 
 ---
@@ -89,6 +89,7 @@ UnrealEditor.exe "C:\Git\vBoR\vBoR.uproject" /<플러그인 또는 Game>/<경로
   - `LogHttp: Warning: HTTP request timed out` (오프라인 확인 요청)
   - 헤드셋 미연결 시 `xrGetSystem() failed` → OVRPlugin 실패 후 OpenXR로 넘어감
   - `CDO Constructor (IsdkInfoCardComponent): Failed to find /OculusInteractionSamples/...` (샘플 플러그인이 없는 PC. 쓰지 않는 컴포넌트)
+  - OpenXR가 API 1.1로 인스턴스를 만들려다 실패한 뒤 `xrCreateInstance succeeded with XR_API_VERSION_1_0`로 정상 생성 (런타임이 1.0까지만 지원. 폴백이라 문제없음)
 - 확인 뒤 에디터를 닫는다. **Meta XR 플러그인 설문 창이 모달로 떠서 정상 종료를 막는다.** 에이전트는 사용자 대신 답하지 않고 강제 종료한다. 닫은 뒤 `git status`로 바뀐 파일이 없는지 본다.
 - 화면을 봐야 하면 스크린샷을 찍어 읽는다. 클릭으로 에디터를 조작하지는 않는다.
 
@@ -116,6 +117,18 @@ UnrealEditor.exe "C:\Git\vBoR\vBoR.uproject" /<플러그인 또는 Game>/<경로
 |---|---|---|---|
 | 시작 훅 `unreal-context.sh` | `.claude/hooks/`, `.codex/hooks/` | 세션 시작 때 UE 프로젝트 사실(엔진 버전, 빌드 명령, 에디터 잠금 주의)을 컨텍스트에 넣는다 | Epic Games의 unreal-engine-skills 플러그인(MIT)을 GMTCK_MR을 거쳐 가져왔다. Claude는 `$CLAUDE_PROJECT_DIR`, Codex는 절대경로로 등록. **Codex의 명령형 훅은 로컬에서만 돌고**, 프로젝트를 신뢰로 지정하고 `/hooks`에서 승인해야 실행된다 |
 | `ue-compile-check` 에이전트 | `.claude/agents/`, `.codex/agents/` | 빌드할 수 없는 환경에서 바뀐 C++의 UHT·include·모듈 의존·unity 빌드 충돌·Meta XR API를 검사한다 | 엔진이 있는 로컬에서는 이것 대신 실제 빌드(§2.3) |
+| `codex exec` (Codex 앱 내장 CLI) | `%LOCALAPPDATA%\OpenAI\Codex\bin\<해시>\codex.exe` | Claude가 Codex에 작업을 넘긴다. 끝나면 마지막 응답이 파일로 돌아온다 | 아래 참고 |
+
+`codex exec` 실행 방법 (2026-10-09 확인):
+
+```
+codex.exe exec -C "C:\Git\vBoR" --approve-for-me -o <마지막 응답 파일> "<지시>" < /dev/null
+```
+
+- **npm으로 설치한 `codex`(0.154.0)가 아니라 Codex 앱에 들어 있는 `codex.exe`(0.160.1)를 쓴다.** 설정의 기본 모델 `gpt-6.1-sol`을 npm 버전은 모른다("not supported when using Codex with a ChatGPT account"로 실패). 앱이 업데이트되면 `<해시>` 폴더가 바뀌므로 `bin\*\codex.exe`로 찾는다.
+- `--approve-for-me`: 작업 폴더 쓰기 샌드박스에서 돌리고, 그 밖의 쓰기(git 커밋, UBT·DDC 쓰기 등) 승인 요청은 Codex 자동 검토가 처리한다. `--sandbox`와 함께 쓸 수 없다. 샌드박스를 끄는 `--dangerously-bypass-approvals-and-sandbox`는 쓰지 않는다.
+- 시작 로그의 MCP 인증 오류(context7, GitHub Copilot)는 쓰지 않는 서버라 무시한다.
+- 백그라운드로 돌리고 끝나면 커밋·리뷰 파일·마지막 응답을 읽는다. Codex가 도는 동안 Claude는 작업 폴더를 건드리지 않는다. `main` 문서는 별도 sparse worktree에서 고친다.
 
 ---
 
