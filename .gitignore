@@ -92,3 +92,7 @@ DerivedDataCache/*
 # tool only. vBoR must not depend on them at runtime: its parts are built in C++ on ISDK directly, and
 # recorded hand poses are saved under the project's Content/, never under the samples plugin.
 Plugins/OculusInteractionSamples/
+
+# Current handoff between Claude Code (spec/review) and the Codex desktop app (implementation).
+# Volatile state (branch, commit, what to do now); durable records live in Docs/Specs and Docs/Reviews.
+/HANDOFF.md
