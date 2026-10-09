@@ -89,6 +89,7 @@ UnrealEditor.exe "C:\Git\vBoR\vBoR.uproject" /<플러그인 또는 Game>/<경로
   - `LogHttp: Warning: HTTP request timed out` (오프라인 확인 요청)
   - 헤드셋 미연결 시 `xrGetSystem() failed` → OVRPlugin 실패 후 OpenXR로 넘어감
   - `CDO Constructor (IsdkInfoCardComponent): Failed to find /OculusInteractionSamples/...` (샘플 플러그인이 없는 PC. 쓰지 않는 컴포넌트)
+  - OpenXR가 API 1.1로 인스턴스를 만들려다 실패한 뒤 `xrCreateInstance succeeded with XR_API_VERSION_1_0`로 정상 생성 (런타임이 1.0까지만 지원. 폴백이라 문제없음)
 - 확인 뒤 에디터를 닫는다. **Meta XR 플러그인 설문 창이 모달로 떠서 정상 종료를 막는다.** 에이전트는 사용자 대신 답하지 않고 강제 종료한다. 닫은 뒤 `git status`로 바뀐 파일이 없는지 본다.
 - 화면을 봐야 하면 스크린샷을 찍어 읽는다. 클릭으로 에디터를 조작하지는 않는다.
 
