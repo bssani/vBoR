@@ -7,14 +7,16 @@
 | 베이스 브랜치 | `main` |
 | 작업 브랜치 | `codex/P0-b-poke-button-bench` |
 | 리뷰 파일 | [Docs/Reviews/P0-b-poke-button-bench.md](../Reviews/P0-b-poke-button-bench.md) (첫 리뷰 때 생김) |
-| 상태 | **초안 — 사용자 결정 대기(§0).** 시험 상태 `not-tested` |
+| 상태 | 확정(2026-10-09) — 구현 전. 시험 상태 `not-tested` |
 
-## 0. 사용자 결정 (구현 전에 확정)
+## 0. 사용자 결정 (2026-10-09 확정)
 
-| # | 결정할 것 | 명세의 현재 가정 |
+| # | 결정 | 내용 |
 |---|---|---|
-| D1 | 확정을 **poke만** 시험할지, **pinch 확정도 같이** 시험할지 | poke만. LiftGateStudy에서 ISDK pinch 확정이 자연스러운 손 동작 중 오인식이 잦아 poke로 바꿨다(LiftGateStudy ADR-007, Agent-Workflow §4 L2). poke limiter(U-06)도 poke 쪽 결정이다. pinch를 넣으면 "손끝으로 겨누고 pinch로 확정"하는 선택 로직을 새로 만들어야 한다 |
-| D2 | 버튼 크기·간격 실제 자료가 있는지 | 없음. §2의 크기·간격은 **시험용 자리값**이며 차량 사양도 합격 기준도 아니다. 자료가 있으면 그 값으로 바꾼다 |
+| D1 | **poke만 시험한다** | pinch 확정은 넣지 않는다. LiftGateStudy에서 ISDK pinch 확정이 자연스러운 손 동작 중 오인식이 잦아 poke로 바꿨다(LiftGateStudy ADR-007, Agent-Workflow §4 L2). poke limiter(U-06)도 poke 쪽 결정이다 |
+| D2 | **버튼 크기·간격은 임시값** | 실자료가 없다. §2의 크기·간격은 시험용 자리값이며 차량 사양도 합격 기준도 아니다. 나중에 값만 바꾼다(프로퍼티) |
+| D3 | **상호작용 부품은 C++ 부모 Actor로 만들고, 실제 부품은 자식으로 완성한다** | 부모에는 지금 필요한 기능만 넣는다(버튼: 눌렸다가 돌아옴). 자식(Blueprint)은 메시를 바꾸면 바로 적용돼야 한다. 부모를 하나씩 필요한 것만 만든다 |
+| D4 | **버튼은 윗면이 눌리는 면이고 버튼 메시가 움직인다** | ISDK의 기본 방식이다(아래 §2-2). 메시 모양 자체를 판정 영역으로 쓰는 것은 ISDK가 지원하지 않는다 — 판정은 평면이다 |
 
 ## 1. 왜 만드는가
 
@@ -31,19 +33,26 @@
 
 **다시 쓰는 부품** — `Source/vBoR/Interaction/`. ISDK·MetaXR에만 의존하고 vBoR 시나리오 코드를 참조하지 않는다(Agent-Workflow §5.3). ISDK 샘플 플러그인은 참조하지 않는다.
 
-1. **손 리그 Pawn** (`AVBoRHandRigPawn`)
+1. **손 리그 Pawn 부모** (`AVBoRHandRigPawn`, `Blueprintable`) — 이후 단계의 Pawn은 이것을 부모로 한다(D3)
    - HMD 카메라, ISDK 손 리그 좌·우(`UIsdkHandRigComponentLeft/Right` — `Plugins/MetaXRInteraction/Source/OculusInteractionPrebuilts/Public/Rig/IsdkHandRigComponent.h:142` 부근).
    - **레이 인터랙션을 끈다.** 리그는 `RayInteraction`을 기본으로 만들고(`IsdkRigComponent.h:394`), 레이 리그는 "컴포넌트가 활성일 때만 켜짐" 조건을 갖는다(`IsdkRayInteractionRigComponent.h:147-151`). 끄는 방법은 헤더·구현으로 확인해 고른다.
    - **원거리 잡기·컨트롤러 리그를 만들지 않는다.** 손 리그만 쓴다.
    - **poke limiter를 붙인다(U-06):** `RigModifiersToSpawn`(`IsdkRigComponent.h` 같은 파일)에 `UIsdkPokeLimiterRigModifier`(`OculusInteractionPrebuilts/Public/Rig/IsdkPokeLimiterRigModifier.h`)를 넣는다.
    - 데이터 소스: ISDK는 MetaXR·OpenXR 데이터 소스 모듈을 둘 다 올린다(`OculusInteractionPrebuilts/Private/OculusInteractionPrebuiltsModule.cpp:32-59`). XR API가 Epic Native OpenXR일 때 어느 쪽이 쓰이는지 확인해 보고한다.
-2. **poke 버튼** (`AVBoRPokeButton`)
-   - ISDK 조립: `IsdkPokeInteractable` + `IsdkPointablePlane` + `IsdkClippedPlaneSurface`(경계 클리퍼 포함) + `IsdkPokeButtonVisual`(눌림 표현) + `IsdkPointerEventAudioPlayer`(누름 소리). 같은 구성의 샘플 BP(BigRedButton)는 참고만 한다.
-   - 보이는 버튼: 교체 가능한 Static Mesh. 기본은 엔진 Cube를 크기에 맞춰 줄인 것.
-   - 프로퍼티: 보이는 크기(가로·세로 mm), 판정 영역 배율(기본 1.0 — U-04는 키워도 되지만 13번은 1.0), 상태 색(평상·hover·select).
-   - **활성 상태를 시각으로 표시**한다(U-04 — 촉감이 없으므로 이것이 접촉을 대신한다). hover·select 색이 달라야 한다.
-   - 누름 소리는 ISDK Content의 poke 소리 에셋(`/OculusInteraction/Audio/Interaction_BasicPoke_ButtonPress`)을 쓴다.
-   - 눌렸을 때 알리는 이벤트(delegate) 하나. 그 뒤 기능 명령 연결은 P3 범위다.
+2. **poke 버튼 부모 Actor** (`AVBoRPokeButton`, `Blueprintable`) — 모든 누르는 버튼의 부모(D3). 자식 Blueprint는 메시만 바꾸면 된다.
+   - **ISDK가 버튼을 움직이는 방식(확인함):** 판정은 `IsdkPokeInteractable` 위치의 평면이다. 평면 법선은 그 컴포넌트의 -X(앞쪽 반대)라서, 컴포넌트의 +X가 누르는 방향이다(`Plugins/MetaXRInteraction/Source/OculusInteraction/Private/Interaction/IsdkPokeButtonVisual.cpp:75-92`). `IsdkPokeButtonVisual`은 시작할 때 자기 위치와 그 평면 사이 거리를 눌림 깊이로 삼는다. hover·select 동안 손끝을 따라 평면까지 내려가고, 그 밖의 상태에서는 시작 위치로 돌아간다(같은 파일 `:214-233`). **그래서 버튼 메시를 `IsdkPokeButtonVisual` 아래에 붙이면 "눌렸다가 돌아오는" 동작이 따로 코드 없이 된다.**
+   - 컴포넌트 구성:
+     - 루트(고정)
+     - 받침 메시(선택, 고정) — 테두리·베젤. 비어 있어도 된다.
+     - `IsdkPokeInteractable` + `IsdkPointablePlane` + `IsdkClippedPlaneSurface`(경계 클리퍼) — **완전히 눌린 깊이**의 평면.
+     - `IsdkPokeButtonVisual` — 버튼 윗면 높이(쉬는 위치). 그 아래에 **버튼 메시**(움직이는 부분, 교체 대상).
+     - `IsdkPointerEventAudioPlayer` — 누름 소리(ISDK Content `/OculusInteraction/Audio/Interaction_BasicPoke_ButtonPress`).
+   - **좌표 규칙:** Actor 로컬 **+Z가 버튼 윗면 법선**(손가락이 오는 쪽), 누르는 방향은 -Z. 버튼 메시는 윗면이 +Z를 보게 만든다(엔진 Cube는 그대로 맞음). 메시가 다른 방향으로 만들어졌으면 자식에서 버튼 메시 컴포넌트를 회전시킨다.
+   - **메시만 바꾸면 적용(D3):** `OnConstruction`에서 버튼 메시의 경계상자(Actor 공간)로 윗면 높이·가로·세로를 구해 `IsdkPokeButtonVisual`을 윗면에, 판정 평면을 윗면에서 눌림 깊이만큼 아래에 놓는다. 평면 크기 = 윗면 크기 × 판정 영역 배율. 메시나 회전을 바꾸면 에디터에서 바로 다시 맞춰진다.
+   - 프로퍼티: 버튼 메시, 받침 메시, 눌림 깊이(mm, 임시값 3 mm), 판정 영역 배율(기본 1.0 — U-04는 키워도 되지만 13번은 1.0), 상태 색(평상·hover·select).
+   - **활성 상태를 시각으로 표시**한다(U-04 — 촉감이 없으므로 이것이 접촉을 대신한다). hover·select 색이 버튼 메시에 보여야 한다.
+   - 눌림·놓임 이벤트(`BlueprintAssignable` delegate). 기능 명령 연결은 P3 범위다. 부모에 그 밖의 기능은 넣지 않는다(D3).
+   - 크기는 버튼 메시에서 나온다. 시험대는 엔진 Cube 버튼 메시의 스케일로 버튼마다 크기를 정한다(D2).
 
 **P0 전용 시험대** — `Source/vBoR/P0Probe/` (P0이 끝나면 지운다)
 
@@ -71,7 +80,8 @@
 
 | 하지 말 것 | 이유 |
 |---|---|
-| pinch 확정·손끝 겨누기 선택 로직 | D1 결정 대기. 결정이 바뀌면 명세를 고친다 |
+| pinch 확정·손끝 겨누기 선택 로직 | D1 — poke만 시험한다 |
+| 버튼 외 부모 Actor(레버·손잡이·다이얼 등) | D3 — 필요해질 때 하나씩. 놓으면 돌아오는 회전 부품은 P2(손잡이)에서 |
 | "가장 가까운 하나만 활성 + 히스테리시스" 선택 층 | 이 시험대가 그것이 필요한지 재는 것이다. 필요하면 다음 명세 |
 | 기능 명령 연결, 단계 진행, 13번 도달 판정 | P3·P4 범위 |
 | 차량 메시·실제 버튼 사양 | D2. 자리값만 쓴다 |
@@ -98,6 +108,7 @@
    - 동시 hover 수와 2 이상 횟수: 전환 때만 센다.
    - 한 누름 동안의 hover 대상 전환 횟수.
    - hover→select 시간.
+   - 버튼 배치 계산: 경계상자·눌림 깊이·판정 영역 배율을 넣으면 윗면 높이, 판정 평면 위치(윗면 − 눌림 깊이), 평면 크기(윗면 × 배율)가 맞게 나온다. 메시를 90° 돌려 넣은 경우도 Actor 공간 경계로 맞는다.
 5. 샘플 플러그인 참조가 없고, 샘플 플러그인을 끈 상태로 빌드·시험한다(`-DisablePlugin=OculusInteractionSamples` / `-DisablePlugins=OculusInteractionSamples`).
 6. 모든 ISDK·MetaXR 호출을 `Plugins/` 헤더와 대조했고 보고에 경로:줄을 적었다.
 7. 로컬 빌드 경고·오류 0, `vBoR.*` 자동화 시험 전체 통과(기존 P0-a 시험 포함).
