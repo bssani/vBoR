@@ -8,9 +8,12 @@ public class vBoR : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "OculusInteraction", "OculusInteractionPrebuilts" });
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "OculusXRInput", "HeadMountedDisplay" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "OculusXRInput", "HeadMountedDisplay", "XRBase", "OculusInteractionLibrary" });
+
+		// P0-b 네이티브 경계 시험용 헤더 (샘플 참조 없음)
+		PrivateIncludePaths.Add(System.IO.Path.Combine(ModuleDirectory, "../../Plugins/MetaXRInteraction/Source/ThirdParty/OculusInteractionLibrary/Include"));
 
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
