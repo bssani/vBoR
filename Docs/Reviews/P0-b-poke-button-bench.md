@@ -10,6 +10,14 @@
 |---|---|---|---|---|
 | 1 | 2026-10-10 | `6562171` P0-b 시험대 | Claude | **수정 후 실측.** 빌드·시험은 통과. 부모 버튼이 메시 재질을 덮는 문제, 동시 활성 수 누락, 시험대 위치 기준 등 6건 |
 | 2 | 2026-10-10 | `fe53a8d` 1회차 반영 + VR 첫 실행 로그 | Claude | **반영 확인. 새 항목 3건(작음).** R1-1~R1-6 제안대로 구현됨. VR 실행에서 원거리 잡기 감지기가 만들어지는 것을 발견(R2-1). **측정 자체는 약 15 fps라 참고용** — 렌더링 설정 결정 필요(사용자) |
+| 3 | 2026-10-10 | `f2594fd` 2회차 반영 | Claude | **통과. 열린 항목 없음.** R2-1·R2-2 제안대로. R2-3은 Claude의 잘못된 지적(두 호출은 BeginPlay와 EndPlay에 하나씩) |
+
+### 3회차에 확인한 것
+
+- R2-1: 양손 잡기 컴포넌트에 `SetGrabDetectionTypeAllowed(DistanceGrab/RayGrab, false)`. 생성자 시점에 잡기 컴포넌트가 이미 있다는 근거(`IsdkRigComponent.cpp:61-62, 233-235`, `IsdkGrabInteractionRigComponent.cpp:41-42`)와 잡기 리그를 다시 켜도 차단이 유지되는 시험(`GrabDetectionRestrictions`)이 있다. 시작 로그는 객체 수 대신 손별 `grabber active / distance allowed / ray grab allowed`를 찍는다.
+- R2-2: 단독 버튼 놓친 시도와 몰린 묶음 지나가기를 손별로 나눴다(`AttemptGroups`).
+- R2-3: Claude가 diff에서 `SetOverlayMaterial(nullptr)` 두 줄을 중복으로 잘못 읽었다. 실제로는 `VBoRPokeButton.cpp:87`(BeginPlay)과 `:96`(EndPlay)이다. Codex가 고치지 않은 것이 맞다.
+- `vBoR.*` 24개 Success(샘플 플러그인 끔)를 재현. **에디터가 열려 있어(11:11 시작, 핫 리로드 DLL `UnrealEditor-vBoR-6845.dll` 생성) 재컴파일 재현은 못 했다.** Codex 빌드 로그 `P0ButtonR2Build.log`는 Succeeded. 머지 전에 에디터를 닫고 재컴파일로 확인한다.
 
 ### 2회차에 확인한 것
 
@@ -29,9 +37,13 @@
 - `vBoR.uproject`에 `XRBase` 명시: 모듈이 XRBase에 의존할 때 UBT 경고를 막는 용도이고, 이미 다른 플러그인 때문에 켜져 있어 동작은 바뀌지 않는다. 받아들인다.
 - 확인 범위: UE 5.7 OpenXR의 기본 추적 공간은 Stage다(`Engine/Plugins/Runtime/OpenXR/Source/OpenXRHMD/Private/OpenXRHMD.cpp:1650`). 바닥 기준이지만 원점이 가디언 중앙이다(R1-3의 근거).
 
+## 열린 항목
+
+없음 — 3회차(2026-10-10) 통과.
+
 ## 2회차 항목 (모두 반영함)
 
-### R2-1 원거리·레이 잡기 감지 유형을 부모 Pawn에서 막는다 — 반영함 (fix: address P0-b second review findings)
+### R2-1 원거리·레이 잡기 감지 유형을 부모 Pawn에서 막는다 — 반영함 (`f2594fd`)
 
 **Codex 반영:** 양손 리그 생성자에서 `DistanceGrab`·`RayGrab`을 허용 목록에서 제거함. `GetGrabber()`는 리그 생성자에서 만든 GrabInteraction의 기본 하위 객체를 반환하므로 이 시점에 존재함(`IsdkRigComponent.cpp:61-62, 233-235`, `IsdkGrabInteractionRigComponent.cpp:41-42`). 객체 개수 대신 양손 grabber 활성·감지 유형 허용 여부를 표시함. `GrabDetectionRestrictions`에서 BeginPlay 및 잡기 리그 재활성화 뒤 양손의 두 유형 차단을 확인함. 같은 시험은 수정 전에 양손 8개 차단 assertion에서 실패했고 수정 후 통과함.
 
@@ -48,7 +60,7 @@
 **확인할 시험**
 - 메모리 월드에서 Pawn을 BeginPlay까지 돌린 뒤, 양손 잡기 컴포넌트에서 DistanceGrab·RayGrab이 허용되지 않음. 잡기 리그를 다시 활성화해도 허용되지 않음.
 
-### R2-2 "놓친 시도"를 단독 버튼과 몰린 묶음으로 나눈다 — 반영함 (fix: address P0-b second review findings)
+### R2-2 "놓친 시도"를 단독 버튼과 몰린 묶음으로 나눈다 — 반영함 (`f2594fd`)
 
 **Codex 반영:** 손별 `Missed single`·`cluster pass`로 패널·주기 로그를 분리함. Unhover 이벤트에도 단독·묶음 구분을 표시함. 먼 버튼은 기존 hover·select 집계를 유지하며 두 합계에서 제외함. 추적 취소는 별도 합계를 유지함. `AttemptGroups`에서 단독/묶음 hover→unhover의 독립 집계, 먼 버튼 제외, 추적 취소·다른 손 분리를 확인함. `ButtonComponents`에서 실제 패널의 새 항목을 확인함.
 
@@ -63,7 +75,7 @@
 **확인할 시험**
 - 단독 버튼 hover→unhover는 single에만, 몰린 묶음은 cluster에만 더해진다.
 
-### R2-3 덧입힘 해제 중복 호출 — 반영함 (fix: address P0-b second review findings)
+### R2-3 덧입힘 해제 중복 호출 — 닫음 (Claude의 잘못된 지적)
 
 **Codex 확인:** 현재 작업 시작점 `902fca5`와 리뷰 대상 `fe53a8d` 모두 `BeginPlay`의 `ButtonMesh->SetOverlayMaterial(nullptr)`가 한 번뿐임(`VBoRPokeButton.cpp:87`). `EndPlay`와 비활성 상태 처리의 호출은 다른 생명주기이므로 유지함. 제거할 중복이 없어 버튼 소스는 변경하지 않음. 기존 `ButtonComponents`의 Normal 덧입힘 없음/복귀 시험은 통과함.
 
