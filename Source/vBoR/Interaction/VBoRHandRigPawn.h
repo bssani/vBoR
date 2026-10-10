@@ -15,6 +15,7 @@ class VBOR_API UVBoRHandRigLeft : public UIsdkHandRigComponentLeft
 	GENERATED_BODY()
 public:
 	UVBoRHandRigLeft();
+	bool ReadPalmGrab(bool& bOutClosed) const;
 };
 
 UCLASS()
@@ -23,6 +24,7 @@ class VBOR_API UVBoRHandRigRight : public UIsdkHandRigComponentRight
 	GENERATED_BODY()
 public:
 	UVBoRHandRigRight();
+	bool ReadPalmGrab(bool& bOutClosed) const;
 };
 
 UCLASS(Blueprintable)
@@ -31,9 +33,13 @@ class VBOR_API AVBoRHandRigPawn : public APawn
 	GENERATED_BODY()
 public:
 	AVBoRHandRigPawn();
+	virtual void PreInitializeComponents() override;
 	UIsdkHandRigComponent* GetHandRig(int32 HandIndex) const;
 	bool ReadRawIndexTip(int32 HandIndex, FVector& OutWorldTip) const;
 	FString DescribeRig() const;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hand Rig")
+	bool bAllowPalmGrab = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hand Rig")
 	TObjectPtr<UCameraComponent> Camera;
