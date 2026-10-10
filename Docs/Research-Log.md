@@ -11,6 +11,36 @@
 
 ---
 
+## 2026-10-10 — P1 골프백 첫 VR 실행 (참고용, 약 16 fps)
+
+사용자가 Quest 3 + Link, 에디터 VR Preview로 `L_P1_GolfBag`(P1 리뷰 2회차 통과본 `eb67e20`)을 한 번 실행했다(약 2분 50초). 숫자는 `Saved/Logs/vBoR.log`의 `LogP1Probe`에서 Claude가 뽑았다. 명세 §7의 정식 반복이 아니다. 시험 상태 `not-tested`.
+
+### 로그에서 본 것
+
+- 잡기 22번, 놓기 22번(잡은 시간 대부분 1~5초). **트렁크 안 안착 0번, 보조 안착 0번.** 놓은 22번 모두 목표 밖.
+- 입구 통과 4번, 4번 모두 입구에서 막힘. 잡은 동안 막힘 상태 진입 38번. 막힌 동안 요청 자세와 실제 자세 차이 최대 51.6 cm.
+- 추적 보류 0번(손을 시야 밖으로 빼는 시험은 하지 않음). `B` 사용 0번, `R` 2번.
+- 리그: palm 허용, pinch·원거리·레이 차단, 컨트롤러 리그 0 — 의도대로.
+- 프레임: 로그 frame 번호로 약 16 fps(이 PC, P0와 같음).
+- **Pawn 원점 Z = 92 cm.** PlayerStart 높이다. 시험대는 Pawn 원점(물리 바닥) 기준이라 문제없지만, 레벨 바닥은 물리 바닥보다 92 cm 아래에 보인다. 목표 밖에 떨어진 골프백은 그 바닥까지 내려간다.
+
+### 왜 못 넣었나 — Claude 분석
+
+- **입구 여유가 좌우 ±5 cm다.** 폭 130 cm 트렁크에 120 cm 골프백이라 트렁크 중심선에서 좌우 5 cm 안, 방향도 거의 맞아야 들어간다. 첫 번째 시험대 배치(시험대 Yaw −154.6°) 기준으로 입구에서 처음 막힌 순간 골프백은 중심에서 좌우 약 44 cm, 방향은 약 31° 벗어나 있었다. 잡을 때마다 골프백 방향은 목표 방향에서 2~97° 벗어나 있었다.
+- **한 손으로 들면 손목 Yaw가 그대로 골프백 Yaw가 된다.** 120 cm 물체를 한 손으로 들고 방향을 몇 도 안으로 맞추는 것은 촉감 없이는 사실상 정밀 정렬이다.
+- **회전 제한 기준이 잡을 때마다 새로 잡힌다.** 15° 제한이 "이번에 잡은 순간" 기준이라 다시 잡을 때마다 쌓인다. 잡은 순간 자세에서 골프백 자기 축 둘레 회전이 최대 56°, 축 기울기가 최대 16.6°였다. 원통이라 자기 축 둘레 회전은 눈에 안 보이지만, 충돌 검사용 상자(외접 OBB)는 같이 돌아서 모서리가 최대 약 6 cm 더 튀어나온다(28 cm 정사각 단면의 대각 39.6 cm). 보조 안착의 각도 판정(20°)에도 이 안 보이는 회전이 들어간다.
+- 엔진 Cylinder에는 단순 충돌(Convex)이 있다(`/Engine/BasicShapes/Cylinder.uasset`의 `ConvexElems`). 메시 자체 충돌로 sweep하면 보이는 형상대로 막을 수 있다(`UWorld::ComponentSweepMulti`·`ComponentOverlapMulti`, `Engine/Source/Runtime/Engine/Classes/Engine/World.h:2351, 2380`).
+
+### 사용자 체감과 결정 (2026-10-10)
+
+- 체감: **입구에서 계속 걸렸다.** 의도하지 않은 놓침, 막힘 색·소리 과다, 바닥 높이는 문제로 꼽지 않았다.
+- **결정 U-08:** "한 손 및 두 손으로 잡았을 때 각도가 계산만 잘 되면 괜찮을 것 같다. 왼손은 가만히 있고 오른손만 움직이면 왼손 잡은 부분은 그대로, 오른손 움직인 부분만 돌아가는 식." → 두 손 잡기를 허용하고 방향을 두 잡은 점으로 계산한다. U-03의 "양손 회전 제외"를 긴 짐에 한해 바꾼 것이다. 자유 6DoF·양손 스케일은 계속 제외.
+- Claude가 짚은 것: 두 손 잡기는 방향 맞추기를 쉽게 하지만 좌우 ±5 cm 위치 맞추기는 그대로 남는다. 다시 시험해서도 입구에서 계속 걸리면 입구 근처 정렬 보조(막히지 않는 범위에서 트렁크 중심선 쪽으로 당김)를 검토한다.
+- ISDK는 두 손을 지원한다. `MultiGrabBehavior = MultiGrab`이면 잡은 손 수가 바뀔 때마다 transform을 끝내고 다시 시작하며, 2개 이상이면 `SetMultiGrabTransformerObject`로 넣은 transformer를 쓴다(`Plugins/MetaXRInteraction/Source/OculusInteraction/Private/Interaction/Grabbable/IsdkGrabTransformerComponent.cpp:113-127, 246-299`, 헤더 `IsdkGrabTransformerComponent.h:171, 259`, 열거형 `StructTypesNonGenerated.h:272-284`).
+- 명세 개정: `Docs/Specs/P1-golf-bag-load.md` D6, 리뷰 3회차 R3-1~R3-2.
+
+---
+
 ## 2026-10-10 — P0 첫 VR 실행 (참고용, 약 15 fps)
 
 사용자가 Quest 3 + Link, 에디터 VR Preview로 `L_P0a_HandSignals`(P0-a 프로브)와 `L_P0b_ButtonBench`(P0-b 시험대, `fe53a8d`)를 한 번씩 실행했다. 숫자는 `Saved/Logs/vBoR.log`의 `LogP0Probe`에서 Claude가 뽑았다. **명세 §5의 정식 측정(자세별 반복)이 아니라 첫 동작 확인이다.** 시험 상태는 계속 `not-tested`.
