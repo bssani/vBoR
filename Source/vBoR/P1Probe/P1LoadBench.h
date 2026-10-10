@@ -18,6 +18,8 @@ DECLARE_LOG_CATEGORY_EXTERN(LogP1Probe, Log, All);
 struct FP1TrialTotals
 {
 	int32 Grabbed = 0;
+	int32 TwoHandEntries = 0;
+	double TwoHandSeconds = 0;
 	int32 Assisted = 0;
 	int32 DroppedInside = 0;
 	int32 DroppedOutside = 0;

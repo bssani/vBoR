@@ -13,5 +13,9 @@ class UP1CarryTestObserver : public UObject
 	GENERATED_BODY()
 public:
 	int32 SeatedCount = 0;
+	int32 GrabbedCount = 0;
+	int32 ReleasedCount = 0;
 	UFUNCTION() void OnSeated(AVBoRCarryObject* Object) { ++SeatedCount; }
+	UFUNCTION() void OnGrabbed(AVBoRCarryObject* Object) { ++GrabbedCount; }
+	UFUNCTION() void OnReleased(AVBoRCarryObject* Object) { ++ReleasedCount; }
 };

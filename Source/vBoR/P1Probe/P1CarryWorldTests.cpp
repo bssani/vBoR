@@ -102,11 +102,12 @@ bool FP1CarryPolicyTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("Pinch input disabled"), Object->Grabbable->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch));
 	TestTrue(TEXT("Only near hand grab detected"), Object->Grabbable->IsHandGrabAllowed() && !Object->Grabbable->IsDistanceGrabAllowed() && !Object->Grabbable->IsRayGrabAllowed());
 	TestFalse(TEXT("Throwable disabled before play"), Object->GrabTransformer->IsThrowingEnabled());
-	TestTrue(TEXT("Second hand rejected at SDK selection"), Object->GrabTransformer->GetMultiGrabBehavior() == EIsdkMultiGrabBehavior::SingleGrabFirstRetained);
+	TestTrue(TEXT("Second hand allowed at SDK selection"), Object->GrabTransformer->GetMultiGrabBehavior() == EIsdkMultiGrabBehavior::MultiGrab);
 	TArray<UIsdkThrowable*> Throwables;
 	Object->GetComponents(Throwables);
 	TestEqual(TEXT("No throwable component created at BeginPlay"), Throwables.Num(), 0);
 	TestTrue(TEXT("Custom one-hand transformer bound"), Object->GrabTransformer->GetSingleGrabTransformerObject()->IsA<UVBoRCarryTransformer>());
+	TestTrue(TEXT("Two-hand SDK uses same constrained transformer"), Object->GrabTransformer->GetMultiGrabTransformerObject() == Object->GrabTransformer->GetSingleGrabTransformerObject());
 	TestTrue(TEXT("Mesh itself is grab collider"), Object->Grabbable->GetGrabCollider() == Object->Mesh.Get());
 	TestTrue(TEXT("Mesh original material preserved"), Object->Mesh->GetMaterial(0) == OriginalMaterial);
 	TestNull(TEXT("Idle has no state overlay"), Object->Mesh->GetOverlayMaterial());
@@ -226,6 +227,99 @@ bool FP1CarryCumulativeTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("R clears all completed results"), Bench->GetTotals().DroppedOutside + Bench->GetTotals().DroppedInside, 0);
 	TestEqual(TEXT("R clears assistance and held duration"), Bench->GetTotals().Assisted, 0);
 	TestEqual(TEXT("R clears accumulated hold duration"), Bench->GetTotals().HeldSeconds, 0.0);
+	World->EndPlay(EEndPlayReason::Quit);
+	World->DestroyWorld(false);
+	return true;
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP1CarryCylinderShapeTest, "vBoR.P1Carry.CylinderShape", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP1CarryCylinderShapeTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+	AddBlocker(World, FVector(0, 0, -5), FVector(300, 300, 5));
+	AVBoRCarryObject* Object = World->SpawnActor<AVBoRCarryObject>();
+	Object->Mesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")));
+	const FQuat Rest = FRotator(0, 0, 90).Quaternion();
+	AVBoRLoadTarget* Target = World->SpawnActor<AVBoRLoadTarget>();
+	Target->SetActorTransform(FTransform(Rest, FVector(0, 0, 15)));
+	Target->GoalSizeCm = FVector(28, 28, 120);
+	for (double Axial : {0.0, 15.0, 45.0, 90.0})
+	{
+		Object->SetActorTransform(FTransform(Rest * FQuat(FVector::UpVector, FMath::DegreesToRadians(Axial)), FVector(0, 0, 15), FVector(0.28, 0.28, 1.2)));
+		TestTrue(TEXT("Cylinder above floor stays clear after axial rotation"), Object->IsPoseClear(Object->GetActorTransform()));
+		TestTrue(TEXT("Axial rotation cannot enlarge cylinder containment"), Target->IsObjectInside(Object));
+		FTransform Shifted = Object->GetActorTransform();
+		Shifted.AddToTranslation(FVector(20, 0, 0));
+		TestTrue(TEXT("Axially rotated cylinder moves horizontally 1 cm above floor"), Object->TryMoveToPose(Shifted));
+	}
+	World->EndPlay(EEndPlayReason::Quit);
+	World->DestroyWorld(false);
+	return true;
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP1CarryTwoHandLifecycleTest, "vBoR.P1Carry.TwoHandActorLifecycle", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP1CarryTwoHandLifecycleTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+	APlayerController* Controller = World->SpawnActor<APlayerController>();
+	AVBoRHandRigPawn* Pawn = World->SpawnActor<AVBoRHandRigPawn>();
+	Controller->Possess(Pawn);
+	AP1LoadBench* Bench = World->SpawnActor<AP1LoadBench>();
+	World->InitializeActorsForPlay(FURL());
+	World->GetWorldSettings()->NotifyBeginPlay();
+	Bench->PlaceFromHead(FTransform(FVector(0, 0, 165)));
+	AVBoRCarryObject* Bag = Bench->Bag;
+	if (!TestNotNull(TEXT("Two-hand lifecycle bag exists"), Bag)) { World->DestroyWorld(false); return false; }
+	UP1CarryTestObserver* Observer = NewObject<UP1CarryTestObserver>(World);
+	Bag->OnGrabbed.AddDynamic(Observer, &UP1CarryTestObserver::OnGrabbed);
+	Bag->OnCarryReleased.AddDynamic(Observer, &UP1CarryTestObserver::OnReleased);
+	const FTransform Before = Bag->GetActorTransform();
+	FTransform Hands[2] = {FTransform(Before.GetLocation() + FVector(0, -30, 0)), FTransform(Before.GetLocation() + FVector(0, 30, 0))};
+	TestTrue(TEXT("Actor accepts first palm"), Bag->BeginCarry(0, nullptr, Hands[0]));
+	TestTrue(TEXT("Actor accepts second palm"), Bag->BeginCarry(1, nullptr, Hands[1]));
+	TestTrue(TEXT("Second accepted palm does not move actor"), Bag->GetActorTransform().Equals(Before));
+	TestFalse(TEXT("Duplicate palm is not another success"), Bag->BeginCarry(1, nullptr, Hands[1]));
+	TestEqual(TEXT("Two distinct palms produce two grab events"), Observer->GrabbedCount, 2);
+	TestEqual(TEXT("Actor mode reports two hands"), Bag->GetStateText(), FString(TEXT("Held (two hands)")));
+	TestEqual(TEXT("Accepted second palm records one entry"), Bag->GetMetrics().TwoHandEntries, 1);
+	TestTrue(TEXT("Measurement snapshot includes current two-hand mode"), Bag->GetMeasurementText().Contains(TEXT("mode=two hands")));
+	FTransform Desired;
+	Bag->Session.UpdateHands(false, Hands, Before, World->GetTimeSeconds(), 15, Desired);
+	Hands[0].AddToTranslation(FVector(200, 0, 0));
+	Hands[1].AddToTranslation(FVector(200, 0, 0));
+	Bag->ReleaseCarry(0);
+	Bag->ReleaseCarry(1);
+	TestTrue(TEXT("Paused actor retains both owning palms"), Bag->Session.HasHand(0) && Bag->Session.HasHand(1));
+	TestEqual(TEXT("Paused actor never emits release event"), Observer->ReleasedCount, 0);
+	TestTrue(TEXT("Paused actor stays in place"), Bag->GetActorTransform().Equals(Before));
+	TestEqual(TEXT("Paused actor displays pause"), Bag->GetStateText(), FString(TEXT("Paused (tracking)")));
+	TestFalse(TEXT("Actor session recovery rebases without movement"), Bag->Session.UpdateHands(true, Hands, Before, World->GetTimeSeconds(), 15, Desired));
+	TestTrue(TEXT("Recovery request and actor are unchanged"), Desired.Equals(Before) && Bag->GetActorTransform().Equals(Before));
+	Bag->Session.LastTime = World->GetTimeSeconds() - 2;
+	Bag->ReleaseCarry(0);
+	TestTrue(TEXT("First accepted release keeps second palm owning"), Bag->Session.HasHand(1) && !Bag->Session.HasHand(0));
+	TestTrue(TEXT("Two-to-one release does not move actor"), Bag->GetActorTransform().Equals(Before));
+	TestEqual(TEXT("One palm release never starts drop or emits event"), Observer->ReleasedCount, 0);
+	TestFalse(TEXT("One palm remains held rather than dropping"), Bag->bDropping);
+	Bag->ReleaseCarry(1);
+	TestEqual(TEXT("Last palm emits release once"), Observer->ReleasedCount, 1);
+	Bag->ReleaseCarry(1);
+	TestEqual(TEXT("Duplicate last release cannot duplicate event"), Observer->ReleasedCount, 1);
+	TestEqual(TEXT("First two-hand ownership totals two seconds"), Bench->GetTotals().TwoHandSeconds, 2.0);
+	Bag->BeginCarry(1, nullptr, Hands[1]);
+	Bag->BeginCarry(0, nullptr, Hands[0]);
+	Bag->Session.LastTime = World->GetTimeSeconds() - 3;
+	Bag->ReleaseCarry(0);
+	Bag->ReleaseCarry(1);
+	TestEqual(TEXT("Regrab keeps both two-hand entries"), Bench->GetTotals().TwoHandEntries, 2);
+	TestEqual(TEXT("Regrab sums both two-hand durations"), Bench->GetTotals().TwoHandSeconds, 5.0);
+	Bench->ResetBagForNextTrial();
+	TestEqual(TEXT("B preserves two-hand entries"), Bench->GetTotals().TwoHandEntries, 2);
+	TestEqual(TEXT("B preserves two-hand duration once"), Bench->GetTotals().TwoHandSeconds, 5.0);
+	Bench->ResetBagForNextTrial();
+	TestEqual(TEXT("Empty B cannot duplicate two-hand entries"), Bench->GetTotals().TwoHandEntries, 2);
+	TestEqual(TEXT("Empty B cannot duplicate two-hand duration"), Bench->GetTotals().TwoHandSeconds, 5.0);
+	Bench->PlaceFromHead(FTransform(FVector(0, 0, 165)));
+	TestEqual(TEXT("R clears two-hand entries"), Bench->GetTotals().TwoHandEntries, 0);
+	TestEqual(TEXT("R clears two-hand duration"), Bench->GetTotals().TwoHandSeconds, 0.0);
 	World->EndPlay(EEndPlayReason::Quit);
 	World->DestroyWorld(false);
 	return true;

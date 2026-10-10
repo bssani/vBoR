@@ -57,11 +57,15 @@
 - 기본값으로는 실을 수 없다는 것을 숨기지 않았다. 값을 임의로 바꾸지 않고 보고 ③과 시험에 드러냈다. 규칙대로 한 것이다.
 - 주석 말투가 맞다. 샘플 플러그인 참조가 없고, `Config`·`Content`·`Plugins` 변경도 없다.
 
-## 열린 항목
+## 3회차 항목 (반영함 — Claude 재리뷰 대기)
 
 3회차는 코드 리뷰가 아니라 **첫 VR 시험(2026-10-10, 사용자) 뒤의 개정**이다. 근거는 조사 기록 "2026-10-10 — P1 골프백 첫 VR 실행", 결정은 U-08(계획서 §2, AGENTS.md 허용 목록). 명세 D6·§2·§3·§4가 바뀌었다.
 
-### R3-1 두 손 잡기 — 두 잡은 점으로 방향을 정한다 (U-08) — 열림
+### R3-1 두 손 잡기 — 두 잡은 점으로 방향을 정한다 (U-08) — 반영함 (fix: refine golf bag carrying after VR review)
+
+**Codex 반영:** 세션이 두 손을 소유하고 single/multi 슬롯에 같은 제약 transformer를 연결했다. 두 점의 위치로 Yaw·제한 elevation·중앙 위치를 정하며, 두 손 모드에서는 손목 회전을 쓰지 않는다. 추가 잡기·한 손 놓기·추적 복구 frame은 rebase만 한다. 한 손이라도 무효면 전체 보류, 마지막 손의 유효 release만 낙하/보조를 시작한다. 두 손 진입 횟수·소유 시간·현재 모드를 패널/로그/B 누적에 추가했다.
+
+**확인:** `TwoHandMotionAndTransitions`, `TwoHandPreservesEntryAxialTilt`, `TwoHandActorLifecycle`에서 pivot·scale·전환·손실·기울기·이벤트·B/R을 확인했다. 가까운 손은 수평 간격 5 cm 미만에서 primary 이동만 따르고 회전을 고정한다. 두 손 시간은 추적 보류를 포함한 소유 시간이다. 실제 palm 인식과 SDK release/confidence 순서는 Quest 3 `not-tested`.
 
 **문제**
 - **위치:** 지금 구현은 두 번째 손을 세 곳에서 막는다.
@@ -101,7 +105,11 @@
   - 복구 frame 변화 0
 - 기존 "두 번째 손은 소유 못 함" 시험 2개는 새 동작에 맞게 바꾼다.
 
-### R3-2 기울기 한도가 다시 잡을 때마다 쌓이고, 충돌 판정이 보이는 형상보다 커진다 — 열림
+### R3-2 기울기 한도가 다시 잡을 때마다 쌓이고, 충돌 판정이 보이는 형상보다 커진다 — 반영함 (fix: refine golf bag carrying after VR review)
+
+**Codex 반영:** rest 회전은 생성/`ResetToPose`에서 저장하고 재잡기·복구·손 수 전환에서 바꾸지 않는다. 두 손 elevation만 제한해 시작 axial 회전을 보존한다. 이동/회전 후보 검사는 mesh simple collision의 component sweep/overlap으로 변경했다(self 무시, blocking만). 기존 0.005 cm 접촉 여유를 유지하며 실제 convex vertices로 목표 포함을 검사한다. 내부 검토에서 입구 측정에 남은 render OBB의 조기 통과 집계도 같은 형상 경계로 수정했다. 형상 무효 구간은 이전 입구 샘플과 연결하지 않는다.
+
+**확인:** `RestTiltAcrossRegrabs` 5회 반복, `CylinderShape` axial 15° 원통의 이동/목표 포함 및 기존 접촉·벽·낙하·보조 회귀가 통과했다. `CylinderHullEntrance`는 회전한 시험대에서도 실제 형상이 입구를 넘기 전에는 통과를 세지 않으며, 무효 형상 복구/B 재설정도 확인한다. `BagRepeat`에 조기 막힘 분류 회귀를 추가했다. 샘플 플러그인 비활성 UE 5.7 빌드 경고·오류 0, `vBoR.*` **46/46 Success**, `TEST COMPLETE. EXIT CODE: 0`. 로그: `Saved/Logs/P1R3F1Build.log`, `P1R3F1Automation.log`. 자세한 보고 ①~⑤는 커밋 본문과 `HANDOFF.md`에 있다. Claude 정식 재리뷰와 Quest 3 시험은 별도 대기.
 
 **문제**
 - **위치:**

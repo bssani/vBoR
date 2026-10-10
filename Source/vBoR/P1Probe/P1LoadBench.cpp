@@ -21,6 +21,8 @@ DEFINE_LOG_CATEGORY(LogP1Probe);
 void FP1TrialTotals::Add(const FVBoRCarryMetrics& Metrics)
 {
 	Grabbed += Metrics.Grabbed;
+	TwoHandEntries += Metrics.TwoHandEntries;
+	TwoHandSeconds += Metrics.TwoHandSeconds;
 	BlockedCount += Metrics.BlockedCount;
 	PauseCount += Metrics.PauseCount;
 	HeldSeconds += Metrics.HeldSeconds;
@@ -234,21 +236,17 @@ void AP1LoadBench::SpawnParts()
 
 void AP1LoadBench::UpdateCrossing()
 {
-	if (!Bag || !Bag->Mesh || !Bag->Mesh->GetStaticMesh() || !Trunk) { return; }
-	const FBox LocalBox = Bag->Mesh->GetStaticMesh()->GetBoundingBox();
-	const FTransform MeshToWorld = Bag->Mesh->GetComponentTransform();
-	float MinX = TNumericLimits<float>::Max();
-	float MaxX = -TNumericLimits<float>::Max();
-	for (int32 X = 0; X < 2; ++X)
-	for (int32 Y = 0; Y < 2; ++Y)
-	for (int32 Z = 0; Z < 2; ++Z)
+	if (!Bag || !Trunk) { bPreviousBodyBeforeOpening = false; return; }
+	// 충돌·안착과 같은 형상으로 입구를 잼 (원통 축 회전 때 외접 상자가 먼저 통과하지 않게, P1 R3 F1)
+	const FBox Bounds = Bag->GetCollisionBoundsInPose(Bag->GetActorTransform(), Trunk->GetActorTransform());
+	if (!Bounds.IsValid)
 	{
-		const FVector Corner(X ? LocalBox.Max.X : LocalBox.Min.X,
-			Y ? LocalBox.Max.Y : LocalBox.Min.Y, Z ? LocalBox.Max.Z : LocalBox.Min.Z);
-		const float TrunkX = Trunk->GetActorTransform().InverseTransformPosition(MeshToWorld.TransformPosition(Corner)).X;
-		MinX = FMath::Min(MinX, TrunkX);
-		MaxX = FMath::Max(MaxX, TrunkX);
+		// 형상이 없던 구간을 통과로 연결하지 않음. 누적 수는 유지 (P1 R3 F1)
+		bPreviousBodyBeforeOpening = false;
+		return;
 	}
+	const double MinX = Bounds.Min.X;
+	const double MaxX = Bounds.Max.X;
 	const bool bBlocked = Bag->IsBlocked();
 	const bool bBodyAtPlane = MinX <= 0.0f && MaxX >= -2.0f;
 	if (!bCrossingRecorded && bPreviousBodyBeforeOpening && MaxX >= 0.0f)
@@ -288,6 +286,7 @@ void AP1LoadBench::UpdatePanel()
 	Text += FString::Printf(TEXT("\nTrial: %d | Total grabbed=%d, assisted=%d, drop inside=%d, outside=%d\nTotal held %.3f s | blocked=%d / %.3f s | pauses=%d / %.3f s"),
 		TrialNumber, Total.Grabbed, Total.Assisted, Total.DroppedInside, Total.DroppedOutside, Total.HeldSeconds,
 		Total.BlockedCount, Total.BlockedSeconds, Total.PauseCount, Total.PausedSeconds);
+	Text += FString::Printf(TEXT("\nTotal two-hand entries=%d / %.3f s"), Total.TwoHandEntries, Total.TwoHandSeconds);
 	Text += TEXT("\nRecent events:");
 	for (const FString& Event : RecentEvents) { Text += TEXT("\n") + Event; }
 	Panel->SetText(FText::FromString(Text));
@@ -317,6 +316,7 @@ void AP1LoadBench::RecordSnapshot(const FString& Reason)
 		Target && Target->IsObjectInside(Bag) ? 1 : 0, EntranceCrossings, BlockedAtCrossings, *Bag->GetMeasurementText());
 	Snapshot += FString::Printf(TEXT(" | Trial %d totals: grabbed=%d, assisted=%d, drop inside=%d, outside=%d, held=%.3f s"),
 		TrialNumber, Metrics.Grabbed, Metrics.Assisted, Metrics.DroppedInside, Metrics.DroppedOutside, Metrics.HeldSeconds);
+	Snapshot += FString::Printf(TEXT(" | two-hand entries=%d / %.3f s"), Metrics.TwoHandEntries, Metrics.TwoHandSeconds);
 	Snapshot.ReplaceInline(TEXT("\n"), TEXT(" | "));
 	UE_LOG(LogP1Probe, Log, TEXT("%s"), *Snapshot);
 	UpdatePanel();

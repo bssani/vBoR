@@ -45,17 +45,12 @@ FTransform AVBoRLoadTarget::GetGoalPose() const
 bool AVBoRLoadTarget::ContainsPose(const AVBoRCarryObject* Object, const FTransform& Pose) const
 {
 	if (!Object) { return false; }
-	const FBox Local = Object->GetMeshLocalBounds();
-	if (!Local.IsValid) { return false; }
-	const FTransform ToGoal = Pose.GetRelativeTransform(GetGoalPose());
+	const FBox Bounds = Object->GetCollisionBoundsInPose(Pose, GetGoalPose());
+	if (!Bounds.IsValid) { return false; }
 	const FVector Half = GoalSizeCm.GetAbs() / 2.0;
-	for (int32 Corner = 0; Corner < 8; ++Corner)
-	{
-		const FVector Point = ToGoal.TransformPosition(FVector(Corner & 1 ? Local.Max.X : Local.Min.X,
-			Corner & 2 ? Local.Max.Y : Local.Min.Y, Corner & 4 ? Local.Max.Z : Local.Min.Z));
-		if (FMath::Abs(Point.X) > Half.X + 0.01 || FMath::Abs(Point.Y) > Half.Y + 0.01 || FMath::Abs(Point.Z) > Half.Z + 0.01) { return false; }
-	}
-	return true;
+	return Bounds.Min.X >= -Half.X - 0.01 && Bounds.Max.X <= Half.X + 0.01 &&
+		Bounds.Min.Y >= -Half.Y - 0.01 && Bounds.Max.Y <= Half.Y + 0.01 &&
+		Bounds.Min.Z >= -Half.Z - 0.01 && Bounds.Max.Z <= Half.Z + 0.01;
 }
 
 bool AVBoRLoadTarget::IsStaticFit(const AVBoRCarryObject* Object) const

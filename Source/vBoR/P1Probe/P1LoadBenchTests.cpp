@@ -193,7 +193,84 @@ bool FP1BagRepeatTest::RunTest(const FString& Parameters)
 			TestEqual(TEXT("R clears grabbed total"), Bench->GetTotals().Grabbed, 0);
 			TestEqual(TEXT("R clears blocked total"), Bench->GetTotals().BlockedCount, 0);
 			TestEqual(TEXT("R clears pause duration"), Bench->GetTotals().PausedSeconds, 0.0);
+			const FTransform TrunkPose = Bench->Trunk->GetActorTransform();
+			const FQuat AxialRotation = TrunkPose.GetRotation() * FRotator(0, 0, 90).Quaternion() *
+				FQuat(FVector::UpVector, FMath::DegreesToRadians(15.0));
+			Bench->Bag->bBlocked = true;
+			Bench->Bag->SetActorTransform(FTransform(AxialRotation, TrunkPose.TransformPosition(FVector(-20, 0, 105)), Bench->Bag->GetActorScale3D()),
+				false, nullptr, ETeleportType::TeleportPhysics);
+			Bench->Tick(0);
+			Bench->Bag->SetActorLocation(TrunkPose.TransformPosition(FVector(-17, 0, 105)), false, nullptr, ETeleportType::TeleportPhysics);
+			Bench->Tick(0);
+			TestEqual(TEXT("Inflated corner cannot classify blocked hull outside plane proximity"), Bench->GetBlockedAtCrossings(), 0);
+			Bench->Bag->SetActorLocation(TrunkPose.TransformPosition(FVector(-10, 0, 105)), false, nullptr, ETeleportType::TeleportPhysics);
+			Bench->Tick(0);
+			TestEqual(TEXT("Blocked actual hull at plane is counted once"), Bench->GetBlockedAtCrossings(), 1);
+			Bench->Tick(0);
+			TestEqual(TEXT("Stationary blocked hull cannot duplicate classification"), Bench->GetBlockedAtCrossings(), 1);
 		}
+	}
+	World->EndPlay(EEndPlayReason::Quit);
+	World->DestroyWorld(false);
+	return true;
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP1BenchHullCrossingTest, "vBoR.P1LoadBench.CylinderHullEntrance", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP1BenchHullCrossingTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+	APlayerController* Controller = World->SpawnActor<APlayerController>();
+	AVBoRHandRigPawn* Pawn = World->SpawnActor<AVBoRHandRigPawn>();
+	Controller->Possess(Pawn);
+	AP1LoadBench* Bench = World->SpawnActor<AP1LoadBench>();
+	World->InitializeActorsForPlay(FURL());
+	World->GetWorldSettings()->NotifyBeginPlay();
+	for (double Yaw : {0.0, 37.0})
+	{
+		Bench->PlaceFromHead(FTransform(FRotator(0, Yaw, 0), FVector(200, -30, 165)));
+		if (!TestNotNull(TEXT("Hull crossing bag exists"), Bench->Bag.Get()) ||
+			!TestNotNull(TEXT("Hull crossing trunk exists"), Bench->Trunk.Get())) { break; }
+		const FTransform TrunkPose = Bench->Trunk->GetActorTransform();
+		const FQuat Rotation = TrunkPose.GetRotation() * FRotator(0, 0, 90).Quaternion() *
+			FQuat(FVector::UpVector, FMath::DegreesToRadians(15.0));
+		auto PlaceBag = [&](double X)
+		{
+			Bench->Bag->SetActorTransform(FTransform(Rotation, TrunkPose.TransformPosition(FVector(X, 0, 105)), Bench->Bag->GetActorScale3D()),
+				false, nullptr, ETeleportType::TeleportPhysics);
+			Bench->Tick(0);
+		};
+		PlaceBag(-20);
+		TestEqual(TEXT("Axially rotated hull starts behind opening"), Bench->GetEntranceCrossings(), 0);
+		PlaceBag(-16);
+		TestTrue(TEXT("Raised axial cylinder is clear of bumper/body"), Bench->Bag->IsPoseClear(Bench->Bag->GetActorTransform()));
+		TestEqual(TEXT("Render-box corner cannot fabricate cylinder entrance"), Bench->GetEntranceCrossings(), 0);
+		PlaceBag(-10);
+		TestEqual(TEXT("Actual leading cylinder hull enters exactly once"), Bench->GetEntranceCrossings(), 1);
+		Bench->Tick(0);
+		TestEqual(TEXT("Stationary entered hull does not repeat crossing"), Bench->GetEntranceCrossings(), 1);
+		Bench->ResetBagForNextTrial();
+		TestEqual(TEXT("B clears hull crossing count"), Bench->GetEntranceCrossings(), 0);
+		PlaceBag(-10);
+		TestEqual(TEXT("B clears prior armed crossing state"), Bench->GetEntranceCrossings(), 0);
+	}
+	Bench->PlaceFromHead(FTransform(FVector(200, -30, 165)));
+	if (Bench->Bag && Bench->Trunk)
+	{
+		const FTransform TrunkPose = Bench->Trunk->GetActorTransform();
+		UStaticMesh* Cylinder = Bench->Bag->Mesh->GetStaticMesh();
+		Bench->Bag->SetActorLocation(TrunkPose.TransformPosition(FVector(-20, 0, 105)), false, nullptr, ETeleportType::TeleportPhysics);
+		Bench->Tick(0);
+		Bench->Bag->Mesh->SetStaticMesh(nullptr);
+		Bench->Tick(0);
+		TestEqual(TEXT("Missing simple geometry fabricates no crossing"), Bench->GetEntranceCrossings(), 0);
+		Bench->Bag->Mesh->SetStaticMesh(Cylinder);
+		Bench->Bag->SetActorLocation(TrunkPose.TransformPosition(FVector(-10, 0, 105)), false, nullptr, ETeleportType::TeleportPhysics);
+		Bench->Tick(0);
+		TestEqual(TEXT("Geometry gap cannot bridge an old behind-opening sample"), Bench->GetEntranceCrossings(), 0);
+		Bench->Bag->SetActorLocation(TrunkPose.TransformPosition(FVector(-20, 0, 105)), false, nullptr, ETeleportType::TeleportPhysics);
+		Bench->Tick(0);
+		Bench->Bag->SetActorLocation(TrunkPose.TransformPosition(FVector(-10, 0, 105)), false, nullptr, ETeleportType::TeleportPhysics);
+		Bench->Tick(0);
+		TestEqual(TEXT("Fresh valid behind sample rearms crossing after geometry recovery"), Bench->GetEntranceCrossings(), 1);
 	}
 	World->EndPlay(EEndPlayReason::Quit);
 	World->DestroyWorld(false);

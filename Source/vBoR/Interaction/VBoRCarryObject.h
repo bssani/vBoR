@@ -26,6 +26,8 @@ enum class EVBoRCarryOutcome : uint8 { None, Assisted, DroppedInside, DroppedOut
 struct FVBoRCarryMetrics
 {
 	int32 Grabbed = 0;
+	int32 TwoHandEntries = 0;
+	double TwoHandSeconds = 0;
 	int32 BlockedCount = 0;
 	int32 PauseCount = 0;
 	int32 Assisted = 0;
@@ -58,7 +60,7 @@ public:
 	virtual FTransform EndTransform(const FIsdkTargetTransform& Target) override;
 	virtual void UpdateConstraints(const FIsdkTargetTransform& Target) override {}
 	virtual bool IsTransformerActive() const override { return bActive; }
-	virtual int MaxGrabPoints() const override { return 1; }
+	virtual int MaxGrabPoints() const override { return 2; }
 private:
 	bool bActive = false;
 };
@@ -76,6 +78,7 @@ public:
 	FString GetMeasurementText() const;
 	FVBoRCarryMetrics GetMetrics() const;
 	bool IsPoseClear(const FTransform& Pose) const;
+	FBox GetCollisionBoundsInPose(const FTransform& Pose, const FTransform& Reference) const;
 	bool TryMoveToPose(const FTransform& Pose);
 	FBox GetMeshLocalBounds() const;
 	void AdvanceHeldPose();
@@ -125,12 +128,13 @@ private:
 	friend class FP1CarryBlockedGapTest;
 	friend class FP1CarryCumulativeTest;
 	friend class FP1BagRepeatTest;
+	friend class FP1CarryTwoHandLifecycleTest;
 	UPROPERTY()
 	TObjectPtr<UVBoRCarryTransformer> CarryTransformer;
 	UPROPERTY()
-	TObjectPtr<UIsdkGrabberComponent> HoldingGrabber;
+	TObjectPtr<UIsdkGrabberComponent> HoldingGrabbers[2];
 	UPROPERTY()
-	TObjectPtr<UIsdkHandRigComponent> HoldingRig;
+	TObjectPtr<UIsdkHandRigComponent> HoldingRigs[2];
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> StateOverlay;
 	UPROPERTY()
@@ -144,7 +148,7 @@ private:
 	double BlockedSeconds = 0;
 	double MaxRequestedGapCm = 0;
 	bool bBlocked = false;
-	bool bPalmOpen = false;
+	bool bPalmOpen[2] = {false, false};
 	bool bDropping = false;
 	bool bAssisting = false;
 	bool bSeated = false;
@@ -155,14 +159,15 @@ private:
 	FTransform AssistGoal;
 	FString ReleaseResult = TEXT("none");
 	FString LastState;
-	FDelegateHandle PalmSelectHandle;
-	FDelegateHandle PalmReleaseHandle;
-	void BindHoldingRig(UIsdkGrabberComponent* Grabber);
+	FDelegateHandle PalmSelectHandles[2];
+	FDelegateHandle PalmReleaseHandles[2];
+	void BindHoldingRig(int32 Hand, UIsdkGrabberComponent* Grabber);
 	bool BeginCarry(int32 Hand, UIsdkGrabberComponent* Grabber, const FTransform& Pose);
-	void ClearHoldingRig();
-	bool ReadHand(FTransform& Pose) const;
+	void ClearHoldingRig(int32 Hand = INDEX_NONE);
+	bool ReadHand(int32 Hand, FTransform& Pose) const;
+	bool ReadHands(FTransform* Poses) const;
 	bool IsHandTracked(int32 Hand) const;
-	void ReleaseCarry();
+	void ReleaseCarry(int32 Hand = INDEX_NONE, const FTransform* TrackedPoses = nullptr);
 	void MoveHeldPose(const FTransform& Desired);
 	void FinishPlacement();
 	void UpdateVisual();
