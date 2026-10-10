@@ -17,7 +17,7 @@ public:
 
 	// UE cm. 개구부는 local X=0, 안쪽은 +X (P1 §2 D3)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Approximate Trunk", meta = (Units = "cm", ClampMin = "1"))
-	float InsideWidthCm = 100.0f;
+	float InsideWidthCm = 130.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Approximate Trunk", meta = (Units = "cm", ClampMin = "1"))
 	float InsideDepthCm = 90.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Approximate Trunk", meta = (Units = "cm", ClampMin = "1"))

@@ -33,10 +33,11 @@ bool FP1CarryLimitsTest::RunTest(const FString& Parameters)
 	const FTransform StartHand(FQuat::Identity, FVector::ZeroVector);
 	const FTransform Hand(FRotator(60, 85, -70), FVector(20, 0, 0));
 	const FTransform Object(FRotator(90, 0, 0), FVector(0, 0, 10), FVector(0.28, 0.28, 1.2));
-	const auto Delta = FVBoRCarryMotion::LimitedHandDelta(StartHand, Hand, 15).Rotator();
-	TestTrue(TEXT("Pitch bounded to 15 deg"), FMath::IsNearlyEqual(Delta.Pitch, 15.0));
-	TestTrue(TEXT("Roll bounded to -15 deg"), FMath::IsNearlyEqual(Delta.Roll, -15.0));
-	TestTrue(TEXT("Yaw follows hand"), FMath::IsNearlyEqual(Delta.Yaw, 85.0));
+	const FQuat Delta = FVBoRCarryMotion::LimitedHandDelta(StartHand, Hand, 15);
+	TestTrue(TEXT("Combined tilt remains within 15 deg cone"), FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(
+		FVector::DotProduct(Delta.RotateVector(FVector::UpVector), FVector::UpVector), -1.0, 1.0))) <= 15.001);
+	TestTrue(TEXT("Pure world yaw follows 85 deg hand turn"), FVBoRCarryMotion::LimitedHandDelta(StartHand,
+		FTransform(FRotator(0, 85, 0)), 15).Equals(FRotator(0, 85, 0).Quaternion(), 0.0001));
 	TestTrue(TEXT("Object shape scale is unchanged"), FVBoRCarryMotion::Follow(StartHand, Hand, Object, 15).GetScale3D().Equals(Object.GetScale3D()));
 	FVBoRCarrySession Session;
 	TestTrue(TEXT("First hand takes ownership"), Session.Begin(0, StartHand, Object, 0));
@@ -56,6 +57,30 @@ bool FP1CarryLimitsTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("Repeated rebase cannot accumulate pitch or roll beyond first-grab limits"),
 			FMath::Abs(FromFirstGrab.Pitch) <= 15.001 && FMath::Abs(FromFirstGrab.Roll) <= 15.001);
 	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP1CarryPitchBoundaryTest, "vBoR.P1Carry.PitchBoundary", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP1CarryPitchBoundaryTest::RunTest(const FString& Parameters)
+{
+	FQuat Previous = FVBoRCarryMotion::LimitedHandDelta(FTransform::Identity, FTransform(FRotator(80, 0, 0)), 15);
+	FVBoRCarrySession Session;
+	Session.Begin(0, FTransform::Identity, FTransform::Identity, 0);
+	FTransform Desired;
+	for (int32 Pitch = 81; Pitch <= 100; ++Pitch)
+	{
+		const FTransform Hand(FRotator(Pitch, 0, 0));
+		const FQuat Limited = FVBoRCarryMotion::LimitedHandDelta(FTransform::Identity, Hand, 15);
+		TestTrue(*FString::Printf(TEXT("Pitch %d does not flip object yaw"), Pitch), FMath::Abs(Limited.Rotator().Yaw) < 1.0);
+		TestTrue(TEXT("Adjacent output rotates at most one degree"), FMath::RadiansToDegrees(Previous.AngularDistance(Limited)) < 1.01);
+		TestTrue(TEXT("Tilt stays within 15 deg"), FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(
+			FVector::DotProduct(Limited.RotateVector(FVector::UpVector), FVector::UpVector), -1.0, 1.0))) <= 15.001);
+		Session.Update(true, Hand, FTransform::Identity, Pitch, 15, Desired);
+		TestTrue(TEXT("First-grab re-limit also avoids yaw flip"), FMath::Abs(Desired.Rotator().Yaw) < 1.0);
+		Previous = Limited;
+	}
+	Session.Update(true, FTransform(FRotator(179, 0, 0)), FTransform::Identity, 110, 15, Desired);
+	TestTrue(TEXT("One inverted hand sample cannot turn yaw by 180 deg"), FMath::Abs(Desired.Rotator().Yaw) < 1.0);
 	return true;
 }
 

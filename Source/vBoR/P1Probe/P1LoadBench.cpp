@@ -18,6 +18,26 @@
 
 DEFINE_LOG_CATEGORY(LogP1Probe);
 
+void FP1TrialTotals::Add(const FVBoRCarryMetrics& Metrics)
+{
+	Grabbed += Metrics.Grabbed;
+	BlockedCount += Metrics.BlockedCount;
+	PauseCount += Metrics.PauseCount;
+	HeldSeconds += Metrics.HeldSeconds;
+	BlockedSeconds += Metrics.BlockedSeconds;
+	PausedSeconds += Metrics.PausedSeconds;
+	Assisted += Metrics.Assisted;
+	DroppedInside += Metrics.DroppedInside;
+	DroppedOutside += Metrics.DroppedOutside;
+}
+
+FP1TrialTotals AP1LoadBench::GetTotals() const
+{
+	FP1TrialTotals Total = CompletedTrials;
+	if (Bag) { Total.Add(Bag->GetMetrics()); }
+	return Total;
+}
+
 AP1LoadBench::AP1LoadBench()
 {
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("OpeningOrigin")));
@@ -51,6 +71,7 @@ void AP1LoadBench::BeginPlay()
 	{
 		EnableInput(Controller);
 		InputComponent->BindKey(RepositionKey, IE_Pressed, this, &AP1LoadBench::ResetAndReposition);
+		InputComponent->BindKey(BagResetKey, IE_Pressed, this, &AP1LoadBench::ResetBagForNextTrial);
 	}
 	RecordEvent(FString::Printf(TEXT("Rig: palm grab allowed=%d; palm only; distance/ray blocked; throwing off | %s"),
 		HandPawn && HandPawn->bAllowPalmGrab ? 1 : 0, HandPawn ? *HandPawn->DescribeRig() : TEXT("hand rig unavailable")));
@@ -108,6 +129,28 @@ void AP1LoadBench::ResetAndReposition()
 	if (!TryPlaceFromHead()) { RecordEvent(TEXT("Reset waiting for tracked head")); }
 }
 
+void AP1LoadBench::ResetCrossing()
+{
+	bPreviousBodyBeforeOpening = false;
+	bCrossingRecorded = false;
+	bBlockedAtCrossingRecorded = false;
+	EntranceCrossings = BlockedAtCrossings = 0;
+}
+
+void AP1LoadBench::ResetBagForNextTrial()
+{
+	if (!bPlaced || !Bag) { return; }
+	// 직전 시도를 먼저 보존함 (B 는 자리와 누적을 유지, P1 R1-6)
+	RecordSnapshot(FString::Printf(TEXT("Trial %d summary"), TrialNumber));
+	CompletedTrials.Add(Bag->GetMetrics());
+	Bag->ResetToPose(BagStartPose());
+	++TrialNumber;
+	ResetCrossing();
+	LastObservedState = Bag->GetStateText();
+	RecordEvent(FString::Printf(TEXT("Trial %d: bag returned to stand; bench unchanged"), TrialNumber));
+	UpdatePanel();
+}
+
 FTransform AP1LoadBench::BagStartPose() const
 {
 	// Cylinder local Z 를 차량 +Y 로 눕힘. 받침대 윗면에 바닥이 닿음 (D5)
@@ -126,7 +169,11 @@ FTransform AP1LoadBench::GoalPose() const
 void AP1LoadBench::PlaceFromHead(const FTransform& Head)
 {
 	const FRotator Yaw(0, Head.Rotator().Yaw, 0);
-	const FVector Origin = Head.GetLocation() + Yaw.RotateVector(FVector(OpeningForwardCm, 0, 0)) - FVector(0, 0, AssumedEyeHeightCm);
+	if (!HandPawn) { HandPawn = Cast<AVBoRHandRigPawn>(UGameplayStatics::GetPlayerPawn(this, 0)); }
+	if (!HandPawn) { RecordEvent(TEXT("Placement waiting for hand pawn")); return; }
+	FVector Origin = Head.GetLocation() + Yaw.RotateVector(FVector(OpeningForwardCm, 0, 0));
+	// Stage 의 바닥은 Pawn 원점. 머리 높이로 들기 높이를 바꾸지 않음 (P1 R1-3)
+	Origin.Z = HandPawn->GetActorLocation().Z;
 	if (Bag) { Bag->ResetToPose(Bag->GetActorTransform()); } // 손 세션을 먼저 끝냄 (P1 §2 R)
 	SetActorTransform(FTransform(Yaw, Origin));
 	Stand->SetRelativeLocation(FVector(-StandBehindOpeningCm, 0, StandTopHeightCm - StandSizeCm.Z * 0.5f));
@@ -135,15 +182,15 @@ void AP1LoadBench::PlaceFromHead(const FTransform& Head)
 	if (Target) { Target->SetActorTransform(GoalPose()); }
 	if (Bag) { Bag->ResetToPose(BagStartPose()); }
 	// 초기 배치와 R 을 입구 통과로 세지 않음 (P1 §2 경로)
-	bPreviousBodyBeforeOpening = false;
-	bCrossingRecorded = false;
-	bBlockedAtCrossingRecorded = false;
-	EntranceCrossings = 0;
-	BlockedAtCrossings = 0;
+	ResetCrossing();
+	TrialNumber = 1;
+	CompletedTrials = FP1TrialTotals();
+	RecentEvents.Reset();
 	LastObservedState = Bag ? Bag->GetStateText() : FString();
 	bPlaced = true;
 	Panel->SetVisibility(true);
 	RecordEvent(TEXT("Bench placed/reset at head yaw; opening +130 cm; stand -100 cm; geometry approximate"));
+	RecordEvent(FString::Printf(TEXT("Physical floor reference: Pawn origin Z=%.2f cm; trial=1; totals cleared"), Origin.Z));
 	RecordEvent(FString::Printf(TEXT("Static target fit=%d (bag length %.1f cm, inside width %.1f cm)"),
 		Target && Bag && Target->IsStaticFit(Bag) ? 1 : 0, BagLengthCm, Trunk ? Trunk->InsideWidthCm : 0.0f));
 	UpdatePanel();
@@ -232,11 +279,15 @@ void AP1LoadBench::UpdatePanel()
 	const FString Rig = HandPawn ? HandPawn->DescribeRig() : TEXT("Hand rig unavailable");
 	const FString StaticFit = Target && Bag ? (Target->IsStaticFit(Bag) ? TEXT("clear") : TEXT("overlap / does not fit")) : TEXT("n/a");
 	const FString CurrentFit = Target && Bag ? (Target->IsObjectInside(Bag) ? TEXT("inside and clear") : TEXT("not inside / overlap")) : TEXT("n/a");
+	const FP1TrialTotals Total = GetTotals();
 	FString Text = FString::Printf(TEXT("P1 | not-tested | Approximate geometry - not vehicle data\n"
 		"Rig: %s\nStatic target: %s | current: %s\nEntrance crossing: %d | blocked at crossing: %d\n"
-		"Bag: %s\n%s\nR: reset and re-place"), *Rig, *StaticFit, *CurrentFit,
+		"Bag: %s\n%s\nR: reset and re-place | B: next trial, bag only"), *Rig, *StaticFit, *CurrentFit,
 		EntranceCrossings, BlockedAtCrossings, Bag ? *Bag->GetStateText() : TEXT("unavailable"),
 		Bag ? *Bag->GetMeasurementText() : TEXT("measurements unavailable"));
+	Text += FString::Printf(TEXT("\nTrial: %d | Total grabbed=%d, assisted=%d, drop inside=%d, outside=%d\nTotal held %.3f s | blocked=%d / %.3f s | pauses=%d / %.3f s"),
+		TrialNumber, Total.Grabbed, Total.Assisted, Total.DroppedInside, Total.DroppedOutside, Total.HeldSeconds,
+		Total.BlockedCount, Total.BlockedSeconds, Total.PauseCount, Total.PausedSeconds);
 	Text += TEXT("\nRecent events:");
 	for (const FString& Event : RecentEvents) { Text += TEXT("\n") + Event; }
 	Panel->SetText(FText::FromString(Text));
@@ -260,9 +311,12 @@ void AP1LoadBench::RecordEvent(const FString& Event)
 void AP1LoadBench::RecordSnapshot(const FString& Reason)
 {
 	if (!Bag) { return; }
+	const FVBoRCarryMetrics Metrics = Bag->GetMetrics();
 	FString Snapshot = FString::Printf(TEXT("%s | state=%s | static fit=%d | current fit=%d | entrance crossings=%d | blocked at crossing=%d | %s"),
 		*Reason, *Bag->GetStateText(), Target && Target->IsStaticFit(Bag) ? 1 : 0,
 		Target && Target->IsObjectInside(Bag) ? 1 : 0, EntranceCrossings, BlockedAtCrossings, *Bag->GetMeasurementText());
+	Snapshot += FString::Printf(TEXT(" | Trial %d totals: grabbed=%d, assisted=%d, drop inside=%d, outside=%d, held=%.3f s"),
+		TrialNumber, Metrics.Grabbed, Metrics.Assisted, Metrics.DroppedInside, Metrics.DroppedOutside, Metrics.HeldSeconds);
 	Snapshot.ReplaceInline(TEXT("\n"), TEXT(" | "));
 	UE_LOG(LogP1Probe, Log, TEXT("%s"), *Snapshot);
 	UpdatePanel();

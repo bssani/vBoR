@@ -4,11 +4,21 @@
 
 struct FVBoRCarryMotion
 {
+	static FQuat LimitWorldTilt(const FQuat& Rotation, double TiltLimitDeg)
+	{
+		FQuat Swing;
+		FQuat Twist;
+		Rotation.GetNormalized().ToSwingTwist(FVector::UpVector, Swing, Twist);
+		// q 와 -q 의 같은 회전을 최단 swing 으로 맞춤 (P1 R1-2, ±90 deg Euler 특이점 제외)
+		if (Swing.W < 0) { Swing = Swing * -1.0; }
+		const double Angle = 2.0 * FMath::Acos(FMath::Clamp(Swing.W, 0.0, 1.0));
+		const double Limit = FMath::DegreesToRadians(FMath::Max(0.0, TiltLimitDeg));
+		if (Angle > Limit) { Swing = FQuat::Slerp(FQuat::Identity, Swing, Limit / Angle); }
+		return (Swing * Twist).GetNormalized();
+	}
 	static FQuat LimitedHandDelta(const FTransform& StartHand, const FTransform& Hand, double TiltLimitDeg)
 	{
-		const FRotator Delta = (Hand.GetRotation() * StartHand.GetRotation().Inverse()).Rotator();
-		return FRotator(FMath::Clamp(Delta.Pitch, -TiltLimitDeg, TiltLimitDeg), Delta.Yaw,
-			FMath::Clamp(Delta.Roll, -TiltLimitDeg, TiltLimitDeg)).Quaternion();
+		return LimitWorldTilt(Hand.GetRotation() * StartHand.GetRotation().Inverse(), TiltLimitDeg);
 	}
 	static FTransform Follow(const FTransform& StartHand, const FTransform& Hand, const FTransform& StartObject, double TiltLimitDeg)
 	{
@@ -88,10 +98,8 @@ struct FVBoRCarrySession
 		}
 		LastValidHand = HandPose.GetLocation();
 		Desired = FVBoRCarryMotion::Follow(StartHand, HandPose, StartObject, TiltLimitDeg);
-		// rebase 를 반복해도 최초 잡기 기준의 ±15 deg 를 넘지 않음 (P1 §2 회전)
-		const FRotator FromGrab = (Desired.GetRotation() * GrabObjectRotation.Inverse()).Rotator();
-		const FQuat Rotation = FRotator(FMath::Clamp(FromGrab.Pitch, -TiltLimitDeg, TiltLimitDeg), FromGrab.Yaw,
-			FMath::Clamp(FromGrab.Roll, -TiltLimitDeg, TiltLimitDeg)).Quaternion() * GrabObjectRotation;
+		// rebase 를 반복해도 최초 잡기 기준 원뿔 15 deg 안에 둠 (P1 R1-2)
+		const FQuat Rotation = FVBoRCarryMotion::LimitWorldTilt(Desired.GetRotation() * GrabObjectRotation.Inverse(), TiltLimitDeg) * GrabObjectRotation;
 		const FQuat RebasedDelta = Rotation * StartObject.GetRotation().Inverse();
 		Desired.SetRotation(Rotation);
 		Desired.SetLocation(HandPose.GetLocation() + RebasedDelta.RotateVector(StartObject.GetLocation() - StartHand.GetLocation()));

@@ -8,6 +8,12 @@
 #include "GameFramework/WorldSettings.h"
 #include "Interaction/IsdkGrabbableComponent.h"
 #include "Interaction/IsdkThrowable.h"
+#include "P1CarryTestObserver.h"
+#include "P1LoadBench.h"
+#include "P1TrunkMock.h"
+#include "../Interaction/VBoRHandRigPawn.h"
+#include "GameFramework/PlayerController.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 namespace
 {
@@ -111,6 +117,115 @@ bool FP1CarryPolicyTest::RunTest(const FString& Parameters)
 	TestFalse(TEXT("Overlap prevents inside-clear result"), Goal->IsObjectInside(Object));
 	Object->ResetToPose(FTransform(FVector(100, 0, 120)));
 	TestTrue(TEXT("Reset preserves geometry scale"), Object->GetActorScale3D().Equals(FVector(0.2)));
+	World->EndPlay(EEndPlayReason::Quit);
+	World->DestroyWorld(false);
+	return true;
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP1CarryPlacementTest, "vBoR.P1Carry.PlacementOutcome", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP1CarryPlacementTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+	AddBlocker(World, FVector(0, 0, 50), FVector(300, 300, 5));
+	AVBoRCarryObject* Object = World->SpawnActor<AVBoRCarryObject>();
+	Object->SetActorTransform(FTransform(FQuat::Identity, FVector(100, 0, 120), FVector(0.2)));
+	AVBoRLoadTarget* Target = World->SpawnActor<AVBoRLoadTarget>();
+	Target->SetActorLocation(FVector(0, 0, 65));
+	Target->GoalSizeCm = FVector(20);
+	Target->OnConstruction(Target->GetActorTransform());
+	Object->LoadTarget = Target;
+	World->InitializeActorsForPlay(FURL());
+	World->GetWorldSettings()->NotifyBeginPlay();
+	UP1CarryTestObserver* Observer = NewObject<UP1CarryTestObserver>(World);
+	Object->OnSeated.AddDynamic(Observer, &UP1CarryTestObserver::OnSeated);
+	Object->Session.Begin(0, Object->GetActorTransform(), Object->GetActorTransform(), 0);
+	Object->ReleaseCarry();
+	Object->Tick(1);
+	TestEqual(TEXT("Outside target drop does not emit seated event"), Observer->SeatedCount, 0);
+	TestEqual(TEXT("Outside target has released state"), Object->GetStateText(), FString(TEXT("Released (outside target)")));
+	if (UMaterialInstanceDynamic* Overlay = Cast<UMaterialInstanceDynamic>(Object->Mesh->GetOverlayMaterial()))
+	{
+		FLinearColor Color;
+		TestTrue(TEXT("Overlay color readable"), Overlay->GetVectorParameterValue(FMaterialParameterInfo(TEXT("ColorParam")), Color));
+		TestFalse(TEXT("Outside drop never uses seated green"), Color.Equals(Object->SeatedColor));
+	}
+	TestTrue(TEXT("Outside drop result identifies outside target"), Object->GetMeasurementText().Contains(TEXT("vertical drop -> outside target")));
+	Object->ResetToPose(FTransform(FVector(0, 0, 120)));
+	Object->Session.Begin(0, Object->GetActorTransform(), Object->GetActorTransform(), 0);
+	Object->ReleaseCarry();
+	TestTrue(TEXT("Above target and beyond assistance range starts dropping"), Object->GetStateText().Contains(TEXT("Dropping")));
+	Object->Tick(1);
+	TestEqual(TEXT("Inside target drop emits seated event once"), Observer->SeatedCount, 1);
+	TestEqual(TEXT("Inside target drop has seated state"), Object->GetStateText(), FString(TEXT("Seated")));
+	TestTrue(TEXT("Inside drop result identifies target seating"), Object->GetMeasurementText().Contains(TEXT("vertical drop -> inside target")));
+	Object->Tick(1);
+	TestEqual(TEXT("Resting inside target does not repeat event"), Observer->SeatedCount, 1);
+	World->EndPlay(EEndPlayReason::Quit);
+	World->DestroyWorld(false);
+	return true;
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP1CarryBlockedGapTest, "vBoR.P1Carry.RequestedActualGap", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP1CarryBlockedGapTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+	AddBlocker(World, FVector(0, 0, 100), FVector(5, 100, 100));
+	AVBoRCarryObject* Object = World->SpawnActor<AVBoRCarryObject>();
+	Object->SetActorTransform(FTransform(FQuat::Identity, FVector(-25, 0, 110), FVector(0.2)));
+	Object->Session.Begin(0, FTransform(FVector(-75, 0, 110)), Object->GetActorTransform(), 0);
+	FTransform Desired;
+	Object->Session.Update(true, FTransform(FVector(-55, 0, 110)), Object->GetActorTransform(), 1, 15, Desired);
+	Object->MoveHeldPose(Desired);
+	TestTrue(TEXT("Object is stopped at wall"), Object->IsBlocked());
+	TestTrue(TEXT("Blocked requested/actual gap excludes 50 cm grab offset"), FMath::IsNearlyEqual(Object->MaxRequestedGapCm, 10.0, 0.01));
+	World->EndPlay(EEndPlayReason::Quit);
+	World->DestroyWorld(false);
+	return true;
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP1CarryCumulativeTest, "vBoR.P1Carry.CumulativeRegrab", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP1CarryCumulativeTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+	APlayerController* Controller = World->SpawnActor<APlayerController>();
+	AVBoRHandRigPawn* Pawn = World->SpawnActor<AVBoRHandRigPawn>();
+	Controller->Possess(Pawn);
+	AP1LoadBench* Bench = World->SpawnActor<AP1LoadBench>();
+	World->InitializeActorsForPlay(FURL());
+	World->GetWorldSettings()->NotifyBeginPlay();
+	Bench->PlaceFromHead(FTransform(FVector(0, 0, 165)));
+	AVBoRCarryObject* Bag = Bench->Bag;
+	if (!TestNotNull(TEXT("Bag exists for cumulative lifecycle"), Bag)) { World->DestroyWorld(false); return false; }
+	Bag->BeginCarry(0, nullptr, Bag->GetActorTransform());
+	Bag->Session.GrabAt = World->GetTimeSeconds() - 2;
+	Bag->ReleaseCarry();
+	Bag->Tick(1);
+	TestEqual(TEXT("First outside release increments displayed cumulative result"), Bench->GetTotals().DroppedOutside, 1);
+	Bag->SetActorLocation(Bench->Target->GetActorLocation() + FVector(0, 0, 30));
+	Bag->BeginCarry(0, nullptr, Bag->GetActorTransform());
+	TestEqual(TEXT("Regrab cannot remove previously completed result"), Bench->GetTotals().DroppedOutside, 1);
+	TestEqual(TEXT("Regrab retains first completed hold duration"), Bench->GetTotals().HeldSeconds, 2.0);
+	Bag->Session.GrabAt = World->GetTimeSeconds() - 3;
+	Bag->ReleaseCarry();
+	Bag->Tick(1);
+	TestEqual(TEXT("Second inside release increments drop seating"), Bench->GetTotals().DroppedInside, 1);
+	TestEqual(TEXT("Completed holds sum across regrabs"), Bench->GetTotals().HeldSeconds, 5.0);
+	Bag->SetActorLocation(Bench->Target->GetActorLocation() + FVector(0, 0, 5));
+	Bag->BeginCarry(0, nullptr, Bag->GetActorTransform());
+	Bag->Session.GrabAt = World->GetTimeSeconds() - 1;
+	Bag->ReleaseCarry();
+	TestTrue(TEXT("Clear nearby target starts assistance"), Bag->bAssisting);
+	Bag->AssistStartedAt = World->GetTimeSeconds() - 0.3;
+	Bag->Tick(0.1);
+	TestEqual(TEXT("Actual assistance completion increments assisted count"), Bench->GetTotals().Assisted, 1);
+	Bench->ResetBagForNextTrial();
+	TestEqual(TEXT("B preserves first result and final result once each"), Bench->GetTotals().DroppedOutside, 1);
+	TestEqual(TEXT("B preserves inside seating once"), Bench->GetTotals().DroppedInside, 1);
+	TestEqual(TEXT("B preserves all three summed hold durations"), Bench->GetTotals().HeldSeconds, 6.0);
+	TestEqual(TEXT("B preserves assisted result"), Bench->GetTotals().Assisted, 1);
+	Bench->ResetBagForNextTrial();
+	TestEqual(TEXT("Empty B cannot duplicate completed results"), Bench->GetTotals().DroppedOutside + Bench->GetTotals().DroppedInside, 2);
+	Bench->PlaceFromHead(FTransform(FVector(0, 0, 120)));
+	TestEqual(TEXT("R clears all completed results"), Bench->GetTotals().DroppedOutside + Bench->GetTotals().DroppedInside, 0);
+	TestEqual(TEXT("R clears assistance and held duration"), Bench->GetTotals().Assisted, 0);
+	TestEqual(TEXT("R clears accumulated hold duration"), Bench->GetTotals().HeldSeconds, 0.0);
 	World->EndPlay(EEndPlayReason::Quit);
 	World->DestroyWorld(false);
 	return true;

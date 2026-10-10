@@ -44,9 +44,11 @@
 - 기본값으로는 실을 수 없다는 것을 숨기지 않았다. 값을 임의로 바꾸지 않고 보고 ③과 시험에 드러냈다. 규칙대로 한 것이다.
 - 주석 말투가 맞다. 샘플 플러그인 참조가 없고, `Config`·`Content`·`Plugins` 변경도 없다.
 
-## 열린 항목
+## 리뷰 항목
 
-### R1-1 트렁크 안쪽 폭 자리값을 130 cm로 바꾼다 (Claude 명세 오류) — 열림
+### R1-1 트렁크 안쪽 폭 자리값을 130 cm로 바꾼다 (Claude 명세 오류) — 반영함 (fix: address P1 loading review findings)
+
+**Codex 반영:** 기본 폭 130 cm, 좌우 벽 안쪽 면 ±65 cm, 기본 정적 적합성 `clear`로 수정했다. 폭 100 cm 실패와 원통 크기 보존 시험은 별도 설정으로 유지했다. `MockGeometry`, `PlacementAndReset` 통과.
 
 **문제**
 - **위치:**
@@ -67,7 +69,9 @@
 - `PlacementAndReset`: 기본값에서 `IsStaticFit` true, 패널 "clear".
 - 폭 100으로 설정한 경우: `IsStaticFit` false, 패널 "overlap / does not fit", 골프백 크기 그대로.
 
-### R1-2 회전 제한이 Pitch ±90° 근처에서 Yaw를 뒤집는다 — 열림
+### R1-2 회전 제한이 Pitch ±90° 근처에서 Yaw를 뒤집는다 — 반영함 (fix: address P1 loading review findings)
+
+**Codex 반영:** 두 제한 지점에 월드 Z swing-twist와 원뿔 15° 제한을 적용했다. 순수 Pitch 80°→100°의 연속 frame, 뒤집힌 179° frame, Yaw 85°, 반복 rebase 시험이 통과했다. 정확한 swing 180° 특이점은 제안에 적힌 한계로 남는다.
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRCarryMotion.h`. 두 곳이 모두 회전 차이를 `FRotator`로 바꾼 뒤 Pitch·Roll을 축별로 자른다.
@@ -96,7 +100,9 @@
 - 손 방향이 뒤집힌 frame 하나가 들어와도 Yaw가 180° 바뀌지 않는다.
 - 기존 시험(Yaw 85° 따라감, 반복 rebase 한도)이 그대로 통과한다.
 
-### R1-3 트렁크 높이를 가정한 눈높이가 아니라 물리 바닥에서 잰다 — 열림
+### R1-3 트렁크 높이를 가정한 눈높이가 아니라 물리 바닥에서 잰다 — 반영함 (fix: address P1 loading review findings)
+
+**Codex 반영:** `AssumedEyeHeightCm`를 제거하고 시험대 원점 Z를 Pawn 원점 Z로 정했다. 머리는 수평 위치와 Yaw에만 사용하며 바닥 기준을 로그에 남긴다. 머리 높이 120·165·190 cm에서 트렁크 바닥이 매번 Pawn Z + 75 cm인 시험이 통과했다.
 
 **문제**
 - **위치:**
@@ -115,7 +121,9 @@
 **확인할 시험**
 - `PlacementAndReset`: Pawn 원점 Z를 고정하고 머리 높이를 120·165·190 cm로 바꿔 배치한다. 매번 트렁크 바닥 윗면 월드 Z = Pawn 원점 Z + 75.
 
-### R1-4 목표 밖에서 멈춘 것을 "안착"(초록)으로 표시한다 — 열림
+### R1-4 목표 밖에서 멈춘 것을 "안착"(초록)으로 표시한다 — 반영함 (fix: address P1 loading review findings)
+
+**Codex 반영:** 최종 목표 안·충돌 없음일 때만 안착 색과 `OnSeated`를 보낸다. 목표 밖은 `Released (outside target)`와 회색 덧입힘이며, 진행 중 보조는 잡힘 색을 쓴다. `PlacementOutcome`에서 목표 밖 이벤트 0회, 목표 안 낙하 이벤트 1회와 반복 tick 중복 없음이 통과했다.
 
 **문제**
 - **위치:** 어디서 멈추든 `bSeated`·`OnSeated`가 된다.
@@ -139,7 +147,9 @@
   - 덧입힘 색이 `SeatedColor`가 아님
 - 목표 안, 보조 범위 밖에서 놓아 낙하 정지: 안착, `OnSeated` 1.
 
-### R1-5 막힘 거리가 잡은 자리 오프셋을 포함한다 — 열림
+### R1-5 막힘 거리가 잡은 자리 오프셋을 포함한다 — 반영함 (fix: address P1 loading review findings)
+
+**Codex 반영:** 제약을 적용한 요청 위치와 충돌 이동 뒤 실제 위치의 최대 차이를 `max requested/actual gap`으로 표시한다. `RequestedActualGap`에서 손바닥 오프셋 50 cm를 제외하고 벽 때문에 못 간 약 10 cm만 기록되는 시험이 통과했다.
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRCarryObject.cpp:244`. `MaxHandGapCm` = 손바닥 위치와 Actor 위치(원통 중심) 사이 거리다.
@@ -153,7 +163,9 @@
 **확인할 시험**
 - 손바닥이 중심에서 50 cm 떨어진 채 벽 쪽으로 10 cm 더 밀면 최대 거리 ≈ 10 cm다(50 cm대가 아님).
 
-### R1-6 반복 시험용으로 골프백만 되돌리는 키를 둔다 — 열림
+### R1-6 반복 시험용으로 골프백만 되돌리는 키를 둔다 — 반영함 (fix: address P1 loading review findings)
+
+**Codex 반영:** 편집 가능한 `B` 키로 가방만 돌려놓고 손 소유를 끝내며, 직전 시도 요약을 한 줄 기록하고 번호를 올린다. 시험대·트렁크 변환과 누적 결과·시간은 유지하고 입구 통과 기록은 초기화한다. `R`은 전체 재배치와 누적 초기화를 유지한다. 같은 시도에서 재잡기해도 앞선 결과와 시간이 보존되도록 보완했다. `BagRepeat`, 실제 Actor의 목표 밖 낙하→재잡기→목표 안 낙하→보조 안착을 거치는 `CumulativeRegrab` 통과.
 
 **문제**
 - **위치:** 골프백을 받침대로 돌려놓는 방법이 `R`뿐이다(`P1LoadBench.cpp:106-108`, `:126-149`). `R`은 두 가지를 같이 한다.
@@ -182,6 +194,13 @@
   - 누적 값 유지
   - 입구 통과 수를 지어내지 않음
 - `R`은 여전히 누적까지 지운다.
+
+### Codex 검증 기록 (2026-10-10)
+
+- 샘플 플러그인을 끈 UE 5.7 `vBoREditor Win64 Development` 빌드 성공, 컴파일·링크 경고와 오류 0. 로그: `Saved/Logs/P1R1Build.log`.
+- 샘플 플러그인을 끈 `vBoR.*` 전체 **40/40 Success**(P0 24 + P1 16), `TEST COMPLETE. EXIT CODE: 0`. 로그: `Saved/Logs/P1R1Automation.log`.
+- 독립 정적 검토에서 발견한 재잡기 누적 손실은 회귀시험으로 재현한 뒤 수정했고, 재검토에서 추가 차단 문제는 없었다. 내부 기록: `Saved/Logs/P1R1InternalReview.md`. 이는 Claude의 다음 공식 리뷰를 대신하지 않는다.
+- 에디터 표시·키보드 입력·Quest 3 손 추적은 미확인. P1 실측과 관련 T-02 정식 시험 상태는 `not-tested`다. 질문 없음.
 
 ## 로컬에서 확인할 것 (반영 뒤)
 

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "InputCoreTypes.h"
+#include "../Interaction/VBoRCarryObject.h"
 #include "P1LoadBench.generated.h"
 
 class AP1TrunkMock;
@@ -14,6 +15,20 @@ class UTextRenderComponent;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogP1Probe, Log, All);
 
+struct FP1TrialTotals
+{
+	int32 Grabbed = 0;
+	int32 Assisted = 0;
+	int32 DroppedInside = 0;
+	int32 DroppedOutside = 0;
+	int32 BlockedCount = 0;
+	int32 PauseCount = 0;
+	double HeldSeconds = 0;
+	double BlockedSeconds = 0;
+	double PausedSeconds = 0;
+	void Add(const FVBoRCarryMetrics& Metrics);
+};
+
 UCLASS()
 class VBOR_API AP1LoadBench : public AActor
 {
@@ -23,9 +38,11 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	void PlaceFromHead(const FTransform& Head);
 	void ResetAndReposition();
+	UFUNCTION(BlueprintCallable, Category = "Bench") void ResetBagForNextTrial();
+	int32 GetTrialNumber() const { return TrialNumber; }
+	FP1TrialTotals GetTotals() const;
 
 	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) float OpeningForwardCm = 130.0f;
-	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) float AssumedEyeHeightCm = 165.0f;
 	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) float StandBehindOpeningCm = 100.0f;
 	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) float StandTopHeightCm = 75.0f;
 	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) FVector StandSizeCm = FVector(60, 130, 5);
@@ -33,6 +50,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) float BagDiameterCm = 28.0f;
 	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) FVector GoalOffsetCm = FVector(45, 0, 14);
 	UPROPERTY(EditAnywhere, Category = "Bench") FKey RepositionKey = EKeys::R;
+	UPROPERTY(EditAnywhere, Category = "Bench") FKey BagResetKey = EKeys::B;
 	UPROPERTY(EditAnywhere, Category = "Bench") TSubclassOf<AP1TrunkMock> TrunkClass;
 	UPROPERTY(EditAnywhere, Category = "Bench") TSubclassOf<AVBoRCarryObject> BagClass;
 	UPROPERTY(EditAnywhere, Category = "Bench") TSubclassOf<AVBoRLoadTarget> TargetClass;
@@ -57,6 +75,8 @@ private:
 	bool bBlockedAtCrossingRecorded = false;
 	int32 EntranceCrossings = 0;
 	int32 BlockedAtCrossings = 0;
+	int32 TrialNumber = 1;
+	FP1TrialTotals CompletedTrials;
 	double LastLogAt = -1.0;
 	FString LastEvent = TEXT("Waiting for tracked head");
 	FString LastObservedState;
@@ -66,6 +86,7 @@ private:
 	FTransform BagStartPose() const;
 	FTransform GoalPose() const;
 	void UpdateCrossing();
+	void ResetCrossing();
 	void UpdatePanel();
 	void RecordEvent(const FString& Event);
 	void RecordSnapshot(const FString& Reason);

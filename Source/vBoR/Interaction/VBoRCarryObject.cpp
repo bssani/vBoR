@@ -193,6 +193,17 @@ void AVBoRCarryObject::ClearHoldingRig()
 void AVBoRCarryObject::HandlePalmSelect(UIsdkRigComponent* Rig) { bPalmOpen = false; }
 void AVBoRCarryObject::HandlePalmRelease(UIsdkRigComponent* Rig) { bPalmOpen = true; }
 
+bool AVBoRCarryObject::BeginCarry(int32 Hand, UIsdkGrabberComponent* Grabber, const FTransform& Pose)
+{
+	if (Pose.ContainsNaN() || !Session.Begin(Hand, Pose, GetActorTransform(), GetWorld()->GetTimeSeconds())) { return false; }
+	BindHoldingRig(Grabber);
+	bDropping = bAssisting = bSeated = bBlocked = bReleasedOutside = false;
+	Outcome = EVBoRCarryOutcome::None;
+	++Successes[Hand];
+	OnGrabbed.Broadcast(this);
+	return true;
+}
+
 void AVBoRCarryObject::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 {
 	UIsdkGrabberComponent* Grabber = Cast<UIsdkGrabberComponent>(Event.Interactor);
@@ -217,11 +228,7 @@ void AVBoRCarryObject::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 		FTransform Pose;
 		Grabber->GetPalmGrabTransform(Pose);
 		Pose.SetScale3D(FVector::OneVector);
-		if (Pose.ContainsNaN() || !Session.Begin(Hand, Pose, GetActorTransform(), Time)) { return; }
-		BindHoldingRig(Grabber);
-		bDropping = bAssisting = bSeated = bBlocked = false;
-		++Successes[Hand];
-		OnGrabbed.Broadcast(this);
+		if (!BeginCarry(Hand, Grabber, Pose)) { return; }
 	}
 	else if ((Event.Type == EIsdkPointerEventType::Unselect || Event.Type == EIsdkPointerEventType::Cancel) && Grabber == HoldingGrabber)
 	{
@@ -238,16 +245,24 @@ void AVBoRCarryObject::AdvanceHeldPose()
 	const bool bTracked = ReadHand(HandPose);
 	FTransform Desired;
 	if (!Session.Update(bTracked, HandPose, GetActorTransform(), GetWorld()->GetTimeSeconds(), TiltLimitDeg, Desired)) { UpdateVisual(); return; }
+	MoveHeldPose(Desired);
+	UpdateVisual();
+}
+
+void AVBoRCarryObject::MoveHeldPose(const FTransform& Desired)
+{
 	const bool bNewBlocked = !TryMoveToPose(Desired);
 	if (bNewBlocked && !bBlocked) { ++BlockedCount; }
 	bBlocked = bNewBlocked;
-	if (bBlocked) { MaxHandGapCm = FMath::Max(MaxHandGapCm, FVector::Distance(HandPose.GetLocation(), GetActorLocation())); }
-	UpdateVisual();
+	// 잡은 자리 오프셋을 빼고 막혀서 못 간 거리만 잼 (P1 R1-5, cm)
+	if (bBlocked) { MaxRequestedGapCm = FMath::Max(MaxRequestedGapCm, FVector::Distance(Desired.GetLocation(), GetActorLocation())); }
 }
 
 void AVBoRCarryObject::ReleaseCarry()
 {
 	if (!Session.Release(Session.Hand, true, GetWorld()->GetTimeSeconds())) { return; }
+	// 같은 시도의 재잡기에서도 앞선 잡기 시간을 남김 (P1 R1-6)
+	CompletedMetrics.HeldSeconds += Session.HeldSeconds;
 	ClearHoldingRig();
 	bBlocked = false;
 	FTransform Goal = LoadTarget ? LoadTarget->GetGoalPose() : GetActorTransform();
@@ -262,8 +277,15 @@ void AVBoRCarryObject::ReleaseCarry()
 
 void AVBoRCarryObject::FinishPlacement()
 {
-	// 멈춘 면에 안착했음. 목표 적합성은 IsObjectInside 로 따로 판정 (P1 §2 놓기 결과)
-	bSeated = true;
+	// 목표 밖 낙하를 성공 색·이벤트로 보이지 않게 함 (P1 R1-4)
+	bSeated = LoadTarget && LoadTarget->IsObjectInside(this);
+	bReleasedOutside = !bSeated;
+	Outcome = bSeated ? (bAssisting ? EVBoRCarryOutcome::Assisted : EVBoRCarryOutcome::DroppedInside) : EVBoRCarryOutcome::DroppedOutside;
+	CompletedMetrics.Assisted += Outcome == EVBoRCarryOutcome::Assisted ? 1 : 0;
+	CompletedMetrics.DroppedInside += Outcome == EVBoRCarryOutcome::DroppedInside ? 1 : 0;
+	CompletedMetrics.DroppedOutside += Outcome == EVBoRCarryOutcome::DroppedOutside ? 1 : 0;
+	ReleaseResult = Outcome == EVBoRCarryOutcome::Assisted ? TEXT("assisted seating") : bSeated ?
+		TEXT("vertical drop -> inside target") : TEXT("vertical drop -> outside target");
 	bDropping = bAssisting = false;
 	if (bSeated) { OnSeated.Broadcast(this); }
 	UpdateVisual();
@@ -318,13 +340,15 @@ void AVBoRCarryObject::ResetToPose(const FTransform& Pose)
 {
 	// 소유 손을 먼저 지움 (ForceCancel 의 동기 callback 을 놓기로 세지 않음, P1 R reset)
 	Session = FVBoRCarrySession();
+	CompletedMetrics = FVBoRCarryMetrics();
 	ClearHoldingRig();
 	GrabTransformer->ForceCancel();
 	Hovering.Empty();
 	Attempts[0] = Attempts[1] = Successes[0] = Successes[1] = 0;
 	BlockedCount = 0;
-	BlockedSeconds = MaxHandGapCm = 0;
-	bDropping = bAssisting = bSeated = bBlocked = false;
+	BlockedSeconds = MaxRequestedGapCm = 0;
+	bDropping = bAssisting = bSeated = bBlocked = bReleasedOutside = false;
+	Outcome = EVBoRCarryOutcome::None;
 	ReleaseResult = TEXT("none (reset)");
 	FTransform Restored = Pose;
 	Restored.SetScale3D(GetActorScale3D());
@@ -341,7 +365,21 @@ FString AVBoRCarryObject::GetStateText() const
 	if (bAssisting) { return TEXT("Assisted seating"); }
 	if (bDropping) { return TEXT("Dropping vertically"); }
 	if (bSeated) { return TEXT("Seated"); }
+	if (bReleasedOutside) { return TEXT("Released (outside target)"); }
 	return Hovering.IsEmpty() ? TEXT("Normal") : TEXT("Palm nearby");
+}
+
+FVBoRCarryMetrics AVBoRCarryObject::GetMetrics() const
+{
+	FVBoRCarryMetrics Metrics = CompletedMetrics;
+	Metrics.Grabbed = Successes[0] + Successes[1];
+	Metrics.BlockedCount = BlockedCount;
+	Metrics.PauseCount = Session.PauseCount;
+	Metrics.HeldSeconds += Session.Hand != INDEX_NONE ? Session.HeldSeconds : 0;
+	Metrics.BlockedSeconds = BlockedSeconds;
+	Metrics.PausedSeconds = Session.PausedSeconds + (Session.bPaused ? FMath::Max(0.0, GetWorld()->GetTimeSeconds() - Session.PauseAt) : 0.0);
+	Metrics.Outcome = Outcome;
+	return Metrics;
 }
 
 FString AVBoRCarryObject::GetMeasurementText() const
@@ -349,9 +387,9 @@ FString AVBoRCarryObject::GetMeasurementText() const
 	const double Paused = Session.PausedSeconds + (Session.bPaused ? FMath::Max(0.0, GetWorld()->GetTimeSeconds() - Session.PauseAt) : 0.0);
 	const double Distance = LoadTarget ? FVector::Distance(GetActorLocation(), LoadTarget->GetGoalPose().GetLocation()) : -1;
 	const double Angle = LoadTarget ? FVBoRCarryMotion::AngleDeg(GetActorTransform(), LoadTarget->GetGoalPose()) : -1;
-	return FString::Printf(TEXT("Attempts L=%d R=%d | grabbed L=%d R=%d | holding hand=%s\nHeld %.3f s | blocked=%d, %.3f s, max hand/object gap %.2f cm\nTracking pauses=%d, %.3f s | recovery delta %.2f cm | ignored SDK releases=%d\nRelease: %s | final pose: %s / %s\nTarget error %.2f cm / %.2f deg | inside and clear=%d\nPalm only | HandGrab only | throwable=0 | scripted drop %.1f cm/s"),
+	return FString::Printf(TEXT("Attempts L=%d R=%d | grabbed L=%d R=%d | holding hand=%s\nHeld %.3f s | blocked=%d, %.3f s, max requested/actual gap %.2f cm\nTracking pauses=%d, %.3f s | recovery delta %.2f cm | ignored SDK releases=%d\nRelease: %s | final pose: %s / %s\nTarget error %.2f cm / %.2f deg | inside and clear=%d\nPalm only | HandGrab only | throwable=0 | scripted drop %.1f cm/s"),
 		Attempts[0], Attempts[1], Successes[0], Successes[1], Session.Hand == 0 ? TEXT("Left") : Session.Hand == 1 ? TEXT("Right") : TEXT("none"),
-		Session.HeldSeconds, BlockedCount, BlockedSeconds, MaxHandGapCm, Session.PauseCount, Paused, Session.RecoveryDistanceCm,
+		Session.HeldSeconds, BlockedCount, BlockedSeconds, MaxRequestedGapCm, Session.PauseCount, Paused, Session.RecoveryDistanceCm,
 		Session.IgnoredReleases, *ReleaseResult, *GetActorLocation().ToString(), *GetActorRotation().ToString(), Distance, Angle,
 		LoadTarget && LoadTarget->IsObjectInside(this), DropSpeedCmPerSecond);
 }
@@ -362,9 +400,9 @@ void AVBoRCarryObject::UpdateVisual()
 	if (State == LastState) { return; }
 	LastState = State;
 	const bool bPaused = Session.bPaused && Session.Hand != INDEX_NONE;
-	const bool bHasOverlay = Session.Hand != INDEX_NONE || !Hovering.IsEmpty() || bAssisting || bSeated;
+	const bool bHasOverlay = Session.Hand != INDEX_NONE || !Hovering.IsEmpty() || bAssisting || bSeated || bReleasedOutside;
 	FLinearColor Color = bPaused ? PausedColor : bBlocked ? BlockedColor : Session.Hand != INDEX_NONE ? HeldColor :
-		bAssisting || bSeated ? SeatedColor : HoverColor;
+		bSeated ? SeatedColor : bReleasedOutside ? ReleasedColor : bAssisting ? HeldColor : HoverColor;
 	if (StateOverlay && bHasOverlay)
 	{
 		StateOverlay->SetVectorParameterValue(TEXT("ColorParam"), Color);
