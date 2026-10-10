@@ -11,6 +11,41 @@
 
 ---
 
+## 2026-10-10 — P0 첫 VR 실행 (참고용, 약 15 fps)
+
+사용자가 Quest 3 + Link, 에디터 VR Preview로 `L_P0a_HandSignals`(P0-a 프로브)와 `L_P0b_ButtonBench`(P0-b 시험대, `fe53a8d`)를 한 번씩 실행했다. 숫자는 `Saved/Logs/vBoR.log`의 `LogP0Probe`에서 Claude가 뽑았다. **명세 §5의 정식 측정(자세별 반복)이 아니라 첫 동작 확인이다.** 시험 상태는 계속 `not-tested`.
+
+### 환경
+
+- PC: NVIDIA GeForce RTX 3060, 드라이버 591.86. OpenXR 런타임 Oculus 1.208.0. XR API Epic Native OpenXR(`107539f`), OVRPlugin 로드 없음.
+- **프레임 약 15 fps**(로그 프레임 번호로 계산, 두 레벨 모두). 렌더링이 데스크톱 템플릿 그대로(Lumen GI·반사, 레이트레이싱, VSM)이고, 에디터 VR Preview는 HMD 전체 해상도를 쓴다("OpenXR ignores max viewport resolution in editor"). **이 상태의 관통 깊이·시간은 화면 지연이 섞여 있어 설계 근거로 쓰지 않는다.**
+
+### 확인된 것 (프레임과 무관)
+
+- Native OpenXR에서 손 추적이 된다. 양손 위치 유효·신뢰도 High로 시작(P0-a). ISDK 데이터 소스는 `IsdkFromOpenXRHandDataSource`(P0-b).
+- **pinch 키가 Native OpenXR에서 들어온다.** 검지 pinch 때 `ThumbPinch`와 `IndexPinch`가 같은 프레임에 함께 눌린다.
+- P0-b 손 리그: 레이 `active=0, enabled=0`(양손), `IsdkPokeLimiterRigModifier` 활성, 컨트롤러 리그 0. 원거리 잡기 감지기 객체는 손마다 하나 있다(ISDK가 항상 만든다 — 잡기 컴포넌트가 꺼져 있어 동작은 안 함, P0-b 리뷰 R2-1).
+- 먼 버튼(약 2 m) hover·select 0. 원본 손끝 추적 때문에 취소된 누름 0.
+
+### 숫자 (15 fps, 참고용) — 오른손, 누름 15회
+
+| 항목 | 값 |
+|---|---|
+| 실제 손끝이 버튼 앞면을 지나간 최대 깊이 | 11.4~20.9 mm(0 한 번 제외 14회). 단독 10 mm 20.2·20.9, 15 mm 15.3, 20 mm 20.9 |
+| select 순간 원본 깊이(눌림 깊이 3 mm라 같으면 3 근처) | **−1.9~+1.4 mm**. ISDK poke 지점이 엔진 IndexTip보다 약 1.6~4.9 mm 손가락 끝 쪽(더 깊이)에 있다는 뜻. 관통 깊이를 읽을 때 이만큼 보정이 필요하다 |
+| hover → select 시간 | 0.05~0.87 s |
+| 몰린 묶음(12 mm·간격 15 mm) 동시 활성 최대 | **1**(누름 10회, 2 이상 0회) — ISDK 기본이 이 배치에서는 한 번에 하나만 활성 |
+| 몰린 묶음 한 누름 동안 hover 대상 전환 | 0~4회. 목표로 가는 동안 이웃을 차례로 지나간다 |
+| hover 뒤 select 없이 끝남 | 22회(대부분 몰린 묶음 지나가기 — 단독 15 mm에서 2회는 실제로 못 누른 시도). 나누어 세도록 P0-b 리뷰 R2-2 |
+
+### 아직 안 한 것
+
+- P0-a: 마이크로제스처·PC 키보드 입력·pinch 강도 값·다이얼 각도(로그에 시도 기록 없음), 흔들림·시야 경계·가림 측정.
+- P0-b: 왼손, 크기별 10회 반복, `R` 다시 놓기, 피드백 체감(사용자 응답 대기).
+- **다음 정식 측정 전에 렌더링 설정을 VR용으로 바꾼다**(사용자 결정 대기). 그 뒤 같은 측정을 다시 해서 15 fps 결과와 비교한다.
+
+---
+
 ## 2026-10-09 — poke limiter 필수, 다이얼 손가락 회전, ISDK 샘플
 
 ### 1. 결정과 요구

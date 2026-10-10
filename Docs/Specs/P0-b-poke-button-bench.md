@@ -7,7 +7,7 @@
 | 베이스 브랜치 | `main` |
 | 작업 브랜치 | `codex/P0-b-poke-button-bench` |
 | 리뷰 파일 | [Docs/Reviews/P0-b-poke-button-bench.md](../Reviews/P0-b-poke-button-bench.md) (첫 리뷰 때 생김) |
-| 상태 | 확정(2026-10-09), 구현됨(`6562171`), 리뷰 1회차 반영 대기 — [리뷰 기록](../Reviews/P0-b-poke-button-bench.md). 시험 상태 `not-tested` |
+| 상태 | 확정(2026-10-09), 구현 `6562171`·1회차 반영 `fe53a8d`, 리뷰 2회차 — 열린 항목 3건(작음) — [리뷰 기록](../Reviews/P0-b-poke-button-bench.md). VR 첫 실행(약 15 fps, 참고용). 시험 상태 `not-tested` |
 | 개정 | 2026-10-10 리뷰 1회차: 상태 표시는 원래 재질을 보존하고 덧입힘, 동시 활성 수는 hover 또는 select, 시험대는 머리 기준 배치·다시 놓기 키, select 순간 원본 깊이·취소·놓친 시도 기록 |
 
 ## 0. 사용자 결정 (2026-10-09 확정)

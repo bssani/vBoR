@@ -9,6 +9,14 @@
 | 회차 | 날짜 | 리뷰 대상 | 리뷰어 | 결과 |
 |---|---|---|---|---|
 | 1 | 2026-10-10 | `6562171` P0-b 시험대 | Claude | **수정 후 실측.** 빌드·시험은 통과. 부모 버튼이 메시 재질을 덮는 문제, 동시 활성 수 누락, 시험대 위치 기준 등 6건 |
+| 2 | 2026-10-10 | `fe53a8d` 1회차 반영 + VR 첫 실행 로그 | Claude | **반영 확인. 새 항목 3건(작음).** R1-1~R1-6 제안대로 구현됨. VR 실행에서 원거리 잡기 감지기가 만들어지는 것을 발견(R2-1). **측정 자체는 약 15 fps라 참고용** — 렌더링 설정 결정 필요(사용자) |
+
+### 2회차에 확인한 것
+
+- `vBoR.*` 22개 Success(샘플 플러그인 끔)를 현재 바이너리로 재현. **에디터가 열려 있어 C++ 재컴파일 재현은 못 했다** — Codex 빌드 로그(`Saved/Logs/P0ButtonR1Build.log`, 경고·오류 0)만 확인. 에디터를 닫은 뒤 다음 회차에 재컴파일로 재현한다.
+- R1-1: 원래 재질 슬롯을 건드리지 않고 hover·select에서만 `SetOverlayMaterial`, `GrabbableLit` 반투명·`ColorParam` 알파 → 불투명도는 에셋 로드 시험으로 확인함. R1-2: hover 또는 select. R1-3: 첫 HMD 추적 프레임에 카메라 Yaw 기준 배치, `R` 다시 놓기, 버튼 붙임. R1-4: 부호 있는 select 깊이. R1-5: 추적 취소·놓친 시도. R1-6: 내부 헤더·라이브러리 의존 제거, 공개 API 경계 시험. 모두 제안대로다.
+- **VR 첫 실행(2026-10-10, 사용자, Link, RTX 3060) 로그에서:** 레이 `active=0, enabled=0`(양손), limiter 활성, 데이터 소스 `IsdkFromOpenXRHandDataSource`, 먼 버튼 hover·select 0, 추적 취소 0, 몰린 묶음 동시 활성 최대 1. 측정 수치는 조사 기록 "2026-10-10 P0 첫 VR 실행"에 정리했다.
+- **프레임:** 로그 프레임 번호로 약 15 fps(P0-a·P0-b 둘 다). 데스크톱 렌더링(Lumen·레이트레이싱·VSM) + 에디터 VR Preview의 HMD 전체 해상도 때문으로 보인다. 이 상태의 관통 깊이·시간은 지연이 섞여 있어 판단 근거로 쓰지 않는다.
 
 ### 1회차에 재현한 것
 
@@ -23,7 +31,42 @@
 
 ## 열린 항목
 
-### R1-1 상태 색이 버튼 메시의 원래 재질을 덮는다 — 반영함 (fix: address P0-b first review findings)
+### R2-1 원거리·레이 잡기 감지 유형을 부모 Pawn에서 막는다 — 열림
+
+**문제**
+- **위치:** `Source/vBoR/Interaction/VBoRHandRigPawn.cpp:17-26`(`ConfigurePokeRig`) — 잡기 리그를 비활성화만 한다. 같은 파일 `DescribeRig`는 원거리 잡기 감지기 **객체 수**를 센다.
+- **발생 조건:** 2026-10-10 VR 실행 로그에 `Distance grab: 2`가 찍혔다. ISDK 잡기 컴포넌트는 원거리 잡기 감지기를 항상 기본 하위 객체로 만든다(`Plugins/MetaXRInteraction/Source/OculusInteraction/Private/Interaction/IsdkGrabberComponent.cpp:51-52`). 지금은 잡기 리그가 꺼지면 잡기 컴포넌트도 꺼져서(`OculusInteractionPrebuilts/Private/Rig/IsdkGrabInteractionRigComponent.cpp:112-133`) 동작하지 않는다.
+- **영향:** 이 Pawn은 부모다(D3). P1(골프백)에서 잡기를 켜는 순간 원거리 잡기와 레이 잡기도 같이 살아난다. 원거리 잡기는 U-03·U-04 금지다. 로그의 "2"도 실제로 켜진 것인지 오해를 부른다.
+
+**제안**
+- `ConfigurePokeRig`에서 잡기 컴포넌트(`GetGrabber()`, `IsdkRigComponent.h:193`)에 `SetGrabDetectionTypeAllowed(EIsdkGrabDetectorType::DistanceGrab, false)`와 `(RayGrab, false)`를 건다(`OculusInteraction/Public/Interaction/IsdkGrabberComponent.h:200`). 감지 여부는 `IsGrabDetectionTypeAllowed`로 판정된다(`IsdkGrabberComponent.cpp:206-213, 236-243, 848-851`).
+- 생성자에서 잡기 컴포넌트가 아직 없으면 BeginPlay(또는 리그 초기화 뒤)에 건다. 어느 시점에 거는지 근거를 보고한다.
+- `DescribeRig`는 객체 수 대신 손별로 "grabber active=?, distance allowed=?, ray grab allowed=?"를 찍는다.
+
+**확인할 시험**
+- 메모리 월드에서 Pawn을 BeginPlay까지 돌린 뒤, 양손 잡기 컴포넌트에서 DistanceGrab·RayGrab이 허용되지 않음. 잡기 리그를 다시 활성화해도 허용되지 않음.
+
+### R2-2 "놓친 시도"를 단독 버튼과 몰린 묶음으로 나눈다 — 열림
+
+**문제**
+- **위치:** `Source/vBoR/P0Probe/P0ButtonBench.cpp` — hover 뒤 select 없이 끝나면 모두 "Missed"로 합산한다.
+- **발생 조건:** 몰린 묶음에서는 손가락이 목표로 가는 동안 이웃 버튼을 차례로 hover한다. 2026-10-10 실행에서 Missed 22건 중 대부분이 몰린 묶음의 지나가기였다.
+- **영향:** 단독 버튼에서 실제로 못 누른 시도와 몰린 묶음의 지나가기가 한 숫자에 섞여 "못 누른 횟수"로 읽을 수 없다.
+
+**제안**
+- 손별로 단독 버튼과 몰린 묶음의 놓친 시도를 따로 센다(먼 버튼은 hover 자체가 0이어야 하므로 그대로). 패널: `Missed single: L/R | cluster pass: L/R`.
+
+**확인할 시험**
+- 단독 버튼 hover→unhover는 single에만, 몰린 묶음은 cluster에만 더해진다.
+
+### R2-3 덧입힘 해제 중복 호출 — 열림
+
+- **위치:** `Source/vBoR/Interaction/VBoRPokeButton.cpp` BeginPlay — `ButtonMesh->SetOverlayMaterial(nullptr);`가 두 번 연속 있다. 동작 영향은 없다. 하나를 지운다.
+
+## 1회차 항목 (모두 반영함, `fe53a8d`)
+
+
+### R1-1 상태 색이 버튼 메시의 원래 재질을 덮는다 — 반영함 (`fe53a8d`)
 
 **반영 확인:** `GrabbableLit`의 `BLEND_Translucent`와 `ColorParam` 알파 → Opacity 연결을 실제 로드한 에셋에서 확인함. 원래 슬롯은 보존하고 hover·select에만 MID 하나를 덧입힘. Normal에는 없음. `OverlayMaterial`·`ButtonComponents` 시험에서 원래 슬롯 객체, 상태별 색·설정 불투명도, Normal 복귀를 확인함.
 
@@ -45,7 +88,7 @@
 - Normal → 덧입힘 없음, Hover·Select → 덧입힘 재질의 색·불투명도가 각 프로퍼티 값이다. Normal로 돌아오면 다시 없음.
 - 덧입힘 재질의 혼합 방식이 반투명이다.
 
-### R1-2 몰린 묶음의 동시 활성 수가 select 중인 버튼을 빼고 센다 — 반영함 (fix: address P0-b first review findings)
+### R1-2 몰린 묶음의 동시 활성 수가 select 중인 버튼을 빼고 센다 — 반영함 (`fe53a8d`)
 
 **반영 확인:** `CountActive`가 hover 또는 select를 셈. 패널은 `Cluster active (both hands)`로 표시함. `SimultaneousActive`에서 select+hover=2, select=1, normal/disabled=0, 2 이상 진입 전환 횟수를 확인함.
 
@@ -61,7 +104,7 @@
 **확인할 시험**
 - `SimultaneousHover` → `SimultaneousActive`로 바꾸고: {Select, Hover} = 2, {Select} = 1, {Normal, Disabled} = 0, 2 이상 진입 횟수는 전환 때만.
 
-### R1-3 시험대가 머리가 아니라 Pawn 원점 기준으로 놓인다 — 반영함 (fix: address P0-b first review findings)
+### R1-3 시험대가 머리가 아니라 Pawn 원점 기준으로 놓인다 — 반영함 (`fe53a8d`)
 
 **반영 확인:** GameMode는 생성만 함. 시험대가 첫 유효 HMD 추적을 기다려 Camera의 위치·Yaw로 배치함(XR가 없으면 Camera 기준). `R` 바인딩·측정 취소·`Bench re-placed` 기록, 버튼 Actor 붙임을 추가함. `HeadPlacement`의 기울어진 머리, `AttemptOutcomes`의 공유 다시 놓기 취소 함수, `ButtonComponents`의 버튼 상대 위치 유지 시험으로 확인함. 실제 HMD 대기·PIE 키 포커스는 기기 후속 확인임.
 
@@ -84,7 +127,7 @@
 - 다시 놓기: 진행 중인 누름이 취소되고, 추적 취소 수는 그대로다.
 - 붙임: 시험대를 옮기면 버튼 Actor들이 같은 상대 위치로 따라온다.
 
-### R1-4 select 순간의 원본 깊이를 기록한다 — 반영함 (fix: address P0-b first review findings)
+### R1-4 select 순간의 원본 깊이를 기록한다 — 반영함 (`fe53a8d`)
 
 **반영 확인:** `DepthAtSelectMm`·가용 여부를 추가하고 select 순간에만 저장함. 최대값과 따로 부호를 보존하며 새 hover에서 초기화됨. Last press 및 select 이벤트 로그에 깊이/n/a를 표시함. `SelectDepth` 시험으로 음수·최대값 분리·무효/n/a·초기화를 확인함.
 
@@ -101,7 +144,7 @@
 **확인할 시험**
 - select 순간 값이 최대값과 따로 저장된다. 음수가 그대로 남는다. 못 읽으면 n/a다. 새 누름(hover)에 초기화된다.
 
-### R1-5 버려진 측정과 놓친 시도를 센다 — 반영함 (fix: address P0-b first review findings)
+### R1-5 버려진 측정과 놓친 시도를 센다 — 반영함 (`fe53a8d`)
 
 **반영 확인:** 활성 측정의 무효 샘플은 추적 취소를 한 번 셈. select 없는 Unhover는 놓친 시도로 셈. 누름별 누적 계수를 손별로 합산하여 패널·로그에 표시함. `AttemptOutcomes`에서 무효 반복, hover만 끝난 경우, 정상 누름 뒤 Unhover, 수동 다시 놓기 취소를 확인함. ISDK Cancel은 합계에 넣지 않음.
 
@@ -120,7 +163,7 @@
 - hover → unhover → 놓친 시도 +1.
 - hover → select → unselect → unhover → 놓친 시도 +0.
 
-### R1-6 시험이 ISDK 내부 네이티브 API에 의존한다 — 반영함 (fix: address P0-b first review findings)
+### R1-6 시험이 ISDK 내부 네이티브 API에 의존한다 — 반영함 (`fe53a8d`)
 
 **반영 확인:** 내부 헤더·native raycast·native surface 접근과 Build.cs의 내부 모듈/경로 의존을 제거함. `ButtonComponents`가 공개 GetSize·Right/Up 벡터·법선으로 경계를 확인함. 메시 90 deg 회전 구성도 확인했고 의존 제거 후 vBoR 전체 소스를 재컴파일함.
 
