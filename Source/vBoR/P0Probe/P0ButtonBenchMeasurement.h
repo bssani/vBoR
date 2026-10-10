@@ -67,6 +67,25 @@ struct FP0ButtonPressMeasurement
 	}
 };
 
+struct FP0ButtonAttemptTotals
+{
+	int32 TrackingCanceled = 0;
+	int32 MissedSingle = 0;
+	int32 ClusterPass = 0;
+	static FP0ButtonAttemptTotals Calculate(TConstArrayView<FP0ButtonPressMeasurement> Presses, int32 ClusterStart, int32 FarIndex)
+	{
+		FP0ButtonAttemptTotals Totals;
+		for (int32 Index = 0; Index < Presses.Num(); ++Index)
+		{
+			Totals.TrackingCanceled += Presses[Index].TrackingCanceled;
+			// 이웃을 지나간 hover 는 단독 버튼의 놓친 시도와 나눔. 먼 버튼은 별도 hover 수로 확인 (P0-b R2-2)
+			if (Index < ClusterStart) { Totals.MissedSingle += Presses[Index].Missed; }
+			else if (Index < FarIndex) { Totals.ClusterPass += Presses[Index].Missed; }
+		}
+		return Totals;
+	}
+};
+
 struct FP0ButtonActiveMeasurement
 {
 	int32 Current = 0;

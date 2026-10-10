@@ -9,8 +9,7 @@
 #include "Rig/IsdkPokeLimiterRigModifier.h"
 #include "Rig/IsdkRayInteractionRigComponent.h"
 #include "Rig/IsdkGrabInteractionRigComponent.h"
-#include "Interaction/GrabDetectors/IsdkDistanceGrabDetector.h"
-#include "UObject/UObjectHash.h"
+#include "Interaction/IsdkGrabberComponent.h"
 
 namespace
 {
@@ -23,6 +22,9 @@ namespace
 		// P0-b 는 poke 만 시험함 (D1)
 		Rig->GetGrabInteraction()->bAutoActivate = false;
 		Rig->GetGrabInteraction()->Deactivate();
+		// Grabber 는 ISDK 생성자에서 이미 존재함. 잡기 재활성화 때도 원거리 차단 유지 (U-03, P0-b R2-1)
+		Rig->GetGrabber()->SetGrabDetectionTypeAllowed(EIsdkGrabDetectorType::DistanceGrab, false);
+		Rig->GetGrabber()->SetGrabDetectionTypeAllowed(EIsdkGrabDetectorType::RayGrab, false);
 	}
 }
 
@@ -81,10 +83,8 @@ bool AVBoRHandRigPawn::ReadRawIndexTip(int32 HandIndex, FVector& OutWorldTip) co
 FString AVBoRHandRigPawn::DescribeRig() const
 {
 	TArray<UIsdkControllerRigComponent*> Controllers;
-	int32 DistanceGrabCount = 0;
 	GetComponents(Controllers);
-	ForEachObjectWithOuter(this, [&DistanceGrabCount](UObject* Object) { if (Object->IsA<UIsdkDistanceGrabDetector>()) { ++DistanceGrabCount; } }, true);
-	FString Text = FString::Printf(TEXT("Controller rigs: %d | Distance grab: %d | Raw tip: XR IndexTip (world)"), Controllers.Num(), DistanceGrabCount);
+	FString Text = FString::Printf(TEXT("Controller rigs: %d | Raw tip: XR IndexTip (world)"), Controllers.Num());
 	for (int32 HandIndex = 0; HandIndex < 2; ++HandIndex)
 	{
 		UIsdkHandRigComponent* Rig = GetHandRig(HandIndex);
@@ -94,9 +94,12 @@ FString AVBoRHandRigPawn::DescribeRig() const
 			Modifiers += Modifier->GetClass()->GetName() + TEXT(" ");
 		}
 		const auto& Sources = Rig->GetHandVisuals()->GetDataSources();
-		Text += FString::Printf(TEXT("\n%s ray active=%d, enabled=%d | modifiers: %s | source: %s"),
+		const UIsdkGrabberComponent* Grabber = Rig->GetGrabber();
+		Text += FString::Printf(TEXT("\n%s ray active=%d, enabled=%d | grabber active=%d, distance allowed=%d, ray grab allowed=%d | modifiers: %s | source: %s"),
 			HandIndex == 0 ? TEXT("Left") : TEXT("Right"), Rig->GetRayInteraction()->IsActive(),
-			Rig->GetRayInteraction()->GetEnabledConditional()->GetResolvedValue(), *Modifiers,
+			Rig->GetRayInteraction()->GetEnabledConditional()->GetResolvedValue(), Grabber->IsActive(),
+			Grabber->IsGrabDetectionTypeAllowed(EIsdkGrabDetectorType::DistanceGrab),
+			Grabber->IsGrabDetectionTypeAllowed(EIsdkGrabDetectorType::RayGrab), *Modifiers,
 			Sources.DataSourceComponent ? *Sources.DataSourceComponent->GetClass()->GetName() : TEXT("unavailable"));
 	}
 	return Text;

@@ -2,6 +2,9 @@
 #include "Misc/AutomationTest.h"
 #include "P0ButtonBenchMeasurement.h"
 #include "../Interaction/VBoRPokeButtonLayout.h"
+#include "../Interaction/VBoRHandRigPawn.h"
+#include "Interaction/IsdkGrabberComponent.h"
+#include "Rig/IsdkGrabInteractionRigComponent.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ButtonDepthTest, "vBoR.P0ButtonBench.RawPenetration", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP0ButtonDepthTest::RunTest(const FString& Parameters)
@@ -113,6 +116,37 @@ bool FP0ButtonPlacementTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ButtonAttemptGroupsTest, "vBoR.P0ButtonBench.AttemptGroups", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP0ButtonAttemptGroupsTest::RunTest(const FString& Parameters)
+{
+	TArray<FP0ButtonPressMeasurement> Presses;
+	Presses.SetNum(4);
+	Presses[0].Hover(1.0);
+	Presses[0].Unhover();
+	auto Totals = FP0ButtonAttemptTotals::Calculate(Presses, 2, 3);
+	TestEqual(TEXT("Single miss goes only to single count"), Totals.MissedSingle, 1);
+	TestEqual(TEXT("Single miss does not count as cluster pass"), Totals.ClusterPass, 0);
+	Presses[2].Hover(2.0);
+	Presses[2].Unhover();
+	Totals = FP0ButtonAttemptTotals::Calculate(Presses, 2, 3);
+	TestEqual(TEXT("Cluster pass does not change single count"), Totals.MissedSingle, 1);
+	TestEqual(TEXT("Cluster hover without select goes only to cluster count"), Totals.ClusterPass, 1);
+	Presses[3].Hover(3.0);
+	Presses[3].Unhover();
+	Presses[1].Hover(4.0);
+	Presses[1].Sample(false, FVector::ZeroVector, FVector::ZeroVector, FVector::UpVector, 10.0);
+	Totals = FP0ButtonAttemptTotals::Calculate(Presses, 2, 3);
+	TestEqual(TEXT("Far hover and tracking cancel do not count as single misses"), Totals.MissedSingle, 1);
+	TestEqual(TEXT("Far hover and tracking cancel do not count as cluster passes"), Totals.ClusterPass, 1);
+	TestEqual(TEXT("Tracking cancellation remains separate"), Totals.TrackingCanceled, 1);
+	TArray<FP0ButtonPressMeasurement> OtherHand;
+	OtherHand.SetNum(4);
+	Totals = FP0ButtonAttemptTotals::Calculate(OtherHand, 2, 3);
+	TestEqual(TEXT("Other hand single count stays separate"), Totals.MissedSingle, 0);
+	TestEqual(TEXT("Other hand cluster count stays separate"), Totals.ClusterPass, 0);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ButtonTargetTest, "vBoR.P0ButtonBench.TargetSwitches", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP0ButtonTargetTest::RunTest(const FString& Parameters)
 {
@@ -157,6 +191,39 @@ bool FP0ButtonLayoutTest::RunTest(const FString& Parameters)
 #include "Components/TextRenderComponent.h"
 #include "P0ButtonBench.h"
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0HandRigGrabTest, "vBoR.P0ButtonBench.GrabDetectionRestrictions", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP0HandRigGrabTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+	AVBoRHandRigPawn* Pawn = World->SpawnActor<AVBoRHandRigPawn>();
+	World->InitializeActorsForPlay(FURL());
+	World->GetWorldSettings()->NotifyBeginPlay();
+	TestTrue(TEXT("Pawn reached BeginPlay"), Pawn->HasActorBegunPlay());
+	for (int32 Hand = 0; Hand < 2; ++Hand)
+	{
+		UIsdkHandRigComponent* Rig = Pawn->GetHandRig(Hand);
+		UIsdkGrabberComponent* Grabber = Rig->GetGrabber();
+		TestNotNull(TEXT("Hand rig has a grabber"), Grabber);
+		if (!Grabber) { continue; }
+		TestFalse(TEXT("Distance grab disallowed after BeginPlay"), Grabber->IsGrabDetectionTypeAllowed(EIsdkGrabDetectorType::DistanceGrab));
+		TestFalse(TEXT("Ray grab disallowed after BeginPlay"), Grabber->IsGrabDetectionTypeAllowed(EIsdkGrabDetectorType::RayGrab));
+		TestFalse(TEXT("Poke-only bench starts with grab rig inactive"), Rig->GetGrabInteraction()->IsActive());
+		Rig->GetGrabInteraction()->Activate(true);
+		TestTrue(TEXT("Grab rig reactivated"), Rig->GetGrabInteraction()->IsActive());
+		TestFalse(TEXT("Reactivation cannot allow distance grab"), Grabber->IsGrabDetectionTypeAllowed(EIsdkGrabDetectorType::DistanceGrab));
+		TestFalse(TEXT("Reactivation cannot allow ray grab"), Grabber->IsGrabDetectionTypeAllowed(EIsdkGrabDetectorType::RayGrab));
+		TestTrue(TEXT("Nearby hand grab remains allowed"), Grabber->IsGrabDetectionTypeAllowed(EIsdkGrabDetectorType::HandGrab));
+		Rig->GetGrabInteraction()->Deactivate();
+	}
+	const FString RigStatus = Pawn->DescribeRig();
+	TestFalse(TEXT("Status does not misrepresent detector objects as active distance grabs"), RigStatus.Contains(TEXT("Distance grab:")));
+	TestTrue(TEXT("Status reports blocked grab detection for left hand"), RigStatus.Contains(TEXT("Left ray active=0, enabled=0 | grabber active=0, distance allowed=0, ray grab allowed=0")));
+	TestTrue(TEXT("Status reports blocked grab detection for right hand"), RigStatus.Contains(TEXT("Right ray active=0, enabled=0 | grabber active=0, distance allowed=0, ray grab allowed=0")));
+	World->EndPlay(EEndPlayReason::Quit);
+	World->DestroyWorld(false);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ButtonComponentTest, "vBoR.P0ButtonBench.ButtonComponents", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP0ButtonComponentTest::RunTest(const FString& Parameters)
 {
@@ -198,7 +265,7 @@ bool FP0ButtonComponentTest::RunTest(const FString& Parameters)
 	UGameplayStatics::GetAllActorsOfClass(World, AVBoRPokeButton::StaticClass(), SpawnedButtons);
 	TestEqual(TEXT("Startup spawns 3 single, 12 cluster, 1 far plus test button"), SpawnedButtons.Num(), 17);
 	TestTrue(TEXT("Startup panel displays both-hands active measurements"), Bench->Panel->Text.ToString().Contains(TEXT("Cluster active (both hands):")));
-	TestTrue(TEXT("Panel includes tracking cancellation and missed counts"), Bench->Panel->Text.ToString().Contains(TEXT("Canceled (tracking): L=0 R=0 | Missed: L=0 R=0")));
+	TestTrue(TEXT("Panel separates tracking cancellation, single misses and cluster passes"), Bench->Panel->Text.ToString().Contains(TEXT("Canceled (tracking): L=0 R=0 | Missed single: L=0 R=0 | cluster pass: L=0 R=0")));
 	TArray<FTransform> RelativeBefore;
 	for (AActor* Spawned : SpawnedButtons)
 	{

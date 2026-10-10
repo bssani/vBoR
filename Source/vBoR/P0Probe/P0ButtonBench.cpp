@@ -205,7 +205,11 @@ void AP0ButtonBench::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 		}
 		break;
 	case EIsdkPointerEventType::Unhover:
-		if (Press.Unhover()) { RecordEvent(Names[ButtonIndex] + (Hand == 0 ? TEXT(" Left missed") : TEXT(" Right missed"))); }
+		if (Press.Unhover())
+		{
+			RecordEvent(Names[ButtonIndex] + (Hand == 0 ? TEXT(" Left ") : TEXT(" Right ")) +
+				(bCluster ? TEXT("cluster pass") : ButtonIndex < ClusterStart ? TEXT("missed single") : TEXT("missed far")));
+		}
 		break;
 	case EIsdkPointerEventType::Cancel: Press.Cancel(); if (bCluster) { Targets[Hand].Reset(); } break;
 	default: break;
@@ -230,8 +234,7 @@ void AP0ButtonBench::HandleFrameFinished()
 	}
 	// 이벤트 전달이 끝난 frame 에 hover·select 를 함께 셈 (P0-b R1-2)
 	Active.Update(FP0ButtonActiveMeasurement::CountActive(States));
-	int32 Canceled[2] = {0, 0};
-	int32 Missed[2] = {0, 0};
+	FP0ButtonAttemptTotals Attempts[2];
 	FString LivePress;
 	for (int32 Hand = 0; Hand < 2; ++Hand)
 	{
@@ -240,8 +243,6 @@ void AP0ButtonBench::HandleFrameFinished()
 		{
 			const FP0ButtonPressMeasurement& Press = Presses[Hand][Index];
 			if (Press.bHover || Press.bSelected) { SamplePress(Hand, Index); }
-			Canceled[Hand] += Press.TrackingCanceled;
-			Missed[Hand] += Press.Missed;
 			if (Press.bHover || Press.bSelected)
 			{
 				LivePress += FString::Printf(TEXT("\n%s %s depth %s"), *Names[Index], Hand == 0 ? TEXT("Left") : TEXT("Right"),
@@ -249,11 +250,13 @@ void AP0ButtonBench::HandleFrameFinished()
 				bClusterActive |= Index >= ClusterStart && Index < FarIndex;
 			}
 		}
+		Attempts[Hand] = FP0ButtonAttemptTotals::Calculate(Presses[Hand], ClusterStart, FarIndex);
 		if (!bClusterActive) { Targets[Hand].Reset(); }
 	}
-	const FString Status = FString::Printf(TEXT("P0-b | not-tested | temporary sizes\n%s\nCluster active (both hands): %d | max: %d | >=2 episodes: %d\nTarget switches: L=%d R=%d | Far hover=%d select=%d\nCanceled (tracking): L=%d R=%d | Missed: L=%d R=%d\nPlacement: %s | re-place: %s\nLast press: %s%s"),
+	const FString Status = FString::Printf(TEXT("P0-b | not-tested | temporary sizes\n%s\nCluster active (both hands): %d | max: %d | >=2 episodes: %d\nTarget switches: L=%d R=%d | Far hover=%d select=%d\nCanceled (tracking): L=%d R=%d | Missed single: L=%d R=%d | cluster pass: L=%d R=%d\nPlacement: %s | re-place: %s\nLast press: %s%s"),
 		*RigStatus, Active.Current, Active.Maximum, Active.MultipleEpisodes, Targets[0].Switches, Targets[1].Switches, FarHoverCount, FarSelectCount,
-		Canceled[0], Canceled[1], Missed[0], Missed[1], bPlaced ? TEXT("fixed") : TEXT("waiting for tracked head"), *RepositionKey.ToString(), *LastPress, *LivePress);
+		Attempts[0].TrackingCanceled, Attempts[1].TrackingCanceled, Attempts[0].MissedSingle, Attempts[1].MissedSingle,
+		Attempts[0].ClusterPass, Attempts[1].ClusterPass, bPlaced ? TEXT("fixed") : TEXT("waiting for tracked head"), *RepositionKey.ToString(), *LastPress, *LivePress);
 	FString Text = Status + TEXT("\nRecent events (10):");
 	for (const FString& Event : RecentEvents) { Text += TEXT("\n") + Event; }
 	Panel->SetText(FText::FromString(Text));

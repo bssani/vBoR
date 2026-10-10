@@ -2,7 +2,7 @@
 
 명세: [Docs/Specs/P0-b-poke-button-bench.md](../Specs/P0-b-poke-button-bench.md) · 브랜치: `codex/P0-b-poke-button-bench`
 
-**Codex가 할 일:** 아래 "열린 항목"을 위에서부터 반영한다. 항목마다 **문제**는 반드시 해결하고, **제안**은 권장이다(다르게 하면 보고 ③에 이유를 적는다). **확인할 시험**은 새로 넣거나 고칠 자동화 시험이다. 같은 브랜치에 새 커밋으로 하고, 반영한 항목의 상태를 `반영함 (<커밋 제목>)`으로 바꿔 같은 커밋에 넣는다. 커밋 본문에 보고 ①~⑤. 판단이 필요하면 맨 아래 "질문"에 적고 멈춘다. push·`main` 머지는 하지 않는다. 끝나면 `HANDOFF.md`의 "Codex 결과"를 채운다.
+**Codex가 할 일:** 상태가 `열림`인 항목을 위에서부터 반영한다. 항목마다 **문제**는 반드시 해결하고, **제안**은 권장이다(다르게 하면 보고 ③에 이유를 적는다). **확인할 시험**은 새로 넣거나 고칠 자동화 시험이다. 같은 브랜치에 새 커밋으로 하고, 반영한 항목의 상태를 `반영함 (<커밋 제목>)`으로 바꿔 같은 커밋에 넣는다. 커밋 본문에 보고 ①~⑤. 판단이 필요하면 맨 아래 "질문"에 적고 멈춘다. push·`main` 머지는 하지 않는다. 끝나면 `HANDOFF.md`의 "Codex 결과"를 채운다.
 
 ## 회차
 
@@ -29,9 +29,11 @@
 - `vBoR.uproject`에 `XRBase` 명시: 모듈이 XRBase에 의존할 때 UBT 경고를 막는 용도이고, 이미 다른 플러그인 때문에 켜져 있어 동작은 바뀌지 않는다. 받아들인다.
 - 확인 범위: UE 5.7 OpenXR의 기본 추적 공간은 Stage다(`Engine/Plugins/Runtime/OpenXR/Source/OpenXRHMD/Private/OpenXRHMD.cpp:1650`). 바닥 기준이지만 원점이 가디언 중앙이다(R1-3의 근거).
 
-## 열린 항목
+## 2회차 항목 (모두 반영함)
 
-### R2-1 원거리·레이 잡기 감지 유형을 부모 Pawn에서 막는다 — 열림
+### R2-1 원거리·레이 잡기 감지 유형을 부모 Pawn에서 막는다 — 반영함 (fix: address P0-b second review findings)
+
+**Codex 반영:** 양손 리그 생성자에서 `DistanceGrab`·`RayGrab`을 허용 목록에서 제거함. `GetGrabber()`는 리그 생성자에서 만든 GrabInteraction의 기본 하위 객체를 반환하므로 이 시점에 존재함(`IsdkRigComponent.cpp:61-62, 233-235`, `IsdkGrabInteractionRigComponent.cpp:41-42`). 객체 개수 대신 양손 grabber 활성·감지 유형 허용 여부를 표시함. `GrabDetectionRestrictions`에서 BeginPlay 및 잡기 리그 재활성화 뒤 양손의 두 유형 차단을 확인함. 같은 시험은 수정 전에 양손 8개 차단 assertion에서 실패했고 수정 후 통과함.
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRHandRigPawn.cpp:17-26`(`ConfigurePokeRig`) — 잡기 리그를 비활성화만 한다. 같은 파일 `DescribeRig`는 원거리 잡기 감지기 **객체 수**를 센다.
@@ -46,7 +48,9 @@
 **확인할 시험**
 - 메모리 월드에서 Pawn을 BeginPlay까지 돌린 뒤, 양손 잡기 컴포넌트에서 DistanceGrab·RayGrab이 허용되지 않음. 잡기 리그를 다시 활성화해도 허용되지 않음.
 
-### R2-2 "놓친 시도"를 단독 버튼과 몰린 묶음으로 나눈다 — 열림
+### R2-2 "놓친 시도"를 단독 버튼과 몰린 묶음으로 나눈다 — 반영함 (fix: address P0-b second review findings)
+
+**Codex 반영:** 손별 `Missed single`·`cluster pass`로 패널·주기 로그를 분리함. Unhover 이벤트에도 단독·묶음 구분을 표시함. 먼 버튼은 기존 hover·select 집계를 유지하며 두 합계에서 제외함. 추적 취소는 별도 합계를 유지함. `AttemptGroups`에서 단독/묶음 hover→unhover의 독립 집계, 먼 버튼 제외, 추적 취소·다른 손 분리를 확인함. `ButtonComponents`에서 실제 패널의 새 항목을 확인함.
 
 **문제**
 - **위치:** `Source/vBoR/P0Probe/P0ButtonBench.cpp` — hover 뒤 select 없이 끝나면 모두 "Missed"로 합산한다.
@@ -59,7 +63,9 @@
 **확인할 시험**
 - 단독 버튼 hover→unhover는 single에만, 몰린 묶음은 cluster에만 더해진다.
 
-### R2-3 덧입힘 해제 중복 호출 — 열림
+### R2-3 덧입힘 해제 중복 호출 — 반영함 (fix: address P0-b second review findings)
+
+**Codex 확인:** 현재 작업 시작점 `902fca5`와 리뷰 대상 `fe53a8d` 모두 `BeginPlay`의 `ButtonMesh->SetOverlayMaterial(nullptr)`가 한 번뿐임(`VBoRPokeButton.cpp:87`). `EndPlay`와 비활성 상태 처리의 호출은 다른 생명주기이므로 유지함. 제거할 중복이 없어 버튼 소스는 변경하지 않음. 기존 `ButtonComponents`의 Normal 덧입힘 없음/복귀 시험은 통과함.
 
 - **위치:** `Source/vBoR/Interaction/VBoRPokeButton.cpp` BeginPlay — `ButtonMesh->SetOverlayMaterial(nullptr);`가 두 번 연속 있다. 동작 영향은 없다. 하나를 지운다.
 
@@ -187,6 +193,54 @@
 
 - 부모 Pawn은 잡기와 입력 액션 바인딩을 꺼 둔다(`VBoRHandRigPawn.cpp:24-25, 32, 39`). P0-b는 poke만이라 맞다(D1). P1(골프백)에서 잡기를 켤 때 원거리 잡기 없이 켜는 방법은 그 명세에서 정한다.
 
+## Codex 2회차 반영 보고 (2026-10-10)
+
+① **바뀐 파일**
+
+- `Source/vBoR/Interaction/VBoRHandRigPawn.cpp`: 원거리·레이 잡기 감지 유형 차단, 손별 실제 상태 표시.
+- `Source/vBoR/P0Probe/P0ButtonBenchMeasurement.h`: 단독 버튼 놓친 시도와 몰린 묶음 지나가기 합계 분리.
+- `Source/vBoR/P0Probe/P0ButtonBench.cpp`: 새 합계를 패널·로그에 표시, Unhover 로그 분류.
+- `Source/vBoR/P0Probe/P0ButtonBenchTests.cpp`: `GrabDetectionRestrictions`·`AttemptGroups` 추가, 실제 패널 표시 시험 갱신.
+- 이 리뷰 파일: R2-1~R2-3 상태·근거·보고 기록. git에서 제외된 `HANDOFF.md`에는 커밋 후 결과 기록.
+
+② **명세 §4 완료 조건**
+
+| 조건 | 확인 상태 |
+|---|---|
+| 1. 측정·표시 | 충족. 기존 측정 유지, 단독 놓침/묶음 지나가기 분리. 실제 패널 문자열 자동화 확인. HMD 가독성은 후속 확인 |
+| 2. 금지 입력·limiter | 코드·메모리 월드 확인. 양손 DistanceGrab/RayGrab 차단, grab 리그 재활성화 뒤에도 차단 유지. 기존 ray 비활성·컨트롤러 없음·limiter 구성 유지. 실제 먼 버튼 가리키기는 미확인 |
+| 3. 원본 손끝 | 기존 XR IndexTip 경로 유지. limiter 모델 위치를 읽지 않음. 기기 정확도·깊이 실측은 미확인 |
+| 4. 합성 자동화 | 충족. P0-b 12개(새 시험 2개 포함), 기존 P0-a 12개 전부 통과 |
+| 5. 샘플 독립 | 충족. 샘플 플러그인을 끄고 빌드·시험. vBoR 소스의 샘플 경로·모듈 참조 없음 |
+| 6. API 대조 | 충족. 이번 변경은 아래 헤더·구현으로 확인. 기존 버튼·원본 손끝 API 근거는 `fe53a8d` 보고 ④ 유지. 추정 API 없음 |
+| 7. 로컬 빌드·시험 | 충족. UE 5.7 Win64 Development Succeeded, 컴파일·링크 경고/오류 0. `vBoR.*` 24/24 Success, 프로세스 종료 코드 0 |
+| 8. 로컬 후속 확인 | 아래 ⑤에 기록 |
+
+검증 로그: `Saved/Logs/P0ButtonR2Build.log`, `P0ButtonR2Automation.log` (`TEST COMPLETE. EXIT CODE: 0`), 수정 전 실패 재현 `P0ButtonR2Red.log` (예상된 차단 assertion 실패). 자동화 시작 시 알려진 미사용 InfoCard의 샘플 에셋 CDO 오류 등은 Agent-Workflow §2.5의 잡음이며, 자동화 실패는 0건임.
+
+③ **명세·제안과 다르게 한 것 및 이유**
+
+- R2-1·R2-2는 제안대로 반영함. Grabber는 생성자에서 존재하므로 BeginPlay로 늦추지 않음. ISDK 기본 감지기 객체를 지우지 않고 허용 유형으로 차단함(R2-1).
+- R2-3은 현재 및 리뷰 대상 소스에 중복이 없어서 제거하지 않음. 확인 근거를 해당 항목에 기록함.
+- 그 밖의 범위 변경 없음. XR·렌더링 설정 및 사용자 시험 레벨 변경 없음.
+
+④ **확인한 API 근거**
+
+- `Plugins/MetaXRInteraction/Source/OculusInteractionPrebuilts/Public/Rig/IsdkRigComponent.h:193` — `GetGrabber()`; `:214` — `GetGrabInteraction()`.
+- `Plugins/MetaXRInteraction/Source/OculusInteraction/Public/Interaction/IsdkGrabberComponent.h:192,200` — `IsGrabDetectionTypeAllowed`·`SetGrabDetectionTypeAllowed`. 구현 `Private/Interaction/IsdkGrabberComponent.cpp:848-865`에서 허용 목록 조회·제거만 수행함을 확인함. 감지 Tick 및 hovered 대상 수집도 허용 여부로 제한함(`:206-213,236-243`).
+- `Plugins/MetaXRInteraction/Source/OculusInteractionPrebuilts/Private/Rig/IsdkRigComponent.cpp:61-62,233-235` 및 `Private/Rig/IsdkGrabInteractionRigComponent.cpp:41-42` — GrabInteraction 및 Grabber 생성·반환 시점. `IsdkGrabInteractionRigComponent.cpp:112-133` — 리그 활성 상태가 Grabber 활성으로 연결됨.
+- `C:/Program Files/Epic Games/UE_5.7/Engine/Source/Runtime/Engine/Classes/Components/ActorComponent.h:563,590` — 시험의 `Activate(bool)` 및 상태 표시의 `IsActive()`.
+- 기존 원본 손끝·plane·overlay·limiter API는 이전 반영 보고(`fe53a8d` 커밋 본문 ④)와 동일함.
+
+⑤ **로컬에서 확인할 것**
+
+- 빌드·합성 시험: 이번 세션에서 완료. 샘플 플러그인을 끈 UE 5.7 Editor 빌드 및 전체 `vBoR.*` 24개 통과.
+- 에디터: 기존 P0-b 레벨에서 양손 상태 로그(감지 유형 0), 단독/묶음 카운터 구분과 패널 가독성, 자식 Blueprint 메시 교체·90 deg 회전·라벨 보존·덧입힘 색 확인. C++ 시험은 실제 렌더링 증거가 아님.
+- Quest 3 Link: 회사 PC에서 명세 §5의 양손·크기별 반복, 몰린 목표 3곳, 먼 버튼 가리키기, limiter·눌림·색·소리 체감 및 `R` 다시 놓기 확인. 정식 측정은 계속 `not-tested`.
+- 이 작업은 P0 실측이며 명세 §5에 따라 T-ID 시험이 아님. 후속 T-07(도달 평가)·T-09(운영)에는 입력 차단 및 기기 측정 근거로 연결하되, 해당 시험을 통과 처리하지 않음.
+
 ## 질문
+
+(2026-10-10 Codex R2 반영: 질문 없음.)
 
 (Codex가 판단이 필요할 때 여기에 적고 멈춘다. Claude가 답을 이 절에 적는다.)
