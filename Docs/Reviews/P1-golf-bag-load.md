@@ -19,6 +19,18 @@
 | 회차 | 날짜 | 리뷰 대상 | 리뷰어 | 결과 |
 |---|---|---|---|---|
 | 1 | 2026-10-10 | `0824ebf` P1 골프백 실험 | Claude | **수정 후 실측.** 빌드·시험은 통과. 6건 — 트렁크 자리값 오류(Claude 명세 실수), 회전 제한의 Yaw 뒤집힘, 높이 기준, 목표 밖 낙하를 "안착"으로 표시, 막힘 거리 정의, 반복 시험용 되돌리기 |
+| 2 | 2026-10-10 | `eb67e20` 1회차 반영 | Claude | **통과. 열린 항목 없음.** R1-1~R1-6 제안대로. 남은 것은 에디터 레벨과 Quest 3 확인(`not-tested`) |
+
+### 2회차에 확인한 것
+
+- 에디터를 닫고 바뀐 파일 non-unity 컴파일 + unity 빌드, 둘 다 경고·오류 0(샘플 플러그인 끔). `vBoR.*` **40개 Success**(P0 24 + P1 16), `TEST COMPLETE. EXIT CODE: 0`. 로그: `Saved/Logs/ClaudeP1R1Review.log`.
+- R1-1: 기본 폭 130 cm, 벽 안쪽 면 ±65 cm. 폭 100 cm "안 맞음·크기 그대로" 시험은 설정값으로 남겼다.
+- R1-2: `LimitWorldTilt`가 월드 Z swing-twist로 나누고 Swing을 W ≥ 0 반구로 맞춘 뒤 원뿔 15°로 자른다(`VBoRCarryMotion.h:7-18`). 손 회전 차이와 잡기 기준 재제한 두 곳 모두 이 함수를 쓴다. 순수 Pitch 100°는 Twist가 단위 회전이 되어 Yaw가 0으로 남는다. `PitchBoundary` 시험이 80°→100° frame 사이 1° 이하 변화와 179° 뒤집힘을 확인한다. 원뿔 선택은 보고 ③에 있다.
+- R1-3: 시험대 원점 Z = Pawn 원점 Z. 머리 높이 120·165·190 cm에서 트렁크 바닥 = Pawn Z + 75 cm 시험. 바닥 기준을 로그에 남긴다.
+- R1-4: `FinishPlacement`에서 `IsObjectInside`로 나눠 목표 밖은 `Released (outside target)`·회색, `OnSeated` 없음. 결과 문자열 셋(보조 / 낙하→목표 안 / 낙하→목표 밖). 실제 Actor 낙하로 시험.
+- R1-5: 요청 자세 위치와 이동 뒤 실제 위치의 차이. 50 cm 오프셋에서 10 cm만 잡히는 시험.
+- R1-6: `B`가 골프백만 돌려놓고 시도 요약 한 줄, 번호 +1, 누적 유지, 입구 통과 수만 초기화. `R`은 전부 지움. Codex가 스스로 찾은 "같은 시도 안 재잡기 때 앞선 결과가 사라짐"도 고치고 회귀 시험(`CumulativeRegrab`)을 넣었다.
+- **받아들인 것(정리 때 지울 것):** 재사용 부모 `VBoRCarryObject.h`에 P1 시험 클래스 4개의 `friend` 선언이 있다. 컴파일 의존은 아니고(이름만 선언) P1 시험이 내부 상태를 직접 만들기 위한 것이라 이번에는 받아들인다. `Source/vBoR/P1Probe/`를 지울 때 이 `friend` 줄과 `P1CarryTestObserver.h`를 함께 지운다.
 
 ### 1회차에 재현한 것
 
@@ -44,9 +56,13 @@
 - 기본값으로는 실을 수 없다는 것을 숨기지 않았다. 값을 임의로 바꾸지 않고 보고 ③과 시험에 드러냈다. 규칙대로 한 것이다.
 - 주석 말투가 맞다. 샘플 플러그인 참조가 없고, `Config`·`Content`·`Plugins` 변경도 없다.
 
-## 리뷰 항목
+## 열린 항목
 
-### R1-1 트렁크 안쪽 폭 자리값을 130 cm로 바꾼다 (Claude 명세 오류) — 반영함 (fix: address P1 loading review findings)
+없음 — 2회차(2026-10-10) 통과.
+
+## 1회차 항목 (모두 반영함)
+
+### R1-1 트렁크 안쪽 폭 자리값을 130 cm로 바꾼다 (Claude 명세 오류) — 반영함 (`eb67e20`)
 
 **Codex 반영:** 기본 폭 130 cm, 좌우 벽 안쪽 면 ±65 cm, 기본 정적 적합성 `clear`로 수정했다. 폭 100 cm 실패와 원통 크기 보존 시험은 별도 설정으로 유지했다. `MockGeometry`, `PlacementAndReset` 통과.
 
@@ -69,7 +85,7 @@
 - `PlacementAndReset`: 기본값에서 `IsStaticFit` true, 패널 "clear".
 - 폭 100으로 설정한 경우: `IsStaticFit` false, 패널 "overlap / does not fit", 골프백 크기 그대로.
 
-### R1-2 회전 제한이 Pitch ±90° 근처에서 Yaw를 뒤집는다 — 반영함 (fix: address P1 loading review findings)
+### R1-2 회전 제한이 Pitch ±90° 근처에서 Yaw를 뒤집는다 — 반영함 (`eb67e20`)
 
 **Codex 반영:** 두 제한 지점에 월드 Z swing-twist와 원뿔 15° 제한을 적용했다. 순수 Pitch 80°→100°의 연속 frame, 뒤집힌 179° frame, Yaw 85°, 반복 rebase 시험이 통과했다. 정확한 swing 180° 특이점은 제안에 적힌 한계로 남는다.
 
@@ -100,7 +116,7 @@
 - 손 방향이 뒤집힌 frame 하나가 들어와도 Yaw가 180° 바뀌지 않는다.
 - 기존 시험(Yaw 85° 따라감, 반복 rebase 한도)이 그대로 통과한다.
 
-### R1-3 트렁크 높이를 가정한 눈높이가 아니라 물리 바닥에서 잰다 — 반영함 (fix: address P1 loading review findings)
+### R1-3 트렁크 높이를 가정한 눈높이가 아니라 물리 바닥에서 잰다 — 반영함 (`eb67e20`)
 
 **Codex 반영:** `AssumedEyeHeightCm`를 제거하고 시험대 원점 Z를 Pawn 원점 Z로 정했다. 머리는 수평 위치와 Yaw에만 사용하며 바닥 기준을 로그에 남긴다. 머리 높이 120·165·190 cm에서 트렁크 바닥이 매번 Pawn Z + 75 cm인 시험이 통과했다.
 
@@ -121,7 +137,7 @@
 **확인할 시험**
 - `PlacementAndReset`: Pawn 원점 Z를 고정하고 머리 높이를 120·165·190 cm로 바꿔 배치한다. 매번 트렁크 바닥 윗면 월드 Z = Pawn 원점 Z + 75.
 
-### R1-4 목표 밖에서 멈춘 것을 "안착"(초록)으로 표시한다 — 반영함 (fix: address P1 loading review findings)
+### R1-4 목표 밖에서 멈춘 것을 "안착"(초록)으로 표시한다 — 반영함 (`eb67e20`)
 
 **Codex 반영:** 최종 목표 안·충돌 없음일 때만 안착 색과 `OnSeated`를 보낸다. 목표 밖은 `Released (outside target)`와 회색 덧입힘이며, 진행 중 보조는 잡힘 색을 쓴다. `PlacementOutcome`에서 목표 밖 이벤트 0회, 목표 안 낙하 이벤트 1회와 반복 tick 중복 없음이 통과했다.
 
@@ -147,7 +163,7 @@
   - 덧입힘 색이 `SeatedColor`가 아님
 - 목표 안, 보조 범위 밖에서 놓아 낙하 정지: 안착, `OnSeated` 1.
 
-### R1-5 막힘 거리가 잡은 자리 오프셋을 포함한다 — 반영함 (fix: address P1 loading review findings)
+### R1-5 막힘 거리가 잡은 자리 오프셋을 포함한다 — 반영함 (`eb67e20`)
 
 **Codex 반영:** 제약을 적용한 요청 위치와 충돌 이동 뒤 실제 위치의 최대 차이를 `max requested/actual gap`으로 표시한다. `RequestedActualGap`에서 손바닥 오프셋 50 cm를 제외하고 벽 때문에 못 간 약 10 cm만 기록되는 시험이 통과했다.
 
@@ -163,7 +179,7 @@
 **확인할 시험**
 - 손바닥이 중심에서 50 cm 떨어진 채 벽 쪽으로 10 cm 더 밀면 최대 거리 ≈ 10 cm다(50 cm대가 아님).
 
-### R1-6 반복 시험용으로 골프백만 되돌리는 키를 둔다 — 반영함 (fix: address P1 loading review findings)
+### R1-6 반복 시험용으로 골프백만 되돌리는 키를 둔다 — 반영함 (`eb67e20`)
 
 **Codex 반영:** 편집 가능한 `B` 키로 가방만 돌려놓고 손 소유를 끝내며, 직전 시도 요약을 한 줄 기록하고 번호를 올린다. 시험대·트렁크 변환과 누적 결과·시간은 유지하고 입구 통과 기록은 초기화한다. `R`은 전체 재배치와 누적 초기화를 유지한다. 같은 시도에서 재잡기해도 앞선 결과와 시간이 보존되도록 보완했다. `BagRepeat`, 실제 Actor의 목표 밖 낙하→재잡기→목표 안 낙하→보조 안착을 거치는 `CumulativeRegrab` 통과.
 
