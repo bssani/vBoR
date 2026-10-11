@@ -4,6 +4,8 @@
 #include "../Interaction/VBoRBuckAlignment.h"
 #include "../Interaction/VBoREyePointComponent.h"
 #include "P0BuckBench.h"
+#include "P0BuckGroundGridComponent.h"
+#include "PrimitiveSceneProxy.h"
 #include "Components/InputComponent.h"
 #include "Components/ArrowComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -279,6 +281,53 @@ bool FP0BuckRepeatTest::RunTest(const FString&)
 		for (int32 Frame = 0; Frame < Rate * 2 - 1; ++Frame) { TestFalse(TEXT("No early completion"), Window.Sample(1.0 / Rate, Head(), 0.1)); }
 		TestTrue(TEXT("Completion at two seconds at both rates"), Window.Sample(1.0 / Rate, Head(), 0.1));
 	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0BuckGroundGridTest, "vBoR.P0Buck.GroundGridReference", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP0BuckGroundGridTest::RunTest(const FString&)
+{
+	FBenchWorld Env;
+	UP0BuckGroundGridComponent* Grid = Env.Bench->GroundGrid;
+	if (!TestNotNull(TEXT("Normal runtime ground primitive exists"), Grid)) { return false; }
+	const auto Lines = Grid->BuildLines();
+	TestEqual(TEXT("25cm spacing across +/-200cm yields17 lines per axis"), Lines.Num(), 34);
+	if (Lines.Num() >= 3)
+	{
+		TestTrue(TEXT("First line literal extent at -200cm"), Lines[0].Start.Equals(FVector(-200, -200, 0)) && Lines[0].End.Equals(FVector(200, -200, 0)));
+		TestTrue(TEXT("Next parallel line at -175cm"), Lines[2].Start.Equals(FVector(-200, -175, 0)) && Lines[2].End.Equals(FVector(200, -175, 0)));
+		TestTrue(TEXT("Last line literal extent at +200cm"), Lines.Last().Start.Equals(FVector(200, -200, 0)) && Lines.Last().End.Equals(FVector(200, 200, 0)));
+	}
+	for (const auto& Line : Lines)
+	{
+		TestTrue(TEXT("Reference endpoints remain exact Z0"), Line.Start.Z == 0 && Line.End.Z == 0);
+	}
+	FPrimitiveSceneProxy* Proxy = Grid->CreateSceneProxy();
+	TestNotNull(TEXT("Runtime component creates a scene proxy"), Proxy);
+	delete Proxy;
+	TestTrue(TEXT("Grid bounds span actual400cm XY reference"), Grid->CalcBounds(FTransform::Identity).BoxExtent.X >= 200 && Grid->CalcBounds(FTransform::Identity).BoxExtent.Y >= 200);
+	const FTransform OriginalBench = Env.Bench->GetActorTransform();
+	const FTransform OriginalEye = Env.Bench->EyePoint->GetComponentTransform();
+	const FTransform OriginalGrid = Grid->GetComponentTransform();
+	Env.Capture();
+	TestTrue(TEXT("Saved alignment leaves grid fixed"), Grid->GetComponentTransform().Equals(OriginalGrid));
+	TestTrue(TEXT("Saved alignment leaves Bench fixed"), Env.Bench->GetActorTransform().Equals(OriginalBench));
+	TestTrue(TEXT("Eye remains fixed at120cm"), Env.Bench->EyePoint->GetComponentTransform().Equals(OriginalEye) && OriginalEye.GetLocation().Z == 120);
+	Env.Bench->GroundHalfSizeCm = 60;
+	Env.Bench->GridColor = FLinearColor::Red;
+	Env.Bench->GridThicknessPx = 3;
+	Env.Bench->GridDepthBias = 0.00002f;
+	Env.Bench->OnConstruction(OriginalBench);
+	TestTrue(TEXT("Actor construction propagates visible render parameters"), Grid->GetSettings().Color == FLinearColor::Red && Grid->GetSettings().ThicknessPx == 3 && Grid->GetSettings().DepthBias == 0.00002f);
+	const auto Smaller = Grid->BuildLines();
+	TestEqual(TEXT("Editable60cm extent with25cm spacing yields5 lines per axis"), Smaller.Num(), 10);
+	if (!Smaller.IsEmpty())
+	{
+		TestTrue(TEXT("Fractional extent not displaced to spacing boundary"), Smaller[0].Start.Equals(FVector(-60, -50, 0)) && Smaller[0].End.Equals(FVector(60, -50, 0)));
+	}
+	TestTrue(TEXT("Render style/extent update never moves plane or eye"), Grid->GetComponentTransform().Equals(OriginalGrid) && Env.Bench->EyePoint->GetComponentTransform().Equals(OriginalEye));
+	Grid->Configure(200, 0, FLinearColor::Yellow, 2, 0.00001f);
+	TestTrue(TEXT("Invalid spacing cannot generate unbounded lines"), Grid->BuildLines().IsEmpty());
 	return true;
 }
 

@@ -1,4 +1,5 @@
 #include "P0BuckBench.h"
+#include "P0BuckGroundGridComponent.h"
 #include "../Interaction/VBoREyePointComponent.h"
 #include "../Interaction/VBoRHandRigPawn.h"
 #include "Components/InputComponent.h"
@@ -50,6 +51,8 @@ AP0BuckBench::AP0BuckBench()
 {
 	CaptureClock = [] { return FPlatformTime::Seconds(); };
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("BuckOrigin")));
+	GroundGrid = CreateDefaultSubobject<UP0BuckGroundGridComponent>(TEXT("GroundGrid"));
+	GroundGrid->SetupAttachment(RootComponent);
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PostUpdateWork;
 	EyePoint = CreateDefaultSubobject<UVBoREyePointComponent>(TEXT("EyePoint"));
@@ -62,9 +65,22 @@ AP0BuckBench::AP0BuckBench()
 	Panel->SetTextRenderColor(FColor::White);
 }
 
+void AP0BuckBench::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	ConfigureGroundGrid();
+}
+
+void AP0BuckBench::ConfigureGroundGrid()
+{
+	GroundGrid->SetRelativeLocation(FVector(EyeOffsetCm.X, EyeOffsetCm.Y, 0));
+	GroundGrid->Configure(GroundHalfSizeCm, GridSpacingCm, GridColor, GridThicknessPx, GridDepthBias);
+}
+
 void AP0BuckBench::BeginPlay()
 {
 	Super::BeginPlay();
+	ConfigureGroundGrid();
 	EyePoint->SetRelativeLocation(EyeOffsetCm);
 	Panel->SetRelativeLocation(EyeOffsetCm + PanelOffsetCm);
 	Panel->SetRelativeRotation(FRotator(0, 180, 0));
@@ -349,13 +365,5 @@ void AP0BuckBench::CreateGeometry()
 		AddBox(Cube, FString::Printf(TEXT("Wheel%d"), Index), Center, FVector(WheelTubeCm, WheelTubeCm, WheelDiameterCm * UE_DOUBLE_PI / Segments + WheelTubeCm));
 		UStaticMeshComponent* Segment = Cast<UStaticMeshComponent>(GetInstanceComponents().Last());
 		Segment->SetRelativeRotation(FRotator(0, 0, -FMath::RadiansToDegrees(Angle)));
-	}
-	const double Spacing = FMath::Max(1.0, GridSpacingCm);
-	const int32 Lines = FMath::Clamp(FMath::FloorToInt(GroundHalfSizeCm / Spacing), 0, 100);
-	for (int32 Index = -Lines; Index <= Lines; ++Index)
-	{
-		// EyeOffset 의 높이를 빼서 격자 윗면은 Actor Z=0 에 둠 (P0-c §2-5)
-		AddBox(Cube, FString::Printf(TEXT("GridX%d"), Index), FVector(0, Index * Spacing, -EyeOffsetCm.Z - 0.05), FVector(GroundHalfSizeCm * 2, 0.2, 0.1));
-		AddBox(Cube, FString::Printf(TEXT("GridY%d"), Index), FVector(Index * Spacing, 0, -EyeOffsetCm.Z - 0.05), FVector(0.2, GroundHalfSizeCm * 2, 0.1));
 	}
 }

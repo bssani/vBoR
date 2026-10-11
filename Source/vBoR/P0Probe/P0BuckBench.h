@@ -10,6 +10,7 @@ class UTextRenderComponent;
 class UStaticMesh;
 class APawn;
 class APlayerController;
+class UP0BuckGroundGridComponent;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogP0Buck, Log, All);
 
@@ -19,9 +20,11 @@ class VBOR_API AP0BuckBench : public AActor
 	GENERATED_BODY()
 public:
 	AP0BuckBench();
+	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void Tick(float DeltaSeconds) override;
 	UPROPERTY(VisibleAnywhere, Category = "Buck") TObjectPtr<UVBoREyePointComponent> EyePoint;
 	UPROPERTY(VisibleAnywhere, Category = "Buck") TObjectPtr<UTextRenderComponent> Panel;
+	UPROPERTY(VisibleAnywhere, Category = "Buck") TObjectPtr<UP0BuckGroundGridComponent> GroundGrid;
 	UPROPERTY(EditAnywhere, Category = "Buck", meta = (Units = "cm")) FVector EyeOffsetCm = FVector(0, 0, 120);
 	UPROPERTY(EditAnywhere, Category = "Buck", meta = (Units = "cm")) FVector CushionTopCm = FVector(-15, 0, -65);
 	UPROPERTY(EditAnywhere, Category = "Buck", meta = (Units = "cm")) FVector CushionSizeCm = FVector(45, 50, 12);
@@ -36,6 +39,9 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Buck", meta = (Units = "cm")) FVector DashboardSizeCm = FVector(5, 130, 40);
 	UPROPERTY(EditAnywhere, Category = "Buck", meta = (Units = "cm")) double GroundHalfSizeCm = 200;
 	UPROPERTY(EditAnywhere, Category = "Buck", meta = (Units = "cm", ClampMin = "1")) double GridSpacingCm = 25;
+	UPROPERTY(EditAnywhere, Category = "Buck|Grid") FLinearColor GridColor = FLinearColor::Yellow;
+	UPROPERTY(EditAnywhere, Category = "Buck|Grid", meta = (ClampMin = "0.5", ClampMax = "10")) float GridThicknessPx = 2;
+	UPROPERTY(EditAnywhere, Category = "Buck|Grid", meta = (ClampMin = "0", ClampMax = "0.0001")) float GridDepthBias = 0.00001f;
 	UPROPERTY(EditAnywhere, Category = "Buck", meta = (Units = "cm")) double MarkerSizeCm = 4;
 	UPROPERTY(EditAnywhere, Category = "Buck", meta = (Units = "cm")) FVector PanelOffsetCm = FVector(85, -75, 40);
 	UPROPERTY(EditAnywhere, Category = "Buck", meta = (Units = "cm")) double PanelTextSizeCm = 1.4;
@@ -86,6 +92,7 @@ private:
 	void Record(const FString& Text);
 	void UpdatePanel();
 	void CreateGeometry();
+	void ConfigureGroundGrid();
 	void AddBox(UStaticMesh* Cube, const FString& Name, const FVector& EyeCenter, const FVector& Size);
 	FString DescribeDelta(const FVBoRBuckCaptureResult& Sample) const;
 };
