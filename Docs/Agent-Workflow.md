@@ -137,7 +137,7 @@ UnrealEditor.exe "C:\Git\vBoR\vBoR.uproject" /<플러그인 또는 Game>/<경로
 |---|---|---|---|
 | 시작 훅 `unreal-context.sh` | `.claude/hooks/`, `.codex/hooks/` | 세션 시작 때 UE 프로젝트 사실(엔진 버전, 빌드 명령, 에디터 잠금 주의)을 컨텍스트에 넣는다 | Epic Games의 unreal-engine-skills 플러그인(MIT)을 GMTCK_MR을 거쳐 가져왔다. Claude는 `$CLAUDE_PROJECT_DIR`, Codex는 절대경로로 등록. **Codex의 명령형 훅은 로컬에서만 돌고**, 프로젝트를 신뢰로 지정하고 `/hooks`에서 승인해야 실행된다 |
 | `ue-compile-check` 에이전트 | `.claude/agents/`, `.codex/agents/` | 빌드할 수 없는 환경에서 바뀐 C++의 UHT·include·모듈 의존·unity 빌드 충돌·Meta XR API를 검사한다 | 엔진이 있는 로컬에서는 이것 대신 실제 빌드(§2.3) |
-| McpAutomationBridge (ChiR24 [Unreal_mcp](https://github.com/ChiR24/Unreal_mcp) 0.6 beta, MIT) | `Plugins/McpAutomationBridge` → `C:\Git\Unreal_mcp\plugins\McpAutomationBridge` (심볼릭 링크, `.gitignore`) | 열린 에디터 안에 MCP 서버를 연다: `http://127.0.0.1:3000/mcp`. 도구는 `unreal` 하나이고 `search`·`describe`·`execute`·`configure`로 약 400개 기능(액터 조회·배치, 레벨 저장, Blueprint, 스크린샷, 로그, PIE, Python)을 쓴다 | 토큰 `Saved/MCP/capability-token`(64자). 에디터가 열려 있을 때만 동작. **2026-10-11 현재 Claude Code·Codex에 연결 안 됨**(아래 §2.10) |
+| McpAutomationBridge (ChiR24 [Unreal_mcp](https://github.com/ChiR24/Unreal_mcp) 0.6 beta, MIT) | `Plugins/McpAutomationBridge` → `C:\Git\Unreal_mcp\plugins\McpAutomationBridge` (심볼릭 링크, `.gitignore`) | 열린 에디터 안에 MCP 서버를 연다: `http://127.0.0.1:3000/mcp`. 도구는 `unreal` 하나이고 `search`·`describe`·`execute`·`configure`로 약 400개 기능(액터 조회·배치, 레벨 저장, Blueprint, 스크린샷, 로그, PIE, Python)을 쓴다 | 토큰 `Saved/MCP/capability-token`(64자, 에디터를 다시 열어도 그대로). 에디터가 열려 있을 때만 동작. **2026-10-11 Claude Code(`unreal-engine`)·Codex(`unreal-vbor`)에 연결함**(§2.10) |
 | UnrealAgent (사용자 프로젝트 `C:\Git\UnrealAgent`) | `Plugins/UnrealAgent` → 심볼릭 링크, 설정 `.unrealagent/settings.local.json`(`.gitignore`) | 에디터 안 AI 대화 창. Python 실행·스크린샷과 외부 MCP `unreal-bridge`(위 서버)를 쓴다. `search`·`describe`는 승인 없이, 그 밖은 승인을 받는다 | 사용자가 에디터에서 직접 쓰는 도구 |
 | `codex exec` (Codex 앱 내장 CLI) | `%LOCALAPPDATA%\OpenAI\Codex\bin\<해시>\codex.exe` | Claude가 Codex에 작업을 넘긴다. 끝나면 마지막 응답이 파일로 돌아온다 | **지금은 쓰지 않는다**(구현은 앱에서, §1). 아래는 다시 쓸 때를 위한 기록 |
 
@@ -152,24 +152,65 @@ codex.exe exec -C "C:\Git\vBoR" --approve-for-me -o <마지막 응답 파일> "<
 - 시작 로그의 MCP 인증 오류(context7, GitHub Copilot)는 쓰지 않는 서버라 무시한다.
 - 백그라운드로 돌리고 끝나면 커밋·리뷰 파일·마지막 응답을 읽는다. Codex가 도는 동안 Claude는 작업 폴더를 건드리지 않는다. `main` 문서는 별도 sparse worktree에서 고친다.
 
-### 2.10 에디터 MCP를 쓰는 규칙 (2026-10-11 Claude 제안)
+### 2.10 에디터 MCP — 연결과 쓰는 규칙 (2026-10-11, 사용자 요청으로 Claude가 설정)
 
-**연결(사용자가 실행 — 설정 변경이라 제안만 한다).** Claude Code에 서버를 등록하고 세션을 다시 시작해야 도구가 보인다. 둘 중 하나:
+**연결 방식: stdio proxy.** 클라이언트 → `unreal-engine-mcp-server` proxy(Node) → 에디터 안 서버 `http://127.0.0.1:3000/mcp`.
+- proxy가 프로젝트의 토큰 파일을 직접 읽는다. 그래서 어떤 설정 파일에도 토큰을 적지 않았다.
+- 에디터가 닫혀 있어도 proxy는 뜨고, 그동안의 호출은 `NOT_CONNECTED`를 돌려준다. 에디터가 다시 뜨면 다음 호출에서 붙는다. 세션 중에 에디터를 열고 닫는 이 리포의 흐름에 맞는다. 직접 HTTP 연결은 세션 시작 때 에디터가 닫혀 있으면 그 세션 내내 못 쓴다.
+- 버전은 플러그인과 같은 `0.6.0-beta-e`로 고정한다(npm `beta` 태그와 같음, `latest`는 0.5.30이라 맞지 않음). 플러그인을 올리면 이 버전도 같이 바꾼다.
 
-- 직접 HTTP: `claude mcp add --transport http unreal-engine http://127.0.0.1:3000/mcp --header "X-MCP-Capability-Token: <토큰>"`. 기본 local scope라 `~/.claude.json`에 저장되고 리포에는 안 들어간다. 에디터를 다시 열면 `/mcp`로 다시 연결해야 한다. 토큰이 바뀌면 다시 등록한다(토큰이 에디터 실행마다 바뀌는지는 확인 안 함).
-- proxy: `claude mcp add unreal-engine -e UE_PROJECT_PATH=C:/Git/vBoR -- npx -y unreal-engine-mcp-server@beta proxy`. 토큰을 프로젝트 파일에서 직접 읽고, 에디터가 꺼졌다 켜져도 다시 붙는다. npm 패키지를 내려받는다(Node 20.19+, 이 PC v24.14.0). `@beta`를 빼면 플러그인과 맞지 않는 0.5가 깔린다.
+| 클라이언트 | 이름 | 등록 위치 | 명령 |
+|---|---|---|---|
+| Claude Code | `unreal-engine` | `~/.claude.json`의 vBoR 프로젝트(local scope) | `cmd /c npx -y unreal-engine-mcp-server@0.6.0-beta-e proxy`, env `UE_PROJECT_PATH=C:/Git/vBoR` |
+| Codex | `unreal-vbor` | `~/.codex/config.toml`(전역 — 다른 프로젝트 세션에서도 뜨지만 vBoR 토큰이라 vBoR 에디터에만 붙는다) | 같음 |
+
+- 다시 등록할 때: Git Bash에서는 `MSYS_NO_PATHCONV=1`을 먼저 둔다. 안 그러면 `/c`가 `C:/`로 바뀐다(2026-10-11에 한 번 겪음).
+- **2026-10-11 확인한 것:**
+  - 에디터 안 서버 직접 호출: `initialize`(서버 `unreal-mcp 0.6.0-beta-e`, 세션 ID 발급) → `tools/list`(`unreal` 하나) → `search` → `execute control_actor.list`(현재 레벨 액터 읽기) 성공.
+  - proxy 직접 실행: 같은 결과(`[NativeProxy] connected`).
+  - Codex `codex exec`: 서버가 뜨고 도구가 보였다. 다만 호출은 "MCP tool call requires approval, but approval policy is never"로 막혔다 — 아래 승인 참고.
+  - Claude Code: 등록만 했다. 도구는 새 세션부터 보인다.
 - 토큰은 비밀번호처럼 다룬다. 명세·리뷰·커밋·대화에 붙여 넣지 않는다(`Saved/`는 `.gitignore`).
 
-**언제.** 에디터가 열려 있을 때만 쓸 수 있고, 에디터가 열려 있으면 빌드·자동화 시험·브랜치 전환을 하지 않는다(§2.3, AGENTS.md). 그래서 리뷰는 이 순서다: 에디터 열림 → MCP로 에디터 쪽 확인 → 사용자가 에디터를 닫음 → 빌드·시험 재현.
+**승인.** 이 서버는 읽기·쓰기를 모두 도구 하나(`unreal`)의 `operation`으로 나눈다. 그래서 클라이언트 설정으로 "읽기만 자동 승인"을 할 수 없다.
+- Codex 앱은 호출마다 승인을 묻는다(기본값 그대로 둠). 사용자가 앱에서 보고 승인한다.
+- `codex exec`처럼 승인할 수 없는 실행에서는 MCP를 못 쓴다.
+- 서버 쪽에서도 삭제 등 62개 기능은 `describe`가 준 `consent`가 있어야 실행된다.
 
-**무엇을 — Claude:**
-- 읽기는 자유롭게 한다: 레벨 액터·설정 조회(GameMode Override, PlayerStart 높이, 시험대 배치), 출력 로그, 뷰포트 스크린샷, 에셋 존재 확인. 명세 "로컬에서 확인할 것"의 에디터 항목 중 눈으로 보는 것을 사용자 대신 확인한다.
-- 쓰기(액터 배치, 레벨·에셋 저장, Blueprint 생성·수정, 프로젝트 설정 변경)는 사용자가 그 작업을 요청했을 때만 한다. `.umap`·`.uasset`은 바이너리라 diff 리뷰가 안 된다. 바꾼 것을 리뷰 파일에 적고 사용자가 에디터에서 확인한 뒤 커밋한다. 삭제는 하지 않는다(서버도 삭제에는 consent를 요구한다).
-- VR·손 추적 시험은 대신할 수 없다. PIE 합성 입력은 키보드·마우스뿐이고 Quest 3 손 입력은 없다. 시험 상태 `not-tested` 규칙은 그대로다.
+**에디터 상태와 순서.** 작업 폴더 하나를 에디터와 빌드가 같이 쓴다.
+- 에디터가 열려 있으면 빌드·자동화 시험·브랜치 전환을 하지 않는다(§2.3).
+- MCP는 에디터가 열려 있을 때만 쓸 수 있다.
+- 그래서 한 작업 안에서 순서를 지킨다: 코드 단계(에디터 닫힘) → 에디터 단계(에디터 열림, MCP) → 다시 코드가 필요하면 에디터를 닫고 코드 단계로.
 
-**무엇을 — Codex:** 구현·빌드 중에는 에디터가 닫혀 있으므로 쓰지 않는다. 쓰게 되면 이 절을 먼저 고친다.
+**Claude:**
+- 읽기는 자유롭게 한다: 레벨 액터·설정 조회(GameMode Override, PlayerStart 높이, 시험대 배치), 출력 로그, 뷰포트 스크린샷, 에셋 존재 확인.
+- 리뷰에서는 에디터 쪽 결과(Codex가 만든 레벨·Blueprint)를 MCP로 읽어 확인하고, 그 뒤 사용자에게 에디터를 닫아 달라고 해 빌드·시험을 재현한다.
+- 쓰기는 사용자가 그 작업을 요청했을 때만 한다.
 
-**무엇을 — 사용자(UnrealAgent):** 에디터 안 반복 작업(레벨 만들기, GameMode Override 설정 등)에 쓴다. 만든 레벨·에셋은 지금처럼 Claude가 확인하고 커밋한다.
+**Codex (2026-10-11 사용자 결정: MCP로 개발 가능):**
+1. **명세가 에디터 작업을 맡길 때만 쓴다.** 명세의 "만들 것"에 레벨·Blueprint·액터 배치가 Codex 몫으로 적혀 있어야 한다. 그렇지 않으면 MCP는 읽기(확인용)만 한다.
+2. **에디터 단계 순서:**
+   - C++ 빌드·시험을 먼저 통과시킨다.
+   - 에디터를 연다: `UnrealEditor.exe "C:\Git\vBoR\vBoR.uproject"` 백그라운드. `NOT_CONNECTED`가 사라질 때까지 기다린다(이 PC에서 :3000이 뜨기까지 약 20초).
+   - MCP로 작업하고 `control_editor.save_all` 또는 `manage_level.save`로 저장한다.
+   - 결과를 스크린샷·액터 조회로 확인한다.
+   - **에디터를 닫는다.** MCP에는 종료 기능이 없다(`restart_editor`뿐이고 destructive). 저장한 뒤 `taskkill /PID <에디터>`로 닫고, Meta 설문 창 등으로 안 닫히면 `/F`로 닫는다 — 저장했으므로 잃을 것이 없다.
+3. **시작할 때 사용자 에디터가 이미 열려 있으면** 빌드하지 않고, MCP로 쓰지도 않는다. 사용자가 저장하지 않은 작업과 부딪힐 수 있다. 그렇게 보고하고 멈춘다.
+4. **하지 않는 것:**
+   - 에셋 삭제·이름 바꾸기
+   - 사용자가 만든 기존 레벨·에셋 수정(명세가 허락한 경우 빼고)
+   - 프로젝트 설정(`Config/*.ini`) 변경
+   - 삭제용 `consent` 전달
+   - MCP의 Python 실행·콘솔 명령으로 위 금지를 우회하는 것
+5. **보고:**
+   - 보고 ①에 바뀐 `.umap`·`.uasset` 경로를 적는다.
+   - ③에 MCP로 한 작업(capability 이름)을 적는다.
+   - ⑤에 확인 스크린샷 경로와 사용자가 에디터에서 볼 것을 적는다.
+   - `.umap`·`.uasset`은 바이너리라 diff 리뷰가 안 된다. Claude는 MCP로 읽어 확인하고, 사용자가 에디터에서 확인한다.
+
+**공통 — MCP로 할 수 없는 것:** VR·손 추적 시험. PIE 합성 입력은 키보드·마우스뿐이다. 시험 상태 `not-tested` 규칙은 그대로다.
+
+**사용자(UnrealAgent):** 에디터 안 반복 작업(레벨 만들기, GameMode Override 설정 등)에 쓴다. 만든 레벨·에셋은 지금처럼 Claude가 확인하고 커밋한다.
 
 ---
 

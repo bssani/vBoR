@@ -11,6 +11,25 @@
 
 ---
 
+## 2026-10-11 — 에디터 MCP 연결 (Claude Code·Codex)
+
+사용자가 로컬 도구 플러그인 두 개를 심볼릭 링크로 넣었다(`.gitignore`):
+- ChiR24 Unreal_mcp의 `McpAutomationBridge`(0.6.0-beta-e)
+- 자기 프로젝트 `UnrealAgent`
+
+"Codex도 MCP로 개발할 수 있게" 하자는 요청에 따라 Claude가 연결하고 확인했다. 규칙은 [Agent-Workflow.md](Agent-Workflow.md) §2.10.
+
+- 에디터 안 서버는 `127.0.0.1:3000/mcp`(Streamable HTTP, 응답 JSON), WebSocket `:8090`·`:8091`도 에디터 프로세스가 연다.
+- 인증 헤더는 `X-MCP-Capability-Token`이다(`plugins/McpAutomationBridge/Source/.../Foundation/McpSecureTokenCompare.h:26`).
+- 토큰 `Saved/MCP/capability-token`은 첫 실행 때 만들어지고, 에디터를 다시 열어도 바뀌지 않았다(파일 시각 01:28 그대로, 다음 세션 01:31~13:45).
+- 도구는 `unreal` 하나: `search` → `describe` → `execute`. 2026-10-11에 `control_actor.list`로 현재 레벨 액터를 읽었다.
+- 저장은 `control_editor.save_all`·`manage_level.save`. 에디터 종료 기능은 없다(`restart_editor`, destructive).
+- Codex CLI 0.162: `codex mcp add --url`은 bearer 토큰 환경변수만 받는다. config에는 `http_headers`·`env_http_headers`·`default_tools_approval_mode`·`approval_mode` 키가 있다(바이너리 문자열로 확인, 문서로는 확인 안 함).
+- Codex의 승인은 도구 단위라 `unreal` 하나 안의 읽기/쓰기를 나눌 수 없다. 기본(매번 승인)으로 뒀다. `codex exec`(승인 정책 never)에서는 호출이 거부된다.
+- 연결은 stdio proxy로 했다. 에디터가 닫혀 있어도 세션이 살아 있고, 토큰을 설정에 적지 않는다.
+
+---
+
 ## 2026-10-10 — P1 골프백 첫 VR 실행 (참고용, 약 16 fps)
 
 사용자가 Quest 3 + Link, 에디터 VR Preview로 `L_P1_GolfBag`(P1 리뷰 2회차 통과본 `eb67e20`)을 한 번 실행했다(약 2분 50초). 숫자는 `Saved/Logs/vBoR.log`의 `LogP1Probe`에서 Claude가 뽑았다. 명세 §7의 정식 반복이 아니다. 시험 상태 `not-tested`.
