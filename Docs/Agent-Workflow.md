@@ -74,6 +74,8 @@
 - UBT에서 여러 플러그인을 끌 때는 `+`로 잇는다(`-DisablePlugin=A+B`, `Engine/Source/Programs/UnrealBuildTool/Configuration/TargetRules.cs:842`).
 - **로컬 도구 플러그인(§2.9의 UnrealAgent, McpAutomationBridge)이 있는 PC에서는 함께 빌드된다.** 경고·오류 판정은 vBoR 모듈 기준이다. 도구 플러그인에서 나온 경고·오류는 따로 적고, 그 소스는 고치지 않는다. 리포에 없는 플러그인이라 다른 PC(회사 PC 포함)의 빌드와 무관하다.
 - 새 플러그인이나 모듈을 추가한 뒤에는 플러그인 모듈까지 다시 컴파일된다(MetaXR+ISDK 처음 빌드는 약 1분).
+- **non-unity 확인(빠진 include 찾기)은 vBoR 모듈로 한정한다:** 위 명령에 `-DisableUnity -Module=vBoR`를 붙인다. 모듈을 한정하지 않으면 로컬 도구 플러그인 약 1,200 파일까지 다시 컴파일한다(2026-10-11, P1 R4).
+  - 이미 빌드된 파일은 다시 컴파일되지 않는다. 리뷰에서 재현할 때는 `Source/vBoR`의 `.cpp`·`.h` 수정 시각을 갱신한 뒤 non-unity, 그다음 unity 순서로 빌드한다(내용은 바뀌지 않는다).
 
 ### 2.4 자동화 시험
 
@@ -161,10 +163,14 @@ codex.exe exec -C "C:\Git\vBoR" --approve-for-me -o <마지막 응답 파일> "<
 
 | 클라이언트 | 이름 | 등록 위치 | 명령 |
 |---|---|---|---|
-| Claude Code | `unreal-engine` | `~/.claude.json`의 vBoR 프로젝트(local scope) | `cmd /c npx -y unreal-engine-mcp-server@0.6.0-beta-e proxy`, env `UE_PROJECT_PATH=C:/Git/vBoR` |
+| Claude Code | `unreal-engine` | `~/.claude.json`의 vBoR 프로젝트(local scope) — **키 두 개 `C:/Git/vBoR`·`c:/Git/vBoR`에 같은 값** | `cmd /c npx -y unreal-engine-mcp-server@0.6.0-beta-e proxy`, env `UE_PROJECT_PATH=C:/Git/vBoR` |
 | Codex | `unreal-vbor` | `~/.codex/config.toml`(전역 — 다른 프로젝트 세션에서도 뜨지만 vBoR 토큰이라 vBoR 에디터에만 붙는다) | 같음 |
 
 - 다시 등록할 때: Git Bash에서는 `MSYS_NO_PATHCONV=1`을 먼저 둔다. 안 그러면 `/c`가 `C:/`로 바뀐다(2026-10-11에 한 번 겪음).
+- **Claude Code local scope 키는 드라이브 문자의 대소문자를 구분한다.** VSCode 확장은 대화를 `c:\Git\vBoR`(소문자)로 시작하고, 터미널은 `C:\Git\vBoR`로 시작한다. 한쪽 키에만 등록하면 다른 쪽 대화에는 도구가 없다.
+  - 2026-10-11 확인: `cmd`에서 `cd /d c:\Git\vBoR` 뒤 `claude mcp get unreal-engine` → "No MCP server". 대문자 경로에서는 "Connected"였다. 그래서 두 키에 다 등록했다.
+  - 등록·버전 변경은 두 경로에서 각각 한다: `cmd /c "cd /d c:\Git\vBoR && claude mcp add unreal-engine -s local -e UE_PROJECT_PATH=C:/Git/vBoR -- cmd /c npx -y unreal-engine-mcp-server@<버전> proxy"`, 그리고 `C:\`로 한 번 더.
+  - PowerShell `Set-Location`은 경로를 대문자로 바꾸므로 소문자 키 확인에 쓸 수 없다. `cmd`를 쓴다.
 - **2026-10-11 확인한 것:**
   - 에디터 안 서버 직접 호출: `initialize`(서버 `unreal-mcp 0.6.0-beta-e`, 세션 ID 발급) → `tools/list`(`unreal` 하나) → `search` → `execute control_actor.list`(현재 레벨 액터 읽기) 성공.
   - proxy 직접 실행: 같은 결과(`[NativeProxy] connected`).

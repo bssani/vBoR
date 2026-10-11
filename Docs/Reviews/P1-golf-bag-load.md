@@ -12,7 +12,7 @@
 - 판단이 필요하면 맨 아래 "질문"에 적고 멈춘다.
 - push·`main` 머지는 하지 않는다. 끝나면 `HANDOFF.md`의 "Codex 결과"를 채운다.
 
-명세가 1회차와 3회차에 바뀌었다(명세 머리 표의 "개정" 행). 3회차 개정은 이 브랜치에 바로 커밋했다.
+명세가 1·3·4·5회차에 바뀌었다(명세 머리 표의 "개정" 행). 3회차부터 개정은 이 브랜치에 바로 커밋했다.
 
 ## 회차
 
@@ -22,6 +22,37 @@
 | 2 | 2026-10-10 | `eb67e20` 1회차 반영 | Claude | **통과. 열린 항목 없음.** R1-1~R1-6 제안대로. 남은 것은 에디터 레벨과 Quest 3 확인(`not-tested`) |
 | 3 | 2026-10-10 | 첫 VR 시험(`eb67e20`, 사용자) | Claude | **개정 2건.** 트렁크 안 안착 0/22. 두 손 잡기(U-08, R3-1), 기울기 기준 고정·보이는 형상대로 충돌(R3-2). 사용자 레벨 `Content/P1/L_P1_GolfBag.umap` 커밋 |
 | 4 | 2026-10-11 | `f6c5a2e` 3회차 반영 | Claude | **R3-1·R3-2 반영 확인. 새 항목 2건.** 안착 판정이 골프백 크기 상자(±0.01 cm)라 트렁크 안에 조금만 비켜 놓아도 "목표 밖"(R4-1, Claude 명세 빈틈), simple collision 없는 메시 경고(R4-2). **빌드·시험 재현 못 함 — 에디터가 열려 있었다** |
+| 5 | 2026-10-11 | `7e6aa46` 4회차 반영 | Claude | **R4-1·R4-2 반영 확인. 빌드·시험 재현(R3·R4분): non-unity·unity 경고·오류 0, `vBoR.*` 47/47.** 새 항목 1건 — 부모 기본값에서 목표 자세(120 cm)가 적재 영역(100 cm)보다 길어 값을 안 바꾼 목표의 보조 안착이 "목표 밖"(R5-1, Claude 명세 빈틈). P1 시험대는 영향 없음 → **VR 재시험 진행, R5-1은 머지 전 반영** |
+
+### 5회차에 확인한 것
+
+- **빌드 재현(R3 `f6c5a2e` + R4 `7e6aa46`분).** 에디터를 닫고, vBoR 소스의 수정 시각만 갱신해 다시 컴파일시켰다. 샘플 플러그인은 끈다.
+  - non-unity(`-DisableUnity -Module=vBoR`): vBoR `.cpp` 19개와 `Module.vBoR.gen.cpp`를 하나씩 컴파일했다. 경고·오류 0.
+    - 모듈을 한정한 이유: 전체 non-unity는 로컬 도구 플러그인 약 1,200 파일을 다시 컴파일한다(Codex 보고 ③). Agent-Workflow §2.3에 적었다.
+  - unity: `Module.vBoR.cpp` 컴파일·링크. 경고·오류 0.
+  - 로컬 도구 `McpAutomationBridge`가 내는 `StructUtils` 폐기 예정 안내 2줄은 vBoR 판정에서 뺀다.
+- **시험:** `-DisablePlugins=OculusInteractionSamples,McpAutomationBridge,UnrealAgent`로 돌렸다. `vBoR.*` **47/47 Success**, `TEST COMPLETE. EXIT CODE: 0`. 로그: `Saved/Logs/P1R5ClaudeAutomation.log`.
+  - Warning·Error는 알려진 잡음뿐이다: 샘플 `InfoCardWidget` CDO, 없는 XR 확장, 시험 world 정리 때 `World has no context`.
+  - 충돌 없는 메시 경고는 기대 로그로 잡혀 Verbose로 찍힌다.
+- **R4-1 적재 영역:**
+  - `AVBoRLoadTarget::LoadingRegion`(UBoxComponent, NoCollision, 게임 중 숨김)을 둔다.
+    - `IsObjectInside`만 영역 좌표계(scale을 뺀 component transform)와 scaled extent로 잰다.
+    - `IsStaticFit`·보조 안착·안내 표시는 목표 자세를 그대로 쓴다(`VBoRLoadTarget.cpp:61-75`).
+  - 시험대 영역을 트렁크 패널 식(`P1TrunkMock.cpp:55-60`)과 대조했다. 영역이 안쪽 공간과 맞는다.
+    - X: 0(범퍼 턱 안쪽 면)부터 깊이(앞벽 안쪽 면)까지
+    - Y: ±폭/2(옆벽 안쪽 면)
+    - Z: 바닥 윗면부터 천장 아랫면까지
+    - 범퍼 턱(X < 0)은 영역 밖이다. 그래서 턱 위에 걸친 골프백은 목표 밖이다.
+  - 영역 축은 트렁크를 따르고, 목표의 가로 회전은 따르지 않는다. `R`과 트렁크 값 변경이 영역에 반영된다. 시험이 둘 다 확인한다.
+  - 낙하 시험은 실제 시험대 Actor로 한다.
+    - 깊이 방향으로 20 cm 비킨 낙하(보조 범위 밖) → 초록, `DroppedInside`, `OnSeated` 1
+    - 입구에 걸친 낙하 → 회색, `DroppedOutside`
+- **R4-2 simple collision:**
+  - `HasSimpleCollision`을 `IsPoseClear`와 상태 표시가 같이 쓴다. 경고 로그는 재사용 부품 쪽 `LogVBoRCarry`에 남긴다. `GetStateText`는 원인을 먼저 보인다.
+  - 시험은 공유 엔진 asset을 건드리지 않고, 복제 메시의 BodySetup만 비운다.
+  - 3회차 시험 중 메시를 잠깐 비우는 단계(`P1LoadBenchTests.cpp:284`)에서 시험대 로그에 `Normal -> No simple collision -> Normal`이 남는다. 새 상태가 시험대 기록에도 나온다는 뜻이고, 문제가 아니다.
+- **범위:** `Config`·`Content`·`Plugins` 변경 없음. 주석 말투가 맞고, 명세 밖 기능이 없다.
+- **새 항목 1건(R5-1).** 재사용 부모의 기본값 두 개가 서로 맞지 않는다. P1 시험대에서는 드러나지 않는다.
 
 ### 4회차에 확인한 것
 
@@ -78,7 +109,42 @@
 
 ## 열린 항목
 
-### R4-1 "안착·목표 안"이 골프백 크기 상자로 판정되어, 트렁크 안에 조금만 비켜 놓아도 목표 밖이 된다 (Claude 명세 빈틈) — 반영함 (fix: separate loading region and warn on missing carry collision)
+### R5-1 부모 기본값에서 목표 자세가 적재 영역보다 길어, 값을 안 바꾼 목표의 보조 안착이 "목표 밖"으로 끝난다 (Claude 명세 빈틈) — 열림
+
+**문제**
+- **위치:**
+  - `Source/vBoR/Interaction/VBoRLoadTarget.cpp:20`: 적재 영역의 기본 BoxExtent가 50 cm다. 한 변 100 cm 정육면체이고, 중심은 목표 root다.
+  - `Source/vBoR/Interaction/VBoRLoadTarget.h:22`: 목표 기본 크기는 28×28×120 cm다. 긴 축은 목표 local Z다.
+  - `Source/vBoR/Interaction/VBoRCarryObject.cpp:368` `FinishPlacement`: 보조 안착도 `IsObjectInside`(적재 영역)로 안착 여부를 가른다.
+- **발생 조건:**
+  - 시험대를 거치지 않고 놓은 `AVBoRLoadTarget`(또는 자식 Blueprint)에서 적재 영역을 바꾸지 않았다.
+  - 그 목표에 긴 축이 100 cm를 넘는 짐을 보조 안착했다.
+  - 예: 120 cm 골프백이 목표 자세에 정확히 놓여도 Z 반길이가 60 cm라 영역 반길이 50 cm를 넘는다.
+- **영향:**
+  - 보조 안착이 끝나도 회색 "Released (outside target)"으로 보이고, 안착 이벤트가 없다. R4-1과 같은 오표시가 부모 기본값에서 다시 생긴다.
+  - 경고도 없다. R4-2에서 막은 "조용한 실패"와 같은 종류다.
+  - P1 시험대는 `PlaceFromHead`가 영역을 트렁크 값으로 덮어쓴다(`P1LoadBench.cpp:186-194`). 그래서 **P1 VR 재시험에는 영향이 없다.** P4에서 부모를 실제 차량 레벨에 놓을 때 드러난다.
+- **원인:** R4-1 명세 개정에서 Claude가 "목표 자세는 적재 영역 안에 있어야 한다"는 조건을 적지 않았다. 명세 §2-3·§4를 고쳤다(5회차 개정).
+
+**제안**
+- 부모 기본 영역이 기본 목표 상자를 담게 한다. 값은 구현자가 정한다(예: 각 축에서 목표 기본 크기의 반 이상).
+- 보조 안착이 끝났는데 `IsObjectInside`가 false면 설정 오류다. 정의상 목표 자세는 영역 안이어야 하기 때문이다.
+  - 이때 경고 로그를 남긴다. 목표 크기, 영역 크기, target 이름을 넣고, 시도마다 한 번만 남긴다.
+  - `FinishPlacement`에서 남기면 같은 파일의 `LogVBoRCarry`(`VBoRCarryObject.cpp:23`, `DEFINE_LOG_CATEGORY_STATIC`)를 그대로 쓸 수 있다.
+- **BeginPlay 검사로 하지 않는다.** 시험대 순서 때문에 거짓 경고가 난다.
+  - 시험대는 목표를 `SpawnActorDeferred`(`P1LoadBench.cpp:218`)로 만들고 `FinishSpawning`(`:223`)을 부른다. BeginPlay는 이때 돈다.
+  - 영역은 그 뒤 `PlaceFromHead`(`:192-193`)에서 정한다.
+  - 그래서 BeginPlay에서 재면 시험대 목표마다 거짓 경고가 난다.
+- 영역을 목표 상자나 렌더 경계에 맞춰 자동으로 키우지 않는다. 사용자가 편집한 영역을 덮어쓰게 된다.
+
+**확인할 시험**
+- 영역을 바꾸지 않은 기본 목표 + 120 cm 골프백(P1 원통 형상) 보조 안착 → `Seated`, `Assisted`, `OnSeated` 1.
+- 영역을 목표보다 작게 설정 → 보조 안착 뒤 `Released (outside target)`, 경고 1회(`AddExpectedMessagePlain`).
+- 시험대 배치·`R`·`B` → 이 경고 0회.
+
+## 4회차 항목 (모두 반영함)
+
+### R4-1 "안착·목표 안"이 골프백 크기 상자로 판정되어, 트렁크 안에 조금만 비켜 놓아도 목표 밖이 된다 (Claude 명세 빈틈) — 반영함 (`7e6aa46`)
 
 **Codex 반영:** `AVBoRLoadTarget::LoadingRegion`을 목표 자세·안내 메시와 별도의 편집 가능한 상자 component로 추가했다. `IsObjectInside`는 이 영역 좌표계에서 기존 simple collision 형상 전체의 포함과 겹침 없음을 확인한다. 목표 자세의 정적 적합성·보조 안착·골프백 크기 안내는 유지했다. 시험대는 배치·R 때 트렁크 안쪽 깊이·폭·높이와 바닥 높이에서 영역을 설정한다. 패널·측정·snapshot 로그는 `loading region`과 `target pose`를 구분한다.
 
@@ -108,7 +174,7 @@
 - 기본 `IsStaticFit` true, 폭 100 cm에서 false — 1회차 시험이 그대로 통과.
 - `PlacementOutcome`의 기존 "목표 밖 낙하"가 적재 영역 밖에서 일어나는지 확인한다(영역이 커져 우연히 안이 되지 않게).
 
-### R4-2 simple collision이 없는 메시는 조용히 못 움직인다 — 반영함 (fix: separate loading region and warn on missing carry collision)
+### R4-2 simple collision이 없는 메시는 조용히 못 움직인다 — 반영함 (`7e6aa46`)
 
 **Codex 반영:** BeginPlay에서 simple collision을 확인해 재사용 부품의 `LogVBoRCarry` Warning으로 메시 경로·원인·수정 방법을 남긴다. `GetStateText`는 다른 상태보다 `No simple collision`을 먼저 표시하므로 시험대 패널에서도 원인이 보인다. 이동 거부와 기존 메시 simple collision 판정은 유지했다.
 
