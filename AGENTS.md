@@ -90,6 +90,7 @@
 - UE 5.7, C++ 모듈 `vBoR`. 빌드: `Engine/Build/BatchFiles/Build.bat vBoREditor Win64 Development -Project=<절대경로>\vBoR.uproject`
 - **Meta XR 플러그인 1.205.0이 `Plugins/MetaXR/`에 들어 있다** (모듈 `OculusXRHMD`, `OculusXRInput`, `OculusXRMovement`, `OculusXRPassthrough`, `MRUtilityKit` 등). OculusXR API를 쓸 때는 기억에 의존하지 말고 이 폴더의 헤더를 확인한다. 프리빌트 라이브러리(`Source/Thirdparty/**`의 dll·lib·so)도 커밋돼 있다.
 - **Meta Interaction SDK(ISDK) 1.205.0이 `Plugins/MetaXRInteraction/`에 들어 있다** (모듈 `OculusInteraction`, `OculusInteractionPrebuilts`, `IsdkDataSourcesMetaXR`/`IsdkDataSourcesOpenXR`). 쓸 클래스와 금지 클래스(레이·원거리 잡기·자유 6DoF·던지기 등)는 조사 기록 §4. 프리빌트는 `Source/ThirdParty/**`에 있다 — MetaXR와 철자가 다르다. ISDK의 잡기는 추적 신뢰도를 보지 않고, 네트워크 복제도 없다.
+- **로컬 도구 플러그인 `Plugins/UnrealAgent`, `Plugins/McpAutomationBridge`는 사용자 PC 전용 개발 도구다**(심볼릭 링크, `.gitignore`). 고치지 않고, 커밋하지 않고, vBoR 코드·에셋에서 참조하지 않는다. 빌드에 같이 들어가도 경고·오류 판정은 vBoR 모듈 기준이다. 자동화 시험에서는 끈다(Agent-Workflow §2.4). 에디터 안 MCP 사용 규칙은 Agent-Workflow §2.10.
 - 에디터는 `.uasset`을 잠근다. git 브랜치 전환·머지·C++ 리빌드 전에 Unreal Editor를 닫는다.
 - **ISDK 샘플(`Plugins/OculusInteractionSamples/`)은 참고 자료와 HandPoseStudio 녹화 도구일 뿐이다.** `.gitignore`로 리포에 없다. 어떤 코드·에셋도 그 경로나 모듈을 참조하지 않는다. 필요한 기능은 ISDK 본체 클래스로 C++에서 직접 조립한다(Agent-Workflow §5).
 
