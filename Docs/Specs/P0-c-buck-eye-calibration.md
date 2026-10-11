@@ -9,7 +9,7 @@
 | 작업 브랜치 | `codex/P0-c-buck-eye-calibration` |
 | 리뷰 파일 | `Docs/Reviews/P0-c-buck-eye-calibration.md` (첫 리뷰 때 생김) |
 | 환경 | PCVR(Link), Epic Native OpenXR, 추적 원점 Stage(UE 5.7 OpenXR가 Stage를 먼저 고른다, `OpenXRHMD.cpp:2332-2335`), WorldToMeters 100 |
-| 상태 | 리뷰 1회차 통과(2026-10-12, 열린 항목 없음, 69/69) → **사용자 VR 확인(§7)**. 시험 상태 `not-tested` |
+| 상태 | 리뷰 1회차 통과(69/69), VR 기능 확인(2026-10-12, 지그 없이 헤드셋 착용 저장 — 저장·자동 적용·M·T 동작) → **`main` 머지 준비**. 지그 반복성·실물 대조·장기 지속성·재중심·가디언은 실물 Buck과 지그가 생기면(§7). 시험 상태 `not-tested` |
 | 개정 | 2026-10-12 리뷰 1회차: §7에 "플레이 영역 못 얻음으로 확인 필요가 남는지"·저장 실패 OS 오류 번호 기록 추가. 2026-10-11: 시험 레벨을 Codex가 에디터 MCP로 만든다(사용자 결정, §2-5). 캡처 창·`C` 누름은 초 단위(frame 수 아님 — P1 R6-1 교훈). PlayerStart는 Pawn 원점이 레벨 바닥 높이에 오게(P1 레벨 92 cm 문제) |
 
 ## 0. 결정
