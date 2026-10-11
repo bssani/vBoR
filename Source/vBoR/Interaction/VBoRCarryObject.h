@@ -93,7 +93,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry")
 	TObjectPtr<AVBoRLoadTarget> LoadTarget;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry", meta = (Units = "deg", ClampMin = "0", ClampMax = "90"))
-	float TiltLimitDeg = 15;
+	float TiltLimitDeg = 45;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Contact", meta = (Units = "cm", ClampMin = "0"))
+	float MaxRotationPushCm = 0.5f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Contact", meta = (Units = "cm", ClampMin = "0"))
+	float BlockedEnterDistanceCm = 2;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Contact", meta = (Units = "cm", ClampMin = "0"))
+	float BlockedExitDistanceCm = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Contact", meta = (Units = "deg", ClampMin = "0"))
+	float BlockedEnterAngleDeg = 5;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Contact", meta = (Units = "deg", ClampMin = "0"))
+	float BlockedExitAngleDeg = 2.5f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry", meta = (Units = "cm", ClampMin = "0"))
 	float AssistDistanceCm = 10;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry", meta = (Units = "deg", ClampMin = "0"))
@@ -129,6 +139,12 @@ private:
 	friend class FP1CarryCumulativeTest;
 	friend class FP1BagRepeatTest;
 	friend class FP1CarryTwoHandLifecycleTest;
+	friend class FP1CarryDefaultAssistanceTest;
+	friend class FP1CarryContactSlideTest;
+	friend class FP1CarryContactRotationTest;
+	friend class FP1CarryContactStateTest;
+	friend class FP1CarryDefaultTiltTest;
+	friend class FP1CarryContactDropTest;
 	UPROPERTY()
 	TObjectPtr<UVBoRCarryTransformer> CarryTransformer;
 	UPROPERTY()
@@ -148,6 +164,8 @@ private:
 	double BlockedSeconds = 0;
 	double MaxRequestedGapCm = 0;
 	bool bBlocked = false;
+	bool bHasHeldRequest = false;
+	FTransform LastHeldRequest;
 	bool bPalmOpen[2] = {false, false};
 	bool bDropping = false;
 	bool bAssisting = false;
@@ -169,6 +187,7 @@ private:
 	bool IsHandTracked(int32 Hand) const;
 	void ReleaseCarry(int32 Hand = INDEX_NONE, const FTransform* TrackedPoses = nullptr);
 	void MoveHeldPose(const FTransform& Desired);
+	void ResolveHeldContact(const FTransform& Desired);
 	void FinishPlacement();
 	void UpdateVisual();
 	bool HasSimpleCollision() const;

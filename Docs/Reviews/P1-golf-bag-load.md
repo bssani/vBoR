@@ -109,7 +109,7 @@
 
 ## 열린 항목
 
-### R5-1 부모 기본값에서 목표 자세가 적재 영역보다 길어, 값을 안 바꾼 목표의 보조 안착이 "목표 밖"으로 끝난다 (Claude 명세 빈틈) — 열림
+### R5-1 부모 기본값에서 목표 자세가 적재 영역보다 길어, 값을 안 바꾼 목표의 보조 안착이 "목표 밖"으로 끝난다 (Claude 명세 빈틈) — 반영함 (fix: add constrained contact response for carried objects)
 
 **문제**
 - **위치:**
@@ -142,7 +142,7 @@
 - 영역을 목표보다 작게 설정 → 보조 안착 뒤 `Released (outside target)`, 경고 1회(`AddExpectedMessagePlain`).
 - 시험대 배치·`R`·`B` → 이 경고 0회.
 
-### R5-2 걸리면 통째로 멈춘다 — 면을 따라 미끄러지고 걸린 곳을 축으로 돌게 한다 (VR 재시험, 사용자 결정 D7) — 열림
+### R5-2 걸리면 통째로 멈춘다 — 면을 따라 미끄러지고 걸린 곳을 축으로 돌게 한다 (VR 재시험, 사용자 결정 D7) — 반영함 (fix: add constrained contact response for carried objects)
 
 근거: 조사 기록 "2026-10-11 — P1 VR 재시험". 명세 D7, §2 "충돌", §3, §4 새 행 9개, §7 "모서리 걸림".
 
@@ -194,7 +194,7 @@
 - 접촉 응답 뒤 기울기 ≤ 15°. 한 frame 밀어냄 ≤ 상한.
 - 기존 보조 안착·낙하·막힘 sweep·`RequestedActualGap` 시험이 그대로 통과한다. 막힘 정의가 바뀐 시험은 새 정의로 고치고 보고 ③에 적는다.
 
-### R5-3 기울기 한도 15°가 너무 제한적이다 — 45°로 올린다 (사용자, Claude 자리값 실수) — 열림
+### R5-3 기울기 한도 15°가 너무 제한적이다 — 45°로 올린다 (사용자, Claude 자리값 실수) — 반영함 (fix: add constrained contact response for carried objects)
 
 **문제**
 - **위치:**
@@ -548,6 +548,58 @@
   - 목표 밖에 떨어뜨렸을 때 초록이 아닌지(R1-4)
   - `B`로 10회 반복(R1-6)
 - **추적 손실 순서는 기기로만 확인된다.** ISDK release와 추적 손실 판정 중 무엇이 먼저 오는지, 그래서 잡은 채 손을 시야 밖으로 뺄 때 골프백이 떨어지지 않고 멈추는지를 본다. Codex가 SDK 소스 순서를 확인했지만(보고 ④) 실제 손 추적 신뢰도가 떨어지는 시점과 다를 수 있다.
+
+## Codex R5 반영 기록 (2026-10-11)
+
+① 바뀐 파일
+- Source/vBoR/Interaction/VBoRCarryObject.h, .cpp: 기본 기울기 45°, 접촉 프로퍼티, 요청 캐시와 생명주기 초기화, 요청/실제 차이 히스테리시스, 막힘 진입 소리, 보조 완료 설정 경고.
+- Source/vBoR/Interaction/VBoRCarryContact.cpp (신규): 들고 옮길 때만 쓰는 접촉 응답.
+- Source/vBoR/Interaction/VBoRLoadTarget.cpp: 기본 적재 영역을 기본 목표 크기 28×28×120 cm로 맞춤.
+- Source/vBoR/P1Probe/P1CarryContactTests.cpp (신규): 실제 Actor/World 합성 회귀시험 6개.
+- Docs/Reviews/P1-golf-bag-load.md: R5-1·R5-2·R5-3 상태와 이 보고. HANDOFF.md는 무시 파일에 따로 기록함.
+
+② 명세 §6 완료 조건
+1. 충족: 패널/로그의 기존 측정 경로를 유지했고, 새 히스테리시스 상태·진입 횟수·최대 요청/실제 차이·막힌 입구 통과가 그 경로로 전달됨. ContactBlockageState 및 기존 시험대 시험 통과.
+2. 충족(코드·합성 검증): 같은 요청의 다음 frame 이동 0, 보류 중 이동 0, scale 보존, simple collision과 0.005 cm 접촉 여유, 처음 놓인 자세 기준 45° 유지. 손 수 변경·새 잡기·보류/복구·reset 때 캐시 초기화. 두 손 요청 계산, 잡기 기본 꺼짐, 보조 안착/수직 낙하 경로는 그대로이며 P0-b 포함 기존 47개 통과. Quest 3 검증은 별도임.
+3. 충족: 신규 DefaultGoalAssistance, ContactSlide, ContactRotation, ContactBlockageState, ContactDropOnSlope, DefaultTilt45. 기본 120 cm 보조 안착/이벤트 1회, 작은 명시 영역의 경고 1회·회색·자동 확장 없음, 시험대 최초/R/B 오경고 없음; 면/교선 이동; 걸린 끝 Yaw·바닥 재잡기; 정지·보류·밀어냄 상한·접촉 결과 45°; 거리/각도 히스테리시스와 정확히 2 cm 진입; 막힌 입구 통과; 경사면 낙하의 수평 이동·회전·후속 이동 0; 기본 45°의 두 손 30°/60° 요청과 90° 근처 연속성을 확인함.
+4. 충족: 실제 플러그인·엔진 헤더 대조 경로/줄은 ④에 있음.
+5. 충족: 샘플을 끈 UE 5.7 vBoREditor Win64 Development 빌드 및 -DisableUnity -Module=vBoR 파일별 재컴파일 성공, vBoR 컴파일·링크 경고/오류 0. 샘플·McpAutomationBridge·UnrealAgent를 끈 vBoR.* 53/53 Success, 실패 0, TEST COMPLETE. EXIT CODE: 0.
+6. 충족: ⑤에 에디터·기기 확인을 구분함.
+
+③ 명세와 다르게 한 것과 이유 / 구현자 재량
+- 명세 이탈 없음. 기존 시험의 기대값은 바꾸지 않았음. 기존 순수 회전 시험의 명시적 15° 입력은 함수의 설정 가능한 한도 시험이므로 유지했고, 기본값/실제 접촉 결과 45°를 신규 시험으로 확인함(R5-3).
+- 엔진 movement component 대신 carry Actor 전용 함수를 둠. 기존 simple collision 쿼리와 0.005 cm 여유를 재사용하고, 보조·낙하의 TryMoveToPose를 수정하지 않기 위함.
+- 이동은 최대 3회 sweep, 면 투영과 교선 투영. 이미 만난 면 안으로 다시 향하면 멈춤. 엔진 TwoWallAdjust의 0.01 cm 밀어냄은 쓰지 않음.
+- 회전은 최대 5° 간격(최대 36 구간)으로 확인하고, 길이 0 sweep의 Normal/PenetrationDepth로 새 겹침을 최대 3회 해소함. 여러 면의 남은 깊이를 순서대로 더하고 최종 겹침을 재검사함. 실패 구간의 회전 비율은 14회 이분 탐색함. 회전 경로 검사는 이산 검사임.
+- 회전 밀어냄 상한은 편집 가능한 기본 0.5 cm. 120 cm 원통의 바닥 재잡기 1 cm/3° 요청이 큰 중심 보정으로 튀지 않게 회전을 일부만 적용하는 자리값이며 실측 합격 기준이 아님.
+- 한 요청에서 회전→이동을 최대 2회 풀고, 두 회전 단계는 같은 frame의 남은 밀어냄 예산을 공유함. 내부 독립 검토가 발견한 '바닥에서 50 cm 들어 올리며 30° 기울일 때 공중에서도 회전이 덜 적용된 채 캐시에 고정됨'을 합성 회귀시험으로 재현한 뒤 수정함. 같은 요청 반복 시 이동 0도 유지했고 재검토에서 추가 중요한 문제 없음. Claude 공식 리뷰는 아직임.
+- 히스테리시스 자리값은 명세대로 위치 2 cm/각도 5° 진입, 둘 다 1 cm/2.5° 미만에서 해제. 막힘 소리는 상태 표시 함수에서 떼어 진입 분기에서만 재생함.
+- 기본 영역은 constructor에서만 목표 기본 크기에 맞춤. 사용자가 줄인 영역을 확장하지 않으며, 보조 완료가 영역 밖일 때만 목표 이름·목표 크기·영역 크기를 경고함. 시험의 로그 집계는 GLog 동기 flush 후 확인해 전달 지연과 실제 경고 누락을 구분함.
+
+④ 헤더/API 확인
+- 새 ISDK·MetaXR API 도입 없음. 기존 조립 경로를 실제 헤더로 다시 확인함:
+  - Plugins/MetaXRInteraction/Source/OculusInteraction/Public/Interaction/IsdkGrabbableComponent.h:117,146,158 — collider, Palm 입력 허용, transformer.
+  - 같은 Public/Interaction/Grabbable/IsdkGrabTransformerComponent.h:110,130,171,199,259,266 — ForceCancel, single/multi transformer, target, MultiGrab, bIsThrowable.
+  - 같은 Public/Interaction/Grabbable/IsdkTransformer.h:47,57,65,89 — Begin/End/UpdateTransform, MaxGrabPoints.
+  - Plugins/MetaXR/Source/OculusXRInput/Public/OculusXRInputFunctionLibrary.h:216,258 — 신뢰도·위치 유효성.
+- 엔진 경로 기준: C:/Program Files/Epic Games/UE_5.7/Engine/Source/
+  - Runtime/Engine/Classes/Engine/World.h:2351,2380 — ComponentSweepMulti, ComponentOverlapMulti.
+  - Runtime/Engine/Classes/Engine/HitResult.h:50,61,91,116 — initial overlap의 ImpactPoint 한계, Normal, PenetrationDepth, bStartPenetrating.
+  - Runtime/Engine/Private/Components/MovementComponent.cpp:711,778 — 면 투영·두 면 처리 참고(직접 component를 붙이지 않음).
+  - Runtime/Engine/Classes/Components/BoxComponent.h:39,43,47 — extent 설정/크기 조회.
+  - Runtime/Engine/Classes/GameFramework/Actor.h:1803 — 검사한 자세 적용.
+  - Runtime/Engine/Classes/Components/AudioComponent.h:517 — 진입 소리 Play.
+  - Runtime/Core/Public/Math/Quat.h:660 — Slerp.
+  - Runtime/Core/Public/Misc/OutputDeviceRedirector.h:88 및 Misc/AutomationTest.h:1815 — 시험의 동기 로그 flush·기대 경고.
+- 위 호출은 헤더 확인 및 실제 로컬 컴파일로 확인함. 기억에만 의존한 신규 API 없음.
+
+⑤ 로컬에서 확인할 것 / 검증 기록
+- 빌드 완료: Saved/Logs/P1R5NonUnityBuild.log, P1R5FinalBuild.log. vBoR .cpp 21개를 파일별로 재컴파일한 뒤 기본 빌드. 로컬 도구 플러그인의 StructUtils 폐기 예정 의존 안내 2줄은 vBoR 컴파일 경고와 분리함.
+- 자동화 완료: Saved/Logs/P1R5AllAutomation.log — 53/53 Success, 실패 0, EXIT CODE: 0. 최초 회귀 재현 P1R5RedAutomation.log, 복합 lift+tilt 실패 재현 P1R5LiftRedAutomation.log. 알려진 XR 확장/샘플 InfoCard CDO/시험 World 정리 잡음은 Agent-Workflow 기준으로 분리함.
+- 에디터: 시작·종료 시 닫힘. HANDOFF의 이번 작업 지시에 따라 MCP 호출·레벨·Blueprint·에셋 수정 없음. 기존 L_P1_GolfBag/ P1LoadBenchGameMode에서 패널·접촉 색·진입 소리를 확인할 것. 실제 자식에서 새 기본값/편집값이 적용되는지도 확인할 것.
+- Quest 3 Link/VR Preview: 명세 §7의 모서리 걸림, 바닥 재잡기, 들어 올리면서 기울이기, 45°의 적절성, 기운 채 놓인 자세, 막힘 색/소리 깜빡임, 시야 밖 손 보류·복구, B 10회 반복을 재시험할 것. T-02 적재·T-09 운영 정식 시험과 이번 R5 기기 재시험은 not-tested. 코드·합성 시험 결과를 기기 동작/주관적 조작감 증거로 취급하지 않음.
+- 브랜치 codex/P1-golf-bag-load, 질문 없음. R5-1·R5-2·R5-3 반영 완료, Claude 6회차 리뷰 대기. push·머지 없음.
+
 
 ## 질문
 

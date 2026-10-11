@@ -17,7 +17,7 @@ AVBoRLoadTarget::AVBoRLoadTarget()
 	Guide->SetStaticMesh(Cube.Object);
 	LoadingRegion = CreateDefaultSubobject<UBoxComponent>(TEXT("LoadingRegion"));
 	LoadingRegion->SetupAttachment(RootComponent);
-	LoadingRegion->SetBoxExtent(FVector(50));
+	LoadingRegion->SetBoxExtent(GoalSizeCm.GetAbs() * 0.5);
 	LoadingRegion->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	LoadingRegion->SetHiddenInGame(true);
 }

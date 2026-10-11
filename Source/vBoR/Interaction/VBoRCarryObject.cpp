@@ -3,6 +3,7 @@
 #include "VBoRHandRigPawn.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/AudioComponent.h"
+#include "Components/BoxComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Engine/OverlapResult.h"
@@ -276,6 +277,7 @@ bool AVBoRCarryObject::BeginCarry(int32 Hand, UIsdkGrabberComponent* Grabber, co
 {
 	if (Pose.ContainsNaN() || !Session.Begin(Hand, Pose, GetActorTransform(), GetWorld()->GetTimeSeconds())) { return false; }
 	BindHoldingRig(Hand, Grabber);
+	bHasHeldRequest = false;
 	bDropping = bAssisting = bSeated = bBlocked = bReleasedOutside = false;
 	Outcome = EVBoRCarryOutcome::None;
 	++Successes[Hand];
@@ -325,14 +327,25 @@ void AVBoRCarryObject::AdvanceHeldPose()
 	FTransform Poses[2];
 	const bool bTracked = ReadHands(Poses);
 	FTransform Desired;
-	if (!Session.UpdateHands(bTracked, Poses, GetActorTransform(), GetWorld()->GetTimeSeconds(), TiltLimitDeg, Desired)) { UpdateVisual(); return; }
+	if (!Session.UpdateHands(bTracked, Poses, GetActorTransform(), GetWorld()->GetTimeSeconds(), TiltLimitDeg, Desired)) { bHasHeldRequest = false; UpdateVisual(); return; }
 	MoveHeldPose(Desired);
 	UpdateVisual();
 }
 void AVBoRCarryObject::MoveHeldPose(const FTransform& Desired)
 {
-	const bool bNewBlocked = !TryMoveToPose(Desired);
-	if (bNewBlocked && !bBlocked) { ++BlockedCount; }
+	if (Session.bPaused) { bHasHeldRequest = false; return; }
+	if (Desired.ContainsNaN()) { return; }
+	FTransform Request = Desired;
+	Request.SetScale3D(GetActorScale3D());
+	// 같은 요청을 다시 풀면 제한된 회전이 저절로 누적됨 (손 정지 시 이동 0, P1 D7)
+	if (!bHasHeldRequest || !Request.Equals(LastHeldRequest, 1e-6)) { ResolveHeldContact(Request); }
+	LastHeldRequest = Request;
+	bHasHeldRequest = true;
+	const double Distance = FVector::Distance(Request.GetLocation(), GetActorLocation());
+	const double Angle = FVBoRCarryMotion::AngleDeg(Request, GetActorTransform());
+	const bool bNewBlocked = bBlocked ? !(Distance < BlockedExitDistanceCm && Angle < BlockedExitAngleDeg) :
+		Distance >= BlockedEnterDistanceCm || Angle >= BlockedEnterAngleDeg;
+	if (bNewBlocked && !bBlocked) { ++BlockedCount; StateAudio->Play(); }
 	bBlocked = bNewBlocked;
 	// 잡은 자리 오프셋을 빼고 막혀서 못 간 거리만 잼 (P1 R1-5, cm)
 	if (bBlocked) { MaxRequestedGapCm = FMath::Max(MaxRequestedGapCm, FVector::Distance(Desired.GetLocation(), GetActorLocation())); }
@@ -346,6 +359,7 @@ void AVBoRCarryObject::ReleaseCarry(int32 Hand, const FTransform* TrackedPoses)
 	const FTransform* Poses = TrackedPoses ? TrackedPoses : Session.LastHands;
 	const FTransform Object = GetActorTransform();
 	const bool bLastReleased = Session.Release(Hand, true, GetWorld()->GetTimeSeconds(), Poses, &Object);
+	if (!Session.HasHand(Hand)) { bHasHeldRequest = false; }
 	if (!Session.HasHand(Hand)) { ClearHoldingRig(Hand); }
 	if (!bLastReleased) { UpdateVisual(); return; }
 	// 같은 시도의 재잡기에서도 앞선 잡기 시간을 남김 (P1 R1-6)
@@ -366,6 +380,11 @@ void AVBoRCarryObject::FinishPlacement()
 {
 	// 목표 밖 낙하를 성공 색·이벤트로 보이지 않게 함 (P1 R1-4)
 	bSeated = LoadTarget && LoadTarget->IsObjectInside(this);
+	if (bAssisting && !bSeated && LoadTarget)
+	{
+		UE_LOG(LogVBoRCarry, Warning, TEXT("Assisted seating finished outside loading region: target '%s', goal size %s cm, region size %s cm. Check target configuration."),
+			*LoadTarget->GetName(), *LoadTarget->GoalSizeCm.ToString(), *(LoadTarget->LoadingRegion->GetScaledBoxExtent() * 2).ToString());
+	}
 	bReleasedOutside = !bSeated;
 	Outcome = bSeated ? (bAssisting ? EVBoRCarryOutcome::Assisted : EVBoRCarryOutcome::DroppedInside) : EVBoRCarryOutcome::DroppedOutside;
 	CompletedMetrics.Assisted += Outcome == EVBoRCarryOutcome::Assisted ? 1 : 0;
@@ -424,6 +443,7 @@ void AVBoRCarryObject::ResetToPose(const FTransform& Pose)
 {
 	// 소유 손을 먼저 지움 (ForceCancel 의 동기 callback 을 놓기로 세지 않음, P1 R reset)
 	Session = FVBoRCarrySession();
+	bHasHeldRequest = false;
 	Session.SetRestPose(Pose);
 	CompletedMetrics = FVBoRCarryMetrics();
 	ClearHoldingRig();
@@ -499,7 +519,7 @@ void AVBoRCarryObject::UpdateVisual()
 		Mesh->SetOverlayMaterial(StateOverlay);
 	}
 	else { Mesh->SetOverlayMaterial(nullptr); }
-	if (bPaused || bBlocked) { StateAudio->Play(); }
+	if (bPaused) { StateAudio->Play(); }
 }
 
 void AVBoRCarryObject::EndPlay(const EEndPlayReason::Type Reason)
