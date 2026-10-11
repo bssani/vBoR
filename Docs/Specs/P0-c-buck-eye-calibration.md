@@ -5,11 +5,12 @@
 | 단계 | P0 환경·기준 확인 — "Buck 정렬 확인 방법을 정한다", "물리 접촉 시험 전 정렬 확인"(계획서 §6) |
 | 대상 | T-01 데이터·Buck 정렬(이 실험은 T-01 정식 시험이 아니다). 나중에 T-05(기준 정렬로 복귀)가 이 저장값을 쓴다 |
 | 결정 근거 | U-07, 조사 기록 2026-10-10 "Buck 정렬 — eye position", AGENTS.md 확정 제약 |
-| 베이스 브랜치 | **P1 머지 뒤의 `main`** (P1 다음 순서) |
+| 베이스 브랜치 | `main` @ P1 머지(PR #5, `06fa73b`) 뒤 Claude 문서 커밋 |
 | 작업 브랜치 | `codex/P0-c-buck-eye-calibration` |
 | 리뷰 파일 | `Docs/Reviews/P0-c-buck-eye-calibration.md` (첫 리뷰 때 생김) |
 | 환경 | PCVR(Link), Epic Native OpenXR, 추적 원점 Stage(UE 5.7 OpenXR가 Stage를 먼저 고른다, `OpenXRHMD.cpp:2332-2335`), WorldToMeters 100 |
-| 상태 | 확정(2026-10-10) — **P1 다음**. 시험 상태 `not-tested` |
+| 상태 | 확정(2026-10-10) → **구현 시작(2026-10-11, P1 머지 뒤)**. 시험 상태 `not-tested` |
+| 개정 | 2026-10-11: 시험 레벨을 Codex가 에디터 MCP로 만든다(사용자 결정, §2-5). 캡처 창·`C` 누름은 초 단위(frame 수 아님 — P1 R6-1 교훈). PlayerStart는 Pawn 원점이 레벨 바닥 높이에 오게(P1 레벨 92 cm 문제) |
 
 ## 0. 결정
 
@@ -84,6 +85,25 @@ VR에서 실물은 좌석뿐이다. 가상 좌석이 실물 좌석과 어긋나�
 
 4. **`AP0BuckBenchGameMode`** — 기본 Pawn은 `AVBoRHandRigPawn`이다. P0-b·P1 설정을 건드리지 않는다.
 
+**시험 레벨 — Codex가 에디터 MCP로 만든다**(2026-10-11 사용자 결정)
+
+5. **`Content/P0/L_P0c_BuckEye`** (새 레벨)
+   - 바닥·조명·하늘: 에디터 Basic 템플릿 수준. 바닥 윗면은 Z 0이다.
+   - World Settings의 GameMode Override = `P0BuckBenchGameMode`.
+   - `AP0BuckBench` **하나**. Yaw 0, 가상 지면 격자가 레벨 바닥 윗면(Z 0)에 오게 놓는다. 그러면 eye point는 Z 120에 온다(§2-3 자리값).
+   - PlayerStart **하나**. Pawn 원점(= Stage 원점 = 물리 바닥)이 레벨 바닥 윗면 높이에 오게 놓는다. 위치는 근사 좌석 옆 바닥이다.
+     - PlayerStart를 에디터 기본대로 놓으면 캡슐 반높이만큼 떠서, Pawn 원점이 바닥보다 약 92 cm 위가 된다. P1 레벨은 그래서 레벨 바닥이 물리 바닥보다 92 cm 아래로 보였다(조사 기록 2026-10-10).
+     - 정렬을 저장한 뒤에는 Pawn이 옮겨지므로, 이 배치는 "저장값 없음" 상태에서만 보인다.
+   - 다른 액터(차량·Blueprint)는 만들지 않는다. 근사 차량은 `AP0BuckBench`가 실행 중에 만든다.
+   - **순서**(Agent-Workflow §2.10 "Codex"):
+     1. C++ 빌드·시험을 먼저 통과시킨다.
+     2. 에디터를 열고 MCP로 만든다.
+     3. 저장한다.
+     4. 액터 조회와 스크린샷으로 확인한다.
+     5. 에디터를 닫는다.
+   - MCP로 못 하는 단계가 있으면(예: GameMode Override 설정 기능이 없음) 우회하지 않는다. 그 단계만 리뷰 파일 "질문"에 적고, 나머지를 끝낸 뒤 멈춘다. 사용자가 그 단계만 손으로 한다.
+   - 기존 레벨(`Content/P0/*`, `Content/P1/*`)과 다른 에셋은 열어서 읽기만 한다. 바꾸지 않는다.
+
 ### 측정·표시할 것 (패널 + `LogP0Buck`)
 
 **패널은 헤드셋을 지그에 둔 채 PC 모니터(VR Preview 미러 창)에서 읽을 수 있어야 한다.** 진행자는 그때 헤드셋을 쓰고 있지 않다.
@@ -147,7 +167,8 @@ VR에서 실물은 좌석뿐이다. 가상 좌석이 실물 좌석과 어긋나�
 ## 5. 구현자가 정할 것
 
 - 저장 방식(SaveGame, ini, JSON 등)과 파일 위치(`Saved/` 아래). 사람이 열어 볼 수 있는 형식이면 좋다. 이유를 보고한다.
-- 캡처 창 길이와 `C` 누름 시간의 기본값. 둘을 하나로 묶어도 된다.
+- 캡처 창 길이와 `C` 누름 시간의 기본값. 둘을 하나로 묶어도 된다. **둘 다 초 단위로 정한다(frame 수가 아니다).** 이 PC(약 15 fps)와 회사 PC(72–90 fps)에서 같은 시간 동안 모아야 흩어짐 값을 비교할 수 있다(P1 R6-1). 사용·버린 frame 수는 그대로 기록한다.
+- MCP로 레벨을 만드는 방법(쓴 capability). 보고 ③에 적는다.
 - Yaw 평균 방법, 수평 성분 거부 기준, 플레이 영역 비교 허용치. 기본값과 이유를 보고한다.
 - 패널을 PC 미러 창에서 읽히게 하는 방법. 예: eye point 앞 월드 공간 텍스트.
 - 가짜 자세 입력을 넣는 방법(시험용 주입 지점).
@@ -164,6 +185,7 @@ VR에서 실물은 좌석뿐이다. 가상 좌석이 실물 좌석과 어긋나�
    - `CoreDelegates.h:436` `VRHeadsetRecenter`
 5. 샘플 플러그인을 끈 상태로 빌드 경고·오류 0, `vBoR.*` 전체 통과.
 6. 보고에 "로컬에서 확인할 것"이 있다.
+7. `Content/P0/L_P0c_BuckEye`가 §2-5대로 저장돼 있다. 보고 ①에 `.umap` 경로, ③에 MCP로 한 작업, ⑤에 확인 스크린샷 경로가 있다(Agent-Workflow §2.10 "보고").
 
 확인한 API 근거(엔진 `C:\Program Files\Epic Games\UE_5.7\Engine` 기준):
 
@@ -184,7 +206,11 @@ VR에서 실물은 좌석뿐이다. 가상 좌석이 실물 좌석과 어긋나�
 
 ### 에디터
 
-1. `Content/P0/L_P0c_BuckEye` 레벨(Basic + PlayerStart). GameMode Override = `P0BuckBenchGameMode`. `AP0BuckBench`를 하나 놓는다.
+1. Codex가 만든 `Content/P0/L_P0c_BuckEye`를 열어 본다(§2-5).
+   - 시험대 하나, PlayerStart 하나가 있는지 본다.
+   - GameMode Override가 `P0BuckBenchGameMode`인지 본다.
+   - 근사 차량은 실행 중에 생긴다.
+   - Claude도 리뷰 때 MCP로 같은 것을 읽어 확인한다.
 
 ### Quest 3 (Link, VR Preview)
 
