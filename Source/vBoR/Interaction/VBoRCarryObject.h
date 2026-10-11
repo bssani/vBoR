@@ -81,7 +81,7 @@ public:
 	FBox GetCollisionBoundsInPose(const FTransform& Pose, const FTransform& Reference) const;
 	bool TryMoveToPose(const FTransform& Pose);
 	FBox GetMeshLocalBounds() const;
-	void AdvanceHeldPose();
+	void AdvanceHeldPose(float DeltaSeconds);
 	bool IsBlocked() const { return bBlocked; }
 	const FVBoRCarrySession& GetCarrySession() const { return Session; }
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Carry")
@@ -94,8 +94,8 @@ public:
 	TObjectPtr<AVBoRLoadTarget> LoadTarget;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry", meta = (Units = "deg", ClampMin = "0", ClampMax = "90"))
 	float TiltLimitDeg = 45;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Contact", meta = (Units = "cm", ClampMin = "0"))
-	float MaxRotationPushCm = 0.5f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Contact", meta = (Units = "cm/s", ClampMin = "0"))
+	float MaxRotationPushCmPerSecond = 30.0f;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Contact", meta = (Units = "cm", ClampMin = "0"))
 	float BlockedEnterDistanceCm = 2;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Contact", meta = (Units = "cm", ClampMin = "0"))
@@ -142,6 +142,8 @@ private:
 	friend class FP1CarryDefaultAssistanceTest;
 	friend class FP1CarryContactSlideTest;
 	friend class FP1CarryContactRotationTest;
+	friend class FP1CarryContactRateTest;
+	friend class FP1CarryContactFloorTiltTest;
 	friend class FP1CarryContactStateTest;
 	friend class FP1CarryDefaultTiltTest;
 	friend class FP1CarryContactDropTest;
@@ -164,8 +166,6 @@ private:
 	double BlockedSeconds = 0;
 	double MaxRequestedGapCm = 0;
 	bool bBlocked = false;
-	bool bHasHeldRequest = false;
-	FTransform LastHeldRequest;
 	bool bPalmOpen[2] = {false, false};
 	bool bDropping = false;
 	bool bAssisting = false;
@@ -186,8 +186,8 @@ private:
 	bool ReadHands(FTransform* Poses) const;
 	bool IsHandTracked(int32 Hand) const;
 	void ReleaseCarry(int32 Hand = INDEX_NONE, const FTransform* TrackedPoses = nullptr);
-	void MoveHeldPose(const FTransform& Desired);
-	void ResolveHeldContact(const FTransform& Desired);
+	void MoveHeldPose(const FTransform& Desired, float DeltaSeconds);
+	void ResolveHeldContact(const FTransform& Desired, float DeltaSeconds);
 	void FinishPlacement();
 	void UpdateVisual();
 	bool HasSimpleCollision() const;

@@ -2,14 +2,17 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/World.h"
 
-void AVBoRCarryObject::ResolveHeldContact(const FTransform& Requested)
+void AVBoRCarryObject::ResolveHeldContact(const FTransform& Requested, float DeltaSeconds)
 {
 	FTransform Resolved = GetActorTransform();
 	if (!GetWorld() || !IsPoseClear(Resolved)) { return; }
 	constexpr double SkinCm = 0.005;
 	FComponentQueryParams Params(SCENE_QUERY_STAT(VBoRCarryContact), this);
-	double PushBudgetCm = FMath::Max(0.0f, MaxRotationPushCm);
-	// 이동으로 접촉을 벗어나면 같은 요청 안에서 회전을 다시 풂 (다음 frame 의 자율 회전 방지, P1 D7)
+	// 무효 시간·속도는 예산 0 으로 둠 (frame 속도와 무관한 밀어냄, P1 R6-1, cm/s × s)
+	const double FrameSeconds = FMath::IsFinite(DeltaSeconds) ? FMath::Max(0.0f, DeltaSeconds) : 0.0;
+	const double PushRate = FMath::IsFinite(MaxRotationPushCmPerSecond) ? FMath::Max(0.0f, MaxRotationPushCmPerSecond) : 0.0;
+	double PushBudgetCm = PushRate * FrameSeconds;
+	// 이동으로 접촉을 벗어나면 같은 요청 안에서 회전을 다시 풂 (lift+tilt 가 한 frame 늦지 않게, P1 D7)
 	for (int32 Stage = 0; Stage < 2; ++Stage)
 	{
 		const FTransform Current = Resolved;

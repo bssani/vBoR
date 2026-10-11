@@ -277,7 +277,6 @@ bool AVBoRCarryObject::BeginCarry(int32 Hand, UIsdkGrabberComponent* Grabber, co
 {
 	if (Pose.ContainsNaN() || !Session.Begin(Hand, Pose, GetActorTransform(), GetWorld()->GetTimeSeconds())) { return false; }
 	BindHoldingRig(Hand, Grabber);
-	bHasHeldRequest = false;
 	bDropping = bAssisting = bSeated = bBlocked = bReleasedOutside = false;
 	Outcome = EVBoRCarryOutcome::None;
 	++Successes[Hand];
@@ -321,26 +320,24 @@ void AVBoRCarryObject::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 	UpdateVisual();
 }
 
-void AVBoRCarryObject::AdvanceHeldPose()
+void AVBoRCarryObject::AdvanceHeldPose(float DeltaSeconds)
 {
 	if (Session.Hand == INDEX_NONE) { return; }
 	FTransform Poses[2];
 	const bool bTracked = ReadHands(Poses);
 	FTransform Desired;
-	if (!Session.UpdateHands(bTracked, Poses, GetActorTransform(), GetWorld()->GetTimeSeconds(), TiltLimitDeg, Desired)) { bHasHeldRequest = false; UpdateVisual(); return; }
-	MoveHeldPose(Desired);
+	if (!Session.UpdateHands(bTracked, Poses, GetActorTransform(), GetWorld()->GetTimeSeconds(), TiltLimitDeg, Desired)) { UpdateVisual(); return; }
+	MoveHeldPose(Desired, DeltaSeconds);
 	UpdateVisual();
 }
-void AVBoRCarryObject::MoveHeldPose(const FTransform& Desired)
+void AVBoRCarryObject::MoveHeldPose(const FTransform& Desired, float DeltaSeconds)
 {
-	if (Session.bPaused) { bHasHeldRequest = false; return; }
+	if (Session.bPaused) { return; }
 	if (Desired.ContainsNaN()) { return; }
 	FTransform Request = Desired;
 	Request.SetScale3D(GetActorScale3D());
-	// 같은 요청을 다시 풀면 제한된 회전이 저절로 누적됨 (손 정지 시 이동 0, P1 D7)
-	if (!bHasHeldRequest || !Request.Equals(LastHeldRequest, 1e-6)) { ResolveHeldContact(Request); }
-	LastHeldRequest = Request;
-	bHasHeldRequest = true;
+	// 같은 요청도 남은 회전을 이어 풂 (초당 예산 안에서 요청 쪽으로 수렴, P1 R6-1)
+	ResolveHeldContact(Request, DeltaSeconds);
 	const double Distance = FVector::Distance(Request.GetLocation(), GetActorLocation());
 	const double Angle = FVBoRCarryMotion::AngleDeg(Request, GetActorTransform());
 	const bool bNewBlocked = bBlocked ? !(Distance < BlockedExitDistanceCm && Angle < BlockedExitAngleDeg) :
@@ -359,7 +356,6 @@ void AVBoRCarryObject::ReleaseCarry(int32 Hand, const FTransform* TrackedPoses)
 	const FTransform* Poses = TrackedPoses ? TrackedPoses : Session.LastHands;
 	const FTransform Object = GetActorTransform();
 	const bool bLastReleased = Session.Release(Hand, true, GetWorld()->GetTimeSeconds(), Poses, &Object);
-	if (!Session.HasHand(Hand)) { bHasHeldRequest = false; }
 	if (!Session.HasHand(Hand)) { ClearHoldingRig(Hand); }
 	if (!bLastReleased) { UpdateVisual(); return; }
 	// 같은 시도의 재잡기에서도 앞선 잡기 시간을 남김 (P1 R1-6)
@@ -403,7 +399,7 @@ void AVBoRCarryObject::Tick(float DeltaSeconds)
 	if (Session.Hand != INDEX_NONE)
 	{
 		const bool bRecovering = Session.bPaused;
-		AdvanceHeldPose();
+		AdvanceHeldPose(DeltaSeconds);
 		for (int32 Hand = 0; Hand < 2; ++Hand)
 		{
 			if (!Session.HasHand(Hand)) { continue; }
@@ -443,7 +439,6 @@ void AVBoRCarryObject::ResetToPose(const FTransform& Pose)
 {
 	// 소유 손을 먼저 지움 (ForceCancel 의 동기 callback 을 놓기로 세지 않음, P1 R reset)
 	Session = FVBoRCarrySession();
-	bHasHeldRequest = false;
 	Session.SetRestPose(Pose);
 	CompletedMetrics = FVBoRCarryMetrics();
 	ClearHoldingRig();

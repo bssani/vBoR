@@ -128,9 +128,15 @@
 - 기본값으로는 실을 수 없다는 것을 숨기지 않았다. 값을 임의로 바꾸지 않고 보고 ③과 시험에 드러냈다. 규칙대로 한 것이다.
 - 주석 말투가 맞다. 샘플 플러그인 참조가 없고, `Config`·`Content`·`Plugins` 변경도 없다.
 
-## 열린 항목
+## 6회차 항목 (반영함 — Claude 7회차 리뷰 대기)
 
-### R6-1 회전 밀어냄 상한이 frame당이고, "같은 요청이면 다시 풀지 않음" 캐시가 시험에서만 정지를 만든다 (Claude 명세 모순) — 열림
+### R6-1 회전 밀어냄 상한이 frame당이고, "같은 요청이면 다시 풀지 않음" 캐시가 시험에서만 정지를 만든다 (Claude 명세 모순) — 반영함 (fix: use elapsed time for held contact rotation)
+
+**Codex 반영:** `MaxRotationPushCmPerSecond` 기본 30 cm/s로 바꾸고 Tick의 `DeltaSeconds`를 `AdvanceHeldPose` → `MoveHeldPose` → `ResolveHeldContact`로 전달했다. frame의 두 회전 단계가 `속도 × dt` 예산을 공유한다. `bHasHeldRequest`·`LastHeldRequest`와 무효화 코드를 모두 제거했다. 같은 요청도 계속 풀며 회전 오차 비증가·요청 미초과·도달/막힘 뒤 정지를 확인했다.
+
+**확인:** 기존 캐시에서 다음 frame 수렴 assertion이 실패하는 RED를 확인한 뒤 수정했다. `ContactRotation`은 새 수렴/정착 기대와 0.3 cm·0.5° 바닥 떨림으로 개정했다. 신규 `ContactFrameRate`에서 정확히 0.5 s의 15/90 fps 결과 차이는 **0.005239511 cm / 0.005519020°**였다(둘 다 아직 요청에 도달하지 않은 조건). `ContactFloorTilt`의 3° 요청은 중심 상승 **3.125975 cm**, `blocked=true`, 낮은 점 Z **0.005004 cm**를 기록했다. 이 응답을 바꾸지 않았으며 자연스러움은 Quest 3 판정 대상이다.
+
+**검증:** 샘플 비활성 non-unity(`-Module=vBoR`)·기본 빌드 성공, vBoR compiler/linker 경고·오류 0. 샘플·두 로컬 도구 플러그인을 끈 `vBoR.*` **55/55 Success**, Fail 0, EXIT CODE 0. 로그 `Saved/Logs/P1R6NonUnityBuild.log`, `P1R6Build.log`, `P1R6Automation.log`; RED `P1R6Red.log`. 보고 ①~⑤는 마지막 커밋 본문과 HANDOFF.md에 기록한다. Claude 7회차 공식 리뷰와 Quest 3 T-02/T-09는 별도 대기(`not-tested`).
 
 **문제**
 - **위치:**

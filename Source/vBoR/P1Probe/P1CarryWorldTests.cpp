@@ -265,7 +265,7 @@ bool FP1CarryBlockedGapTest::RunTest(const FString& Parameters)
 	Object->Session.Begin(0, FTransform(FVector(-75, 0, 110)), Object->GetActorTransform(), 0);
 	FTransform Desired;
 	Object->Session.Update(true, FTransform(FVector(-55, 0, 110)), Object->GetActorTransform(), 1, 15, Desired);
-	Object->MoveHeldPose(Desired);
+	Object->MoveHeldPose(Desired, 1.0f / 60.0f);
 	TestTrue(TEXT("Object is stopped at wall"), Object->IsBlocked());
 	TestTrue(TEXT("Blocked requested/actual gap excludes 50 cm grab offset"), FMath::IsNearlyEqual(Object->MaxRequestedGapCm, 10.0, 0.01));
 	World->EndPlay(EEndPlayReason::Quit);
