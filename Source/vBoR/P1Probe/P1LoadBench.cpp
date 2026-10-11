@@ -8,6 +8,7 @@
 #include "Components/InputComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/BoxComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
@@ -182,6 +183,15 @@ void AP1LoadBench::PlaceFromHead(const FTransform& Head)
 	Stand->SetRelativeScale3D(StandSizeCm / 100.0f);
 	if (!bPlaced) { SpawnParts(); }
 	if (Target) { Target->SetActorTransform(GoalPose()); }
+	if (Target && Trunk)
+	{
+		// 바닥 윗면부터 천장 아랫면까지, 입구에서 안쪽 벽까지의 공간 (P1 R4-1, cm)
+		const FVector Size(FMath::Max(1.0f, Trunk->InsideDepthCm), FMath::Max(1.0f, Trunk->InsideWidthCm), FMath::Max(1.0f, Trunk->InsideHeightCm));
+		const FVector Center(Size.X * 0.5, 0, Trunk->FloorHeightCm + Size.Z * 0.5);
+		const FTransform RegionPose(Trunk->GetActorQuat(), Trunk->GetActorTransform().TransformPosition(Center));
+		Target->LoadingRegion->SetBoxExtent(Size * 0.5);
+		Target->LoadingRegion->SetWorldTransform(RegionPose);
+	}
 	if (Bag) { Bag->ResetToPose(BagStartPose()); }
 	// 초기 배치와 R 을 입구 통과로 세지 않음 (P1 §2 경로)
 	ResetCrossing();
@@ -279,7 +289,7 @@ void AP1LoadBench::UpdatePanel()
 	const FString CurrentFit = Target && Bag ? (Target->IsObjectInside(Bag) ? TEXT("inside and clear") : TEXT("not inside / overlap")) : TEXT("n/a");
 	const FP1TrialTotals Total = GetTotals();
 	FString Text = FString::Printf(TEXT("P1 | not-tested | Approximate geometry - not vehicle data\n"
-		"Rig: %s\nStatic target: %s | current: %s\nEntrance crossing: %d | blocked at crossing: %d\n"
+		"Rig: %s\nStatic target pose: %s | loading region: %s\nEntrance crossing: %d | blocked at crossing: %d\n"
 		"Bag: %s\n%s\nR: reset and re-place | B: next trial, bag only"), *Rig, *StaticFit, *CurrentFit,
 		EntranceCrossings, BlockedAtCrossings, Bag ? *Bag->GetStateText() : TEXT("unavailable"),
 		Bag ? *Bag->GetMeasurementText() : TEXT("measurements unavailable"));
@@ -311,7 +321,7 @@ void AP1LoadBench::RecordSnapshot(const FString& Reason)
 {
 	if (!Bag) { return; }
 	const FVBoRCarryMetrics Metrics = Bag->GetMetrics();
-	FString Snapshot = FString::Printf(TEXT("%s | state=%s | static fit=%d | current fit=%d | entrance crossings=%d | blocked at crossing=%d | %s"),
+	FString Snapshot = FString::Printf(TEXT("%s | state=%s | static goal pose fit=%d | loading region inside and clear=%d | entrance crossings=%d | blocked at crossing=%d | %s"),
 		*Reason, *Bag->GetStateText(), Target && Target->IsStaticFit(Bag) ? 1 : 0,
 		Target && Target->IsObjectInside(Bag) ? 1 : 0, EntranceCrossings, BlockedAtCrossings, *Bag->GetMeasurementText());
 	Snapshot += FString::Printf(TEXT(" | Trial %d totals: grabbed=%d, assisted=%d, drop inside=%d, outside=%d, held=%.3f s"),

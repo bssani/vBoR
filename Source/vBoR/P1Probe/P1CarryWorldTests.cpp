@@ -4,7 +4,10 @@
 #include "../Interaction/VBoRLoadTarget.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/TextRenderComponent.h"
 #include "Engine/World.h"
+#include "Engine/StaticMesh.h"
+#include "PhysicsEngine/BodySetup.h"
 #include "GameFramework/WorldSettings.h"
 #include "Interaction/IsdkGrabbableComponent.h"
 #include "Interaction/IsdkThrowable.h"
@@ -95,6 +98,7 @@ bool FP1CarryPolicyTest::RunTest(const FString& Parameters)
 	AVBoRLoadTarget* Goal = World->SpawnActor<AVBoRLoadTarget>();
 	Goal->SetActorLocation(FVector(0, 0, 120));
 	Goal->GoalSizeCm = FVector(20);
+	Goal->LoadingRegion->SetBoxExtent(FVector(10));
 	Goal->OnConstruction(Goal->GetActorTransform());
 	World->InitializeActorsForPlay(FURL());
 	World->GetWorldSettings()->NotifyBeginPlay();
@@ -132,6 +136,7 @@ bool FP1CarryPlacementTest::RunTest(const FString& Parameters)
 	AVBoRLoadTarget* Target = World->SpawnActor<AVBoRLoadTarget>();
 	Target->SetActorLocation(FVector(0, 0, 65));
 	Target->GoalSizeCm = FVector(20);
+	Target->LoadingRegion->SetBoxExtent(FVector(10));
 	Target->OnConstruction(Target->GetActorTransform());
 	Object->LoadTarget = Target;
 	World->InitializeActorsForPlay(FURL());
@@ -143,6 +148,7 @@ bool FP1CarryPlacementTest::RunTest(const FString& Parameters)
 	Object->Tick(1);
 	TestEqual(TEXT("Outside target drop does not emit seated event"), Observer->SeatedCount, 0);
 	TestEqual(TEXT("Outside target has released state"), Object->GetStateText(), FString(TEXT("Released (outside target)")));
+	TestFalse(TEXT("Original outside drop remains outside loading region"), Target->IsObjectInside(Object));
 	if (UMaterialInstanceDynamic* Overlay = Cast<UMaterialInstanceDynamic>(Object->Mesh->GetOverlayMaterial()))
 	{
 		FLinearColor Color;
@@ -160,6 +166,91 @@ bool FP1CarryPlacementTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Inside drop result identifies target seating"), Object->GetMeasurementText().Contains(TEXT("vertical drop -> inside target")));
 	Object->Tick(1);
 	TestEqual(TEXT("Resting inside target does not repeat event"), Observer->SeatedCount, 1);
+	World->EndPlay(EEndPlayReason::Quit);
+	World->DestroyWorld(false);
+
+	UWorld* BenchWorld = UWorld::CreateWorld(EWorldType::Game, false);
+	APlayerController* Controller = BenchWorld->SpawnActor<APlayerController>();
+	AVBoRHandRigPawn* Pawn = BenchWorld->SpawnActor<AVBoRHandRigPawn>();
+	Controller->Possess(Pawn);
+	AP1LoadBench* Bench = BenchWorld->SpawnActor<AP1LoadBench>();
+	BenchWorld->InitializeActorsForPlay(FURL());
+	BenchWorld->GetWorldSettings()->NotifyBeginPlay();
+	Bench->PlaceFromHead(FTransform(FRotator(0, 37, 0), FVector(200, -100, 165)));
+	AVBoRCarryObject* Bag = Bench->Bag;
+	if (!TestNotNull(TEXT("Loading region fixture has bag"), Bag))
+	{
+		BenchWorld->DestroyWorld(false);
+		return false;
+	}
+	UP1CarryTestObserver* BagObserver = NewObject<UP1CarryTestObserver>(BenchWorld);
+	Bag->OnSeated.AddDynamic(BagObserver, &UP1CarryTestObserver::OnSeated);
+	const FTransform TrunkFrame = Bench->Trunk->GetActorTransform();
+	FTransform DropPose = Bag->GetActorTransform();
+	// 폭 여유는 5 cm 뿐이라 깊이 쪽으로 20 cm 비킴 (보조 범위 밖·트렁크 안, P1 R4-1)
+	DropPose.SetLocation(TrunkFrame.TransformPosition(FVector(65, 0, 120)));
+	Bag->ResetToPose(DropPose);
+	Bag->Session.Begin(0, Bag->GetActorTransform(), Bag->GetActorTransform(), 0);
+	Bag->ReleaseCarry();
+	TestTrue(TEXT("Offset in trunk starts drop, not assistance"), Bag->GetStateText().Contains(TEXT("Dropping")));
+	Bag->Tick(1);
+	TestTrue(TEXT("20 cm from goal still inside trunk loading region"), Bench->Target->IsObjectInside(Bag));
+	TestEqual(TEXT("Offset drop emits seated event once"), BagObserver->SeatedCount, 1);
+	TestEqual(TEXT("Offset drop is seated"), Bag->GetStateText(), FString(TEXT("Seated")));
+	TestTrue(TEXT("Offset drop records drop inside"), Bag->GetMetrics().Outcome == EVBoRCarryOutcome::DroppedInside);
+	UMaterialInstanceDynamic* Overlay = Cast<UMaterialInstanceDynamic>(Bag->Mesh->GetOverlayMaterial());
+	if (TestNotNull(TEXT("Seated offset drop has overlay"), Overlay))
+	{
+		FLinearColor Color;
+		TestTrue(TEXT("Seated color readable"), Overlay->GetVectorParameterValue(FMaterialParameterInfo(TEXT("ColorParam")), Color));
+		TestTrue(TEXT("Offset drop uses seated green"), Color.Equals(Bag->SeatedColor));
+	}
+	Bag->Tick(1);
+	TestEqual(TEXT("Offset rest does not repeat seated event"), BagObserver->SeatedCount, 1);
+	DropPose.SetLocation(TrunkFrame.TransformPosition(FVector(0, 0, 120)));
+	Bag->ResetToPose(DropPose);
+	Bag->Session.Begin(0, Bag->GetActorTransform(), Bag->GetActorTransform(), 0);
+	Bag->ReleaseCarry();
+	Bag->Tick(1);
+	TestFalse(TEXT("Bag straddling entrance and bumper is outside loading region"), Bench->Target->IsObjectInside(Bag));
+	TestEqual(TEXT("Entrance rest does not emit seated event"), BagObserver->SeatedCount, 1);
+	TestTrue(TEXT("Entrance rest records outside drop"), Bag->GetMetrics().Outcome == EVBoRCarryOutcome::DroppedOutside);
+	TestEqual(TEXT("Entrance rest has released state"), Bag->GetStateText(), FString(TEXT("Released (outside target)")));
+	Overlay = Cast<UMaterialInstanceDynamic>(Bag->Mesh->GetOverlayMaterial());
+	if (TestNotNull(TEXT("Entrance rest has overlay"), Overlay))
+	{
+		FLinearColor Color;
+		TestTrue(TEXT("Released color readable"), Overlay->GetVectorParameterValue(FMaterialParameterInfo(TEXT("ColorParam")), Color));
+		TestTrue(TEXT("Entrance rest uses released gray"), Color.Equals(Bag->ReleasedColor));
+	}
+	BenchWorld->EndPlay(EEndPlayReason::Quit);
+	BenchWorld->DestroyWorld(false);
+	return true;
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP1CarryMissingCollisionTest, "vBoR.P1Carry.MissingSimpleCollision", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP1CarryMissingCollisionTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+	AVBoRCarryObject* Object = World->SpawnActor<AVBoRCarryObject>();
+	// 공유 asset 의 충돌을 지우지 않게 시험 전용 복제 사용 (P1 R4-2)
+	UStaticMesh* MeshWithoutCollision = DuplicateObject<UStaticMesh>(Object->Mesh->GetStaticMesh(), World);
+	MeshWithoutCollision->SetBodySetup(NewObject<UBodySetup>(MeshWithoutCollision));
+	Object->Mesh->SetStaticMesh(MeshWithoutCollision);
+	AddExpectedMessagePlain(TEXT("No simple collision on carry mesh"), ELogVerbosity::Warning);
+	World->InitializeActorsForPlay(FURL());
+	World->GetWorldSettings()->NotifyBeginPlay();
+	TestEqual(TEXT("Missing collision has actionable state at startup"), Object->GetStateText(), FString(TEXT("No simple collision")));
+	FTransform Desired = Object->GetActorTransform();
+	Desired.AddToTranslation(FVector(0, 0, 50));
+	const FTransform Before = Object->GetActorTransform();
+	TestFalse(TEXT("Missing collision cannot move"), Object->TryMoveToPose(Desired));
+	TestTrue(TEXT("Missing collision leaves pose unchanged"), Object->GetActorTransform().Equals(Before));
+	Object->Tick(1);
+	TestEqual(TEXT("Missing collision warning persists after tick"), Object->GetStateText(), FString(TEXT("No simple collision")));
+	AP1LoadBench* Bench = World->SpawnActor<AP1LoadBench>();
+	Bench->Bag = Object;
+	Bench->Tick(0);
+	TestTrue(TEXT("Bench panel shows missing collision cause"), Bench->Panel->Text.ToString().Contains(TEXT("Bag: No simple collision")));
 	World->EndPlay(EEndPlayReason::Quit);
 	World->DestroyWorld(false);
 	return true;
@@ -242,6 +333,7 @@ bool FP1CarryCylinderShapeTest::RunTest(const FString& Parameters)
 	AVBoRLoadTarget* Target = World->SpawnActor<AVBoRLoadTarget>();
 	Target->SetActorTransform(FTransform(Rest, FVector(0, 0, 15)));
 	Target->GoalSizeCm = FVector(28, 28, 120);
+	Target->LoadingRegion->SetBoxExtent(Target->GoalSizeCm * 0.5);
 	for (double Axial : {0.0, 15.0, 45.0, 90.0})
 	{
 		Object->SetActorTransform(FTransform(Rest * FQuat(FVector::UpVector, FMath::DegreesToRadians(Axial)), FVector(0, 0, 15), FVector(0.28, 0.28, 1.2)));

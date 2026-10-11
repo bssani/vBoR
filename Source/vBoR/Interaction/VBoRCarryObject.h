@@ -171,6 +171,7 @@ private:
 	void MoveHeldPose(const FTransform& Desired);
 	void FinishPlacement();
 	void UpdateVisual();
+	bool HasSimpleCollision() const;
 	void HandlePalmSelect(UIsdkRigComponent* Rig);
 	void HandlePalmRelease(UIsdkRigComponent* Rig);
 	UFUNCTION()

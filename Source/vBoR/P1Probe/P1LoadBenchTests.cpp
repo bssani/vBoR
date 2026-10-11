@@ -6,6 +6,7 @@
 #include "../Interaction/VBoRCarryObject.h"
 #include "../Interaction/VBoRLoadTarget.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/BoxComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -73,6 +74,16 @@ bool FP1BenchWorldTest::RunTest(const FString& Parameters)
 			Bench->GetActorTransform().InverseTransformPosition(Bench->Bag->GetActorLocation()).Equals(FVector(-100, 0, 89), 0.01));
 		TestTrue(TEXT("Goal is crosswise on 75 cm trunk floor"),
 			Bench->GetActorTransform().InverseTransformPosition(Bench->Target->GetActorLocation()).Equals(FVector(45, 0, 89), 0.01));
+		TestTrue(TEXT("Loading region spans trunk interior depth/width/height"),
+			Bench->Target->LoadingRegion->GetUnscaledBoxExtent().Equals(FVector(45, 65, 35), 0.01));
+		TestTrue(TEXT("Loading region center follows trunk, not bag goal height"),
+			Bench->Trunk->GetActorTransform().InverseTransformPosition(Bench->Target->LoadingRegion->GetComponentLocation()).Equals(FVector(45, 0, 110), 0.01));
+		TestTrue(TEXT("Loading region axes follow trunk despite crosswise goal rotation"),
+			Bench->Target->LoadingRegion->GetComponentQuat().Equals(Bench->Trunk->GetActorQuat(), 0.001));
+		TestTrue(TEXT("Guide stays bag size while loading region is larger"),
+			Bench->Target->Guide->GetRelativeScale3D().Equals(FVector(0.28, 0.28, 1.2), 0.001));
+		TestTrue(TEXT("Loading region cannot block the bag"),
+			Bench->Target->LoadingRegion->GetCollisionEnabled() == ECollisionEnabled::NoCollision);
 		TestTrue(TEXT("P1 bag explicitly uses engine Cylinder rather than carry parent Cube"),
 			Bench->Bag->Mesh->GetStaticMesh() && Bench->Bag->Mesh->GetStaticMesh()->GetPathName().Contains(TEXT("/Engine/BasicShapes/Cylinder")));
 		if (const UStaticMesh* Cylinder = Bench->Bag->Mesh->GetStaticMesh())
@@ -88,7 +99,8 @@ bool FP1BenchWorldTest::RunTest(const FString& Parameters)
 			Bench->Target->GetActorUpVector().Equals(Bench->GetActorRightVector(), 0.001));
 		TestTrue(TEXT("Target guide retains full 120 cm bag length"), Bench->Target->GoalSizeCm.Equals(FVector(28, 28, 120)));
 		TestTrue(TEXT("120 cm crosswise bag clears default 130 cm trunk width"), Bench->Target->IsStaticFit(Bench->Bag));
-		TestTrue(TEXT("Panel states clear static fit"), Bench->Panel->Text.ToString().Contains(TEXT("Static target: clear")));
+		TestTrue(TEXT("Panel states clear static goal pose fit"), Bench->Panel->Text.ToString().Contains(TEXT("Static target pose: clear")));
+		TestTrue(TEXT("Panel labels current containment as loading region"), Bench->Panel->Text.ToString().Contains(TEXT("loading region: not inside / overlap")));
 		const FVector OriginalBagScale = Bench->Bag->GetActorScale3D();
 		Bench->Trunk->InsideWidthCm = 100;
 		Bench->Trunk->OnConstruction(Bench->Trunk->GetActorTransform());
@@ -128,6 +140,16 @@ bool FP1BenchWorldTest::RunTest(const FString& Parameters)
 	}
 	TestEqual(TEXT("Reset does not fabricate entrance crossings"), Bench->GetEntranceCrossings(), 0);
 	TestEqual(TEXT("Reset does not fabricate blocked crossings"), Bench->GetBlockedAtCrossings(), 0);
+	Bench->Trunk->InsideDepthCm = 110;
+	Bench->Trunk->InsideWidthCm = 140;
+	Bench->Trunk->InsideHeightCm = 80;
+	Bench->Trunk->FloorHeightCm = 85;
+	Bench->Trunk->OnConstruction(Bench->Trunk->GetActorTransform());
+	Bench->PlaceFromHead(FTransform(FRotator(0, 25, 0), FVector(0, 0, 165)));
+	TestTrue(TEXT("R applies edited trunk dimensions to loading region"),
+		Bench->Target->LoadingRegion->GetUnscaledBoxExtent().Equals(FVector(55, 70, 40), 0.01));
+	TestTrue(TEXT("R applies edited floor height to loading region center"),
+		Bench->Trunk->GetActorTransform().InverseTransformPosition(Bench->Target->LoadingRegion->GetComponentLocation()).Equals(FVector(55, 0, 125), 0.01));
 	World->EndPlay(EEndPlayReason::Quit);
 	World->DestroyWorld(false);
 	return true;

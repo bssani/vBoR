@@ -5,6 +5,7 @@
 #include "VBoRLoadTarget.generated.h"
 
 class UStaticMeshComponent;
+class UBoxComponent;
 class AVBoRCarryObject;
 
 UCLASS(Blueprintable)
@@ -25,8 +26,11 @@ public:
 	FLinearColor GuideColor = FLinearColor(0, 0.8, 0.4, 0.15);
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Load Target")
 	TObjectPtr<UStaticMeshComponent> Guide;
+	// 목표 자세와 별도로 공간 전체를 잼 (비켜 놓인 짐도 안착 판정, P1 R4-1)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Load Target")
+	TObjectPtr<UBoxComponent> LoadingRegion;
 protected:
 	virtual void BeginPlay() override;
 private:
-	bool ContainsPose(const AVBoRCarryObject* Object, const FTransform& Pose) const;
+	bool ContainsPose(const AVBoRCarryObject* Object, const FTransform& Pose, const FTransform& Reference, const FVector& Half) const;
 };

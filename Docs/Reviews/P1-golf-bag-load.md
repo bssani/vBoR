@@ -78,7 +78,11 @@
 
 ## 열린 항목
 
-### R4-1 "안착·목표 안"이 골프백 크기 상자로 판정되어, 트렁크 안에 조금만 비켜 놓아도 목표 밖이 된다 (Claude 명세 빈틈) — 열림
+### R4-1 "안착·목표 안"이 골프백 크기 상자로 판정되어, 트렁크 안에 조금만 비켜 놓아도 목표 밖이 된다 (Claude 명세 빈틈) — 반영함 (fix: separate loading region and warn on missing carry collision)
+
+**Codex 반영:** `AVBoRLoadTarget::LoadingRegion`을 목표 자세·안내 메시와 별도의 편집 가능한 상자 component로 추가했다. `IsObjectInside`는 이 영역 좌표계에서 기존 simple collision 형상 전체의 포함과 겹침 없음을 확인한다. 목표 자세의 정적 적합성·보조 안착·골프백 크기 안내는 유지했다. 시험대는 배치·R 때 트렁크 안쪽 깊이·폭·높이와 바닥 높이에서 영역을 설정한다. 패널·측정·snapshot 로그는 `loading region`과 `target pose`를 구분한다.
+
+**확인:** 수정 전에 `PlacementOutcome`에서 목표에서 깊이 방향으로 20 cm 비킨 낙하가 회색·안착 이벤트 0으로 실패했다(`Saved/Logs/P1R4RedAutomation.log`). 반영 뒤 같은 낙하는 초록·`DroppedInside`·`OnSeated` 1이고 반복 tick에도 이벤트가 늘지 않는다. 입구/범퍼 턱에 걸친 낙하는 회색·목표 밖이며, 기존 목표 밖 낙하도 영역 밖임을 명시했다. `PlacementAndReset`에서 기본 정적 적합성 true·폭 100 cm false, 영역 위치/회전/크기·guide 크기 유지·R 뒤 편집 치수 반영을 확인했다. 원통 자기 축 회전 포함 시험도 유지했다.
 
 **문제**
 - **위치:**
@@ -104,7 +108,11 @@
 - 기본 `IsStaticFit` true, 폭 100 cm에서 false — 1회차 시험이 그대로 통과.
 - `PlacementOutcome`의 기존 "목표 밖 낙하"가 적재 영역 밖에서 일어나는지 확인한다(영역이 커져 우연히 안이 되지 않게).
 
-### R4-2 simple collision이 없는 메시는 조용히 못 움직인다 — 열림
+### R4-2 simple collision이 없는 메시는 조용히 못 움직인다 — 반영함 (fix: separate loading region and warn on missing carry collision)
+
+**Codex 반영:** BeginPlay에서 simple collision을 확인해 재사용 부품의 `LogVBoRCarry` Warning으로 메시 경로·원인·수정 방법을 남긴다. `GetStateText`는 다른 상태보다 `No simple collision`을 먼저 표시하므로 시험대 패널에서도 원인이 보인다. 이동 거부와 기존 메시 simple collision 판정은 유지했다.
+
+**확인:** 수정 전에 충돌 없는 복제 메시의 상태가 `Normal`이라 `MissingSimpleCollision`이 실패했다(`Saved/Logs/P1R4RedF1Automation.log`). 반영 뒤 시작 경고 1개를 기대 로그로 확인하고, 시작/tick 상태 문구·이동 거부·자세 불변·시험대 패널 문구를 확인했다. 공유 엔진 asset은 수정하지 않고 시험용 복제 메시의 BodySetup만 비웠다.
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRCarryObject.cpp` `IsPoseClear`. 메시에 simple collision이 없으면(`AggGeom.GetElementCount() == 0`) 항상 false다. 그래서 `TryMoveToPose`가 모든 이동을 거부한다.
@@ -118,6 +126,32 @@
 
 **확인할 시험**
 - simple collision 없는 메시로 시작하면 경고 문구가 상태에 나오고, 이동은 하지 않는다.
+
+### Codex R4 반영 보고 (2026-10-11)
+
+① **바뀐 파일:** `Source/vBoR/Interaction/VBoRLoadTarget.h`, `.cpp`; `Source/vBoR/Interaction/VBoRCarryObject.h`, `.cpp`; `Source/vBoR/P1Probe/P1LoadBench.cpp`, `P1CarryWorldTests.cpp`, `P1LoadBenchTests.cpp`; 이 리뷰 파일. `HANDOFF.md` 결과는 git 무시 파일에 별도 기록했다.
+
+② **명세 §6 완료 조건:**
+- 1: 패널·로그에 목표 자세 오차와 적재 영역 포함을 구분하고 충돌 누락 원인을 표시함. 기존 측정 유지.
+- 2: 형상·scale·충돌·손 입력/추적 정책 유지. P0 기본 poke-only와 기존 회귀시험 통과.
+- 3: R4 경계 시험 추가/수정. 영역 안 비킨 낙하·입구에 걸친 낙하·충돌 없는 메시를 실제 Actor 합성 시험으로 확인.
+- 4: 아래 ④의 로컬 엔진/ISDK 헤더 대조 완료.
+- 5: 샘플 플러그인을 끈 기본 빌드와 vBoR 모듈 non-unity 빌드 성공, vBoR 컴파일·링크 경고/오류 0. `vBoR.*` **47/47 Success**, 실패 0, `TEST COMPLETE. EXIT CODE: 0`. 자동화는 샘플·두 로컬 도구 플러그인을 모두 끔.
+- 6: 아래 ⑤에 빌드·에디터·Quest 확인 사항 기록.
+
+③ **명세와 다르게 한 것:** 없음. 두 제안대로 구현했다. 20 cm 낙하 시험은 폭 여유가 양옆 5 cm인 조건 때문에 깊이 방향으로 비켰다. 영역 component의 transform·BoxExtent가 편집 값이며, 판정용이라 충돌/게임 중 표시를 껐다. 전체 non-unity 빌드가 로컬 도구 파일 약 1,200개를 재컴파일하려 해 중단하고 `-DisableUnity -Module=vBoR`로 범위를 한정했다. 최종 변경 `.cpp` 5개를 다시 개별 컴파일·링크했다. 기본 빌드는 handoff 명령 그대로 완료했다. UnrealAgent/MCP 도구와 junction은 확인했고 이번 R4는 에디터 단계가 없어 MCP 호출하지 않았다. `Config/`, `Content/`, `Plugins/` 소스 변경 없음.
+
+④ **헤더 확인(추정 없음):** 아래 엔진 경로는 `C:/Program Files/Epic Games/UE_5.7/Engine/Source/` 기준이다.
+- 영역 상자: `Runtime/Engine/Classes/Components/BoxComponent.h:39,43,47` (`SetBoxExtent`, scaled/unscaled extent), `Runtime/Engine/Classes/Components/SceneComponent.h:593,928` (world transform, 게임 중 숨김).
+- 충돌 유무: `Runtime/Engine/Classes/Components/StaticMeshComponent.h:624` (`GetBodySetup`), `Runtime/Engine/Classes/PhysicsEngine/BodySetup.h:138` (`AggGeom`), `Runtime/Engine/Classes/PhysicsEngine/AggregateGeom.h:72` (`GetElementCount`). 기존 메시 검사 `Runtime/Engine/Classes/Engine/World.h:2351,2380` (component sweep/overlap)도 대조했다.
+- 시험용 메시/경고: `Runtime/Engine/Classes/Engine/StaticMesh.h:1248` (`SetBodySetup`), `Runtime/Core/Public/Misc/AutomationTest.h:1815` (`AddExpectedMessagePlain`).
+- ISDK 호출 변경 없음. 유지한 설정은 `Plugins/MetaXRInteraction/Source/OculusInteraction/Public/Interaction/IsdkGrabbableComponent.h:117,146` (collider/Palm), `Interaction/Grabbable/IsdkGrabTransformerComponent.h:130,171,199,259,266` (transformer target, MultiGrab, Throwable)로 다시 대조했다.
+
+⑤ **로컬에서 확인할 것:**
+- 빌드 로그: `Saved/Logs/P1R4FinalBuild.log`, `P1R4FinalNonUnityBuild.log`. 기본 빌드에 로컬 `McpAutomationBridge`의 `StructUtils` 폐기 예정 의존 안내 2줄(플러그인·project)이 있다. vBoR 경고/오류와 구분하며 도구 소스는 수정하지 않았다.
+- 합성 자동화 로그: `Saved/Logs/P1R4FinalAutomation.log`. 47개 전체 통과. 충돌 누락 경고 1개는 시험에서 의도적으로 발생시키고 검증한 로그다. Workflow §2.5의 기존 XR/샘플 CDO 잡음과 실제 시험 결과를 구분한다.
+- 에디터: 새 Blueprint·asset·레벨 작업 없음. 기존 `Content/P1/L_P1_GolfBag`에서 목표 guide 크기, `loading region` 패널 표기, 영역 안/입구 밖 낙하 색을 확인한다. 실제 자식 메시 교체 시 simple collision 설정과 경고 문구도 확인한다.
+- Quest 3 Link/VR Preview: P1 명세 §7의 두 손 pivot·한 손 놓기/추적 손실, 트렁크 안 비킨 낙하 초록·입구 밖 회색, B 10회 반복, 손 시야 밖 보류/복구를 재시험한다. 관련 계획서 **T-02·T-09는 `not-tested`**이며 P1 합성 시험이 정식 기기/적재 평가를 대신하지 않는다. 질문 없음. Claude 5회차 리뷰 대기, push·머지 없음.
 
 ## 3회차 항목 (모두 반영함)
 

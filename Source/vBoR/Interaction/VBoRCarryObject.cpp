@@ -20,6 +20,8 @@
 #include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
 
+DEFINE_LOG_CATEGORY_STATIC(LogVBoRCarry, Log, All);
+
 UVBoRCarryGrabTransformer::UVBoRCarryGrabTransformer() { ConfigureCarry(); }
 void UVBoRCarryGrabTransformer::ConfigureCarry()
 {
@@ -94,6 +96,11 @@ void AVBoRCarryObject::PreInitializeComponents()
 void AVBoRCarryObject::BeginPlay()
 {
 	Super::BeginPlay();
+	if (!HasSimpleCollision())
+	{
+		UE_LOG(LogVBoRCarry, Warning, TEXT("No simple collision on carry mesh '%s' (%s); movement disabled. Add simple collision to the child mesh."),
+			*GetPathNameSafe(Mesh->GetStaticMesh()), *GetName());
+	}
 	Session.SetRestPose(GetActorTransform());
 	UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, IsdkContentAssetPaths::Materials::GrabbableDefault);
 	StateOverlay = Material ? UMaterialInstanceDynamic::Create(Material, this) : nullptr;
@@ -129,9 +136,15 @@ FBox AVBoRCarryObject::GetCollisionBoundsInPose(const FTransform& Pose, const FT
 	return Bounds;
 }
 
+bool AVBoRCarryObject::HasSimpleCollision() const
+{
+	const UBodySetup* Body = Mesh->GetBodySetup();
+	return Body && Body->AggGeom.GetElementCount() > 0;
+}
+
 bool AVBoRCarryObject::IsPoseClear(const FTransform& Pose) const
 {
-	if (!GetWorld() || Pose.ContainsNaN() || !Mesh->GetBodySetup() || Mesh->GetBodySetup()->AggGeom.GetElementCount() == 0) { return false; }
+	if (!GetWorld() || Pose.ContainsNaN() || !HasSimpleCollision()) { return false; }
 	// 등록된 Mesh 의 simple collision 을 그대로 씀 (원통 외접 상자 모서리 제거, P1 R3-2)
 	FComponentQueryParams Params(SCENE_QUERY_STAT(VBoRCarryOverlap), this);
 	TArray<FOverlapResult> Overlaps;
@@ -430,6 +443,8 @@ void AVBoRCarryObject::ResetToPose(const FTransform& Pose)
 
 FString AVBoRCarryObject::GetStateText() const
 {
+	// 잡힘·막힘 상태보다 원인을 먼저 표시함 (자식 메시 교체 시 조용한 실패 방지, P1 R4-2)
+	if (!HasSimpleCollision()) { return TEXT("No simple collision"); }
 	if (Session.Hand != INDEX_NONE)
 	{
 		return Session.bPaused ? TEXT("Paused (tracking)") : bBlocked ? TEXT("Blocked") : Session.IsTwoHanded() ? TEXT("Held (two hands)") : TEXT("Held (one hand)");
@@ -461,7 +476,7 @@ FString AVBoRCarryObject::GetMeasurementText() const
 	const double Paused = Session.PausedSeconds + (Session.bPaused ? FMath::Max(0.0, GetWorld()->GetTimeSeconds() - Session.PauseAt) : 0.0);
 	const double Distance = LoadTarget ? FVector::Distance(GetActorLocation(), LoadTarget->GetGoalPose().GetLocation()) : -1;
 	const double Angle = LoadTarget ? FVBoRCarryMotion::AngleDeg(GetActorTransform(), LoadTarget->GetGoalPose()) : -1;
-	return FString::Printf(TEXT("Attempts L=%d R=%d | grabbed L=%d R=%d | holding hand=%s | mode=%s | two-hand=%d / %.3f s\nHeld %.3f s | blocked=%d, %.3f s, max requested/actual gap %.2f cm\nTracking pauses=%d, %.3f s | recovery delta %.2f cm | ignored SDK releases=%d\nRelease: %s | final pose: %s / %s\nTarget error %.2f cm / %.2f deg | inside and clear=%d\nPalm only | HandGrab only | throwable=0 | scripted drop %.1f cm/s"),
+	return FString::Printf(TEXT("Attempts L=%d R=%d | grabbed L=%d R=%d | holding hand=%s | mode=%s | two-hand=%d / %.3f s\nHeld %.3f s | blocked=%d, %.3f s, max requested/actual gap %.2f cm\nTracking pauses=%d, %.3f s | recovery delta %.2f cm | ignored SDK releases=%d\nRelease: %s | final pose: %s / %s\nTarget pose error %.2f cm / %.2f deg | loading region inside and clear=%d\nPalm only | HandGrab only | throwable=0 | scripted drop %.1f cm/s"),
 		Attempts[0], Attempts[1], Successes[0], Successes[1], Session.Hand == 0 ? TEXT("Left") : Session.Hand == 1 ? TEXT("Right") : TEXT("none"),
 	Session.IsTwoHanded() ? TEXT("two hands") : Session.Hand != INDEX_NONE ? TEXT("one hand") : TEXT("none"), Session.TwoHandEntries, Session.TwoHandSeconds,
 		Session.HeldSeconds, BlockedCount, BlockedSeconds, MaxRequestedGapCm, Session.PauseCount, Paused, Session.RecoveryDistanceCm,
