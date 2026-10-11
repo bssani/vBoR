@@ -10,6 +10,8 @@
 #include "Rig/IsdkRayInteractionRigComponent.h"
 #include "Rig/IsdkGrabInteractionRigComponent.h"
 #include "Interaction/IsdkGrabberComponent.h"
+#include "HandPoseDetection/IsdkHandPalmGrabRecognizer.h"
+#include "StructTypesNonGenerated.h"
 
 namespace
 {
@@ -35,11 +37,25 @@ UVBoRHandRigLeft::UVBoRHandRigLeft()
 	ConfigurePokeRig(this);
 }
 
+bool UVBoRHandRigLeft::ReadPalmGrab(bool& bOutClosed) const
+{
+	if (!PalmGrabRecognizer) { return false; }
+	bOutClosed = PalmGrabRecognizer->IsActive();
+	return true;
+}
+
 UVBoRHandRigRight::UVBoRHandRigRight()
 {
 	RigModifiersToSpawn.Add(UIsdkPokeLimiterRigModifier::StaticClass());
 	bAutoBindInputActions = false;
 	ConfigurePokeRig(this);
+}
+
+bool UVBoRHandRigRight::ReadPalmGrab(bool& bOutClosed) const
+{
+	if (!PalmGrabRecognizer) { return false; }
+	bOutClosed = PalmGrabRecognizer->IsActive();
+	return true;
 }
 
 AVBoRHandRigPawn::AVBoRHandRigPawn()
@@ -60,6 +76,25 @@ AVBoRHandRigPawn::AVBoRHandRigPawn()
 	RightRig = CreateDefaultSubobject<UVBoRHandRigRight>(TEXT("RightHandRig"));
 	LeftRig->SetupAttachment(LeftMotion);
 	RightRig->SetupAttachment(RightMotion);
+}
+
+void AVBoRHandRigPawn::PreInitializeComponents()
+{
+	for (UIsdkHandRigComponent* Rig : {static_cast<UIsdkHandRigComponent*>(LeftRig.Get()), static_cast<UIsdkHandRigComponent*>(RightRig.Get())})
+	{
+		UIsdkGrabberComponent* Grabber = Rig->GetGrabber();
+		// P1 에서만 손바닥 근접 잡기 활성. Pinch 와 원거리는 Grabber 초기화 전부터 차단 (P1 §2 D1, U-03)
+		if (bAllowPalmGrab)
+		{
+			Grabber->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, true);
+			Grabber->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch, false);
+			Grabber->SetGrabDetectionTypeAllowed(EIsdkGrabDetectorType::HandGrab, true);
+			Grabber->SetGrabDetectionTypeAllowed(EIsdkGrabDetectorType::DistanceGrab, false);
+			Grabber->SetGrabDetectionTypeAllowed(EIsdkGrabDetectorType::RayGrab, false);
+			Rig->GetGrabInteraction()->bAutoActivate = true;
+		}
+	}
+	Super::PreInitializeComponents();
 }
 
 UIsdkHandRigComponent* AVBoRHandRigPawn::GetHandRig(int32 HandIndex) const
@@ -101,6 +136,11 @@ FString AVBoRHandRigPawn::DescribeRig() const
 			Grabber->IsGrabDetectionTypeAllowed(EIsdkGrabDetectorType::DistanceGrab),
 			Grabber->IsGrabDetectionTypeAllowed(EIsdkGrabDetectorType::RayGrab), *Modifiers,
 			Sources.DataSourceComponent ? *Sources.DataSourceComponent->GetClass()->GetName() : TEXT("unavailable"));
+		Text += FString::Printf(TEXT(" | allow palm grab=%d, grab rig active=%d, hand grab allowed=%d, palm allowed=%d, pinch allowed=%d"),
+			bAllowPalmGrab, Rig->GetGrabInteraction()->IsActive(),
+			Grabber->IsGrabDetectionTypeAllowed(EIsdkGrabDetectorType::HandGrab),
+			Grabber->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm),
+			Grabber->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch));
 	}
 	return Text;
 }

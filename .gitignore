@@ -96,3 +96,10 @@ Plugins/OculusInteractionSamples/
 # Current handoff between Claude Code (spec/review) and the Codex desktop app (implementation).
 # Volatile state (branch, commit, what to do now); durable records live in Docs/Specs and Docs/Reviews.
 /HANDOFF.md
+
+# Dev tooling — local only, cloned/linked per machine.
+# UnrealAgent: in-editor MCP server (Claude bridge). McpAutomationBridge: ChiR24 Unreal MCP server.
+# .unrealagent: machine-local agent settings (MCP server list, tokens are read from Saved/).
+Plugins/UnrealAgent/
+Plugins/McpAutomationBridge/
+.unrealagent/
