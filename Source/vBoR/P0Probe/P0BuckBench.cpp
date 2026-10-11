@@ -15,6 +15,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/Paths.h"
+#include "HAL/PlatformTime.h"
 
 DEFINE_LOG_CATEGORY(LogP0Buck);
 
@@ -47,6 +48,7 @@ namespace
 
 AP0BuckBench::AP0BuckBench()
 {
+	CaptureClock = [] { return FPlatformTime::Seconds(); };
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("BuckOrigin")));
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PostUpdateWork;
@@ -164,6 +166,7 @@ void AP0BuckBench::StartSave()
 	bSaveHeld = true;
 	CaptureOrigin = CurrentFrame.TrackingOrigin;
 	if (!Window.Begin(SaveHoldSeconds, true)) { Record(TEXT("C rejected: invalid hold duration")); return; }
+	LastCaptureSampleSeconds = CaptureClock();
 	Record(FString::Printf(TEXT("C capture started: hold %.3f s"), SaveHoldSeconds));
 }
 
@@ -182,10 +185,11 @@ void AP0BuckBench::StartMeasure()
 	if (Window.bActive || bSaveHeld) { Record(TEXT("M ignored: capture or hold already active")); return; }
 	CaptureOrigin = CurrentFrame.TrackingOrigin;
 	if (!Window.Begin(MeasureSeconds, false)) { Record(TEXT("M rejected: invalid window duration")); return; }
+	LastCaptureSampleSeconds = CaptureClock();
 	Record(FString::Printf(TEXT("M measurement started: %.3f s; no save"), MeasureSeconds));
 }
 
-void AP0BuckBench::ProcessFrame(double DeltaSeconds, const FVBoRBuckHeadFrame& Frame)
+void AP0BuckBench::ProcessFrame(double, const FVBoRBuckHeadFrame& Frame)
 {
 	CurrentFrame = Frame;
 	if (bHasSaved && !bNeedsCheck)
@@ -203,7 +207,10 @@ void AP0BuckBench::ProcessFrame(double DeltaSeconds, const FVBoRBuckHeadFrame& F
 		}
 		else
 		{
-			const bool bComplete = Window.Sample(DeltaSeconds, Frame, MinHorizontalLength);
+			const double Now = CaptureClock();
+			// Tick dt 에 입력 이전 시간이 포함됨. 명령 경계 이후 실제 시간만 셈 (P0-c I1)
+			const bool bComplete = Window.Sample(Now - LastCaptureSampleSeconds, Frame, MinHorizontalLength);
+			LastCaptureSampleSeconds = Now;
 			if (!Window.bActive && !bComplete) { LastCapture = Window.Reason; Record(LastCapture); }
 			if (bComplete)
 			{

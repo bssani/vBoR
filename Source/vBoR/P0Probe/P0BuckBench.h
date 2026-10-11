@@ -68,6 +68,8 @@ private:
 	bool bNeedsCheck = false;
 	bool bSaveHeld = false;
 	int32 CaptureOrigin = 0;
+	TFunction<double()> CaptureClock;
+	double LastCaptureSampleSeconds = 0;
 	int32 RecenterCount = 0;
 	double LastLogSeconds = -1;
 	FDelegateHandle RecenterHandle;

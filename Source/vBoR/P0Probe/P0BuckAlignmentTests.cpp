@@ -22,9 +22,19 @@
 
 struct FP0BuckTestAccess
 {
+	static TMap<AP0BuckBench*, double>& Times() { static TMap<AP0BuckBench*, double> Values; return Values; }
+	static void Clock(AP0BuckBench* Bench)
+	{
+		Times().Add(Bench, 1000);
+		Bench->CaptureClock = [Bench] { return Times().FindChecked(Bench); };
+	}
+	static void RemoveClock(AP0BuckBench* Bench) { Times().Remove(Bench); }
+	static double Time(AP0BuckBench* Bench) { return Times().FindChecked(Bench); }
+	static void SetTime(AP0BuckBench* Bench, double Now) { Times().FindChecked(Bench) = Now; }
 	static void Path(AP0BuckBench* Bench, const FString& Path) { Bench->SavePath = Path; }
 	static void Load(AP0BuckBench* Bench, const FVBoRBuckHeadFrame& Frame) { Bench->LoadAndApply(Frame); }
-	static void Frame(AP0BuckBench* Bench, double Dt, const FVBoRBuckHeadFrame& Head) { Bench->ProcessFrame(Dt, Head); }
+	static void Frame(AP0BuckBench* Bench, double Dt, const FVBoRBuckHeadFrame& Head) { Times().FindChecked(Bench) += Dt; Bench->ProcessFrame(Dt, Head); }
+	static void FrameAt(AP0BuckBench* Bench, double Now, double Dt, const FVBoRBuckHeadFrame& Head) { SetTime(Bench, Now); Bench->ProcessFrame(Dt, Head); }
 	static void Save(AP0BuckBench* Bench) { Bench->StartSave(); }
 	static void Release(AP0BuckBench* Bench) { Bench->ReleaseSave(); }
 	static void Measure(AP0BuckBench* Bench) { Bench->StartMeasure(); }
@@ -34,6 +44,7 @@ struct FP0BuckTestAccess
 	static bool NeedsCheck(AP0BuckBench* Bench) { return Bench->bNeedsCheck; }
 	static const FString& State(AP0BuckBench* Bench) { return Bench->State; }
 	static const FString& TipsText(AP0BuckBench* Bench) { return Bench->LastTips; }
+	static const FString& MeasureText(AP0BuckBench* Bench) { return Bench->LastMeasure; }
 	static const FString& Event(AP0BuckBench* Bench) { return Bench->LastEvent; }
 	static const FVBoRBuckCaptureWindow& Window(AP0BuckBench* Bench) { return Bench->Window; }
 	static int32 RecenterCount(AP0BuckBench* Bench) { return Bench->RecenterCount; }
@@ -81,6 +92,7 @@ namespace
 			Pawn->SetActorLocation(FVector(-100, 75, 0));
 			Controller->Possess(Pawn);
 			Bench = World->SpawnActor<AP0BuckBench>();
+			FP0BuckTestAccess::Clock(Bench);
 			FP0BuckTestAccess::Path(Bench, Path);
 			World->InitializeActorsForPlay(FURL());
 			World->GetWorldSettings()->NotifyBeginPlay();
@@ -91,6 +103,7 @@ namespace
 			World->EndPlay(EEndPlayReason::Quit);
 			GEngine->DestroyWorldContext(World);
 			World->DestroyWorld(false);
+			FP0BuckTestAccess::RemoveClock(Bench);
 			IFileManager::Get().Delete(*Path);
 			IFileManager::Get().Delete(*(Path + TEXT(".candidate")));
 		}
@@ -265,6 +278,69 @@ bool FP0BuckRepeatTest::RunTest(const FString&)
 		FVBoRBuckCaptureWindow Window; Window.Begin(2, true);
 		for (int32 Frame = 0; Frame < Rate * 2 - 1; ++Frame) { TestFalse(TEXT("No early completion"), Window.Sample(1.0 / Rate, Head(), 0.1)); }
 		TestTrue(TEXT("Completion at two seconds at both rates"), Window.Sample(1.0 / Rate, Head(), 0.1));
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0BuckCommandClockTest, "vBoR.P0Buck.CommandPhaseClock", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP0BuckCommandClockTest::RunTest(const FString&)
+{
+	for (int32 Rate : {15, 90})
+	{
+		FBenchWorld Env; Env.Capture();
+		if (!TestTrue(TEXT("Phase test baseline saved"), FP0BuckTestAccess::HasSaved(Env.Bench))) { return false; }
+		const double Step = 1.0 / Rate;
+		FString OriginalFile; FFileHelper::LoadFileToString(OriginalFile, *Env.Path);
+		const auto OriginalSave = FP0BuckTestAccess::Saved(Env.Bench);
+		const FTransform OriginalPawn = Env.Pawn->GetActorTransform();
+		const double BeforePress = FP0BuckTestAccess::Time(Env.Bench);
+		const double PressAt = BeforePress + 0.85 * Step;
+		FP0BuckTestAccess::SetTime(Env.Bench, PressAt);
+		FP0BuckTestAccess::Save(Env.Bench);
+		// Tick dt 의 85% 는 명령 전에 지났음. 실제 명령 경계부터만 시간 계산 (P0-c I1)
+		for (int32 Index = 1; Index <= Rate * 2; ++Index)
+		{
+			FP0BuckTestAccess::FrameAt(Env.Bench, BeforePress + Index * Step, Step, Head(75));
+			TestTrue(FString::Printf(TEXT("C %d fps frame %d cannot finish before full command duration"), Rate, Index), FP0BuckTestAccess::Window(Env.Bench).bActive);
+		}
+		FP0BuckTestAccess::SetTime(Env.Bench, PressAt + Env.Bench->SaveHoldSeconds - 0.01 * Step);
+		FP0BuckTestAccess::Release(Env.Bench);
+		FString AfterRelease; FFileHelper::LoadFileToString(AfterRelease, *Env.Path);
+		TestEqual(TEXT("Release before full C hold leaves file bytes intact"), AfterRelease, OriginalFile);
+		TestEqual(TEXT("Release before full C hold leaves timestamp intact"), FP0BuckTestAccess::Saved(Env.Bench).SavedAt, OriginalSave.SavedAt);
+		TestTrue(TEXT("Release before full C hold leaves Stage yaw intact"), FMath::IsNearlyEqual(FP0BuckTestAccess::Saved(Env.Bench).Capture.YawDeg, 30.0));
+		TestTrue(TEXT("Release before full C hold leaves Pawn intact"), Env.Pawn->GetActorTransform().Equals(OriginalPawn));
+
+		const double RetryBase = FP0BuckTestAccess::Time(Env.Bench);
+		const double RetryPress = RetryBase + 0.85 * Step;
+		FP0BuckTestAccess::SetTime(Env.Bench, RetryPress); FP0BuckTestAccess::Save(Env.Bench);
+		for (int32 Index = 1; Index <= Rate * 2; ++Index)
+		{
+			FP0BuckTestAccess::FrameAt(Env.Bench, RetryBase + Index * Step, Step, Head(75));
+			TestTrue(TEXT("Retry C also waits for whole actual hold"), FP0BuckTestAccess::Window(Env.Bench).bActive);
+		}
+		FP0BuckTestAccess::FrameAt(Env.Bench, RetryBase + (Rate * 2 + 1) * Step, Step, Head(75));
+		TestFalse(TEXT("C completes after whole command duration"), FP0BuckTestAccess::Window(Env.Bench).bActive);
+		TestTrue(TEXT("C completed candidate replaces saved yaw"), FMath::IsNearlyEqual(FP0BuckTestAccess::Saved(Env.Bench).Capture.YawDeg, 75.0));
+		FP0BuckTestAccess::Release(Env.Bench);
+		FString SavedAfterC; FFileHelper::LoadFileToString(SavedAfterC, *Env.Path);
+		const FString BeforeM = FP0BuckTestAccess::MeasureText(Env.Bench);
+		const double MBase = FP0BuckTestAccess::Time(Env.Bench);
+		const double MPress = MBase + 0.85 * Step;
+		FP0BuckTestAccess::SetTime(Env.Bench, MPress); FP0BuckTestAccess::Measure(Env.Bench);
+		const int32 MFrames = FMath::CeilToInt(Env.Bench->MeasureSeconds * Rate);
+		for (int32 Index = 1; Index <= MFrames; ++Index)
+		{
+			FP0BuckTestAccess::FrameAt(Env.Bench, MBase + Index * Step, Step, Head(85));
+			TestTrue(FString::Printf(TEXT("M %d fps frame %d cannot finish before full command duration"), Rate, Index), FP0BuckTestAccess::Window(Env.Bench).bActive);
+		}
+		TestEqual(TEXT("M does not publish prematurely"), FP0BuckTestAccess::MeasureText(Env.Bench), BeforeM);
+		FP0BuckTestAccess::FrameAt(Env.Bench, MPress + Env.Bench->MeasureSeconds + 0.02 * Step, Step, Head(85));
+		TestFalse(TEXT("M completes after full actual window"), FP0BuckTestAccess::Window(Env.Bench).bActive);
+		TestTrue(TEXT("M completed mean is published"), FP0BuckTestAccess::MeasureText(Env.Bench).Contains(TEXT("M averaged")));
+		FString AfterM; FFileHelper::LoadFileToString(AfterM, *Env.Path);
+		TestEqual(TEXT("M never changes saved file"), AfterM, SavedAfterC);
+		TestTrue(TEXT("M never changes saved pose"), FMath::IsNearlyEqual(FP0BuckTestAccess::Saved(Env.Bench).Capture.YawDeg, 75.0));
 	}
 	return true;
 }
