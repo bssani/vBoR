@@ -7,6 +7,7 @@
 
 class UCameraComponent;
 class UMotionControllerComponent;
+struct FVBoRDoorHand;
 
 // protected modifier 목록에 필수 limiter 를 넣기 위한 얇은 리그 자식 (P0-b §3)
 UCLASS()
@@ -36,6 +37,7 @@ public:
 	virtual void PreInitializeComponents() override;
 	UIsdkHandRigComponent* GetHandRig(int32 HandIndex) const;
 	bool ReadRawIndexTip(int32 HandIndex, FVector& OutWorldTip) const;
+	bool ReadRawPalmAndTips(int32 HandIndex, FVBoRDoorHand& OutHand) const;
 	FString DescribeRig() const;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hand Rig")

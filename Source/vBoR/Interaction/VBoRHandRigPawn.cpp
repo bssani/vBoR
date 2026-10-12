@@ -1,4 +1,5 @@
 #include "VBoRHandRigPawn.h"
+#include "VBoRDoorMotion.h"
 
 #include "Camera/CameraComponent.h"
 #include "HeadMountedDisplayFunctionLibrary.h"
@@ -113,6 +114,29 @@ bool AVBoRHandRigPawn::ReadRawIndexTip(int32 HandIndex, FVector& OutWorldTip) co
 	if (!State.bValid || State.TrackingStatus != ETrackingStatus::Tracked || !State.HandKeyLocations.IsValidIndex(TipIndex)) { return false; }
 	OutWorldTip = State.HandKeyLocations[TipIndex];
 	return !OutWorldTip.ContainsNaN();
+}
+
+bool AVBoRHandRigPawn::ReadRawPalmAndTips(int32 HandIndex, FVBoRDoorHand& OutHand) const
+{
+	OutHand = FVBoRDoorHand();
+	if (HandIndex < 0 || HandIndex > 1) { return false; }
+	FXRHandTrackingState State;
+	UHeadMountedDisplayFunctionLibrary::GetHandTrackingState(const_cast<AVBoRHandRigPawn*>(this),
+		EXRSpaceType::UnrealWorldSpace, HandIndex == 0 ? EControllerHand::Left : EControllerHand::Right, State);
+	const EHandKeypoint Keys[] = {EHandKeypoint::Palm, EHandKeypoint::IndexTip, EHandKeypoint::MiddleTip, EHandKeypoint::RingTip, EHandKeypoint::LittleTip};
+	if (!State.bValid || State.TrackingStatus != ETrackingStatus::Tracked || !State.HandKeyRotations.IsValidIndex(0)) { return false; }
+	for (int32 I = 0; I < 5; ++I)
+	{
+		const int32 Key = static_cast<int32>(Keys[I]);
+		if (!State.HandKeyLocations.IsValidIndex(Key) || State.HandKeyLocations[Key].ContainsNaN()) { return false; }
+		OutHand.Points[I] = State.HandKeyLocations[Key];
+	}
+	const FQuat Palm = State.HandKeyRotations[0];
+	if (Palm.ContainsNaN() || !Palm.IsNormalized()) { return false; }
+	// OpenXR +Y 손등 → UE +Z, 손바닥은 −Z 로 추정함 (P2 §2-1, 기기 미확인)
+	OutHand.PalmNormal = -Palm.GetUpVector();
+	OutHand.bTracked = true;
+	return true;
 }
 
 FString AVBoRHandRigPawn::DescribeRig() const
