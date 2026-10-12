@@ -19,6 +19,23 @@
 |---|---|---|---|---|
 | 1 | 2026-10-12 | `bfb72d7` P2 문 시험대 + 레벨 | Claude | **2건.** 빌드·시험 재현: non-unity(`.cpp` 33개)·unity 경고·오류 0, `vBoR.*` 76/76. 기하·잠금·속도 상한·잡기 우선은 명세대로다. "밀기 무시"가 문에 닿지 않은 손까지 매 frame 세어 핵심 값이 의미를 잃음(R1-1). 미는 손의 추적 손실이 문 전체를 보류해 다른 손이 못 씀(R1-2, Claude 명세 모호). **토큰 규칙을 지켰다(6.1M, 하위 에이전트 0)** |
 | 1+ | 2026-10-12 | 사용자 VR(`bfb72d7`) | Claude | **R1-3 추가(가장 먼저): 손잡이가 잡히지 않아 문을 열 수 없다.** 손잡이 잡기 시도 0번(ISDK가 손잡이를 감지하지 못함), 잠금 해제 0번. 손잡이 상자가 모든 채널 Ignore·overlap 이벤트 꺼짐이라 ISDK 손바닥 구 콜라이더의 overlap이 생기지 않는다. 시험은 ISDK 이벤트를 직접 넣어 이 경로를 건너뛰었다 |
+| 2 | 2026-10-13 | `5d75550` 1회차 반영 + 사용자 VR 2차 | Claude | **통과, 열린 항목 없음.** R1-3·R1-1·R1-2 반영 확인. 빌드·시험 재현: non-unity(`.cpp` 33개)·unity 경고·오류 0, `vBoR.*` 79/79. VR: 풀림 5·잠김 5, 밀기 12, 손바닥–문 각 10–41°로 −Z 축 추정 확인. 토큰 4.4M, 하위 에이전트 0 |
+
+### 2회차에 확인한 것
+
+- **빌드·시험 재현.** 에디터를 닫고, vBoR 소스 수정 시각을 갱신한 뒤 빌드했다.
+  - non-unity(`-DisableUnity -Module=vBoR`): `.cpp` 33개와 gen 파일을 하나씩 컴파일했다. 경고·오류 0.
+  - unity: 경고·오류 0.
+  - 시험: `vBoR.*` **79/79 Success**, `TEST COMPLETE. EXIT CODE: 0`. 로그: `Saved/Logs/P2R2ClaudeAutomation.log`. 추가 Warning 없음.
+- **R1-3:** 손잡이 상자가 `ECC_WorldDynamic`에만 Overlap으로 응답하고, overlap 이벤트를 켰다(`VBoRHingedDoor.cpp:57-62`). 나머지 채널은 Ignore다.
+  - 시험 E20: ISDK 손바닥 구와 같은 설정의 구를 손잡이 안으로 옮겨, 실제 overlap과 `FindGrabbableByComponent`를 확인한다.
+  - VR에서 잡기 16번, 풀림 5번이 나왔다.
+- **R1-1:** 무시는 문 면 범위 + 가장자리 5 cm 안에서 면을 넘은 접촉만 센다. 면 뒤로 두께 넘게 떨어진 손은 crossing·연속 밀기가 아니면 뺀다.
+  - 손별 직전 이유와 다를 때만 센다(`RecordIgnore`, 에피소드). 추적 Low는 직전에 접촉 근처였던 손만 센다.
+  - VR 값(잠김 10, 손바닥 방향 6, 면 뒤 6, 범위 밖 2)이 이제 접촉 횟수 크기다.
+- **R1-2:** 보류 구동 손은 잡은 손뿐이다(`VBoRDoorMotion.cpp:144`). 밀던 손을 잃으면 그 밀기만 끝나고 "밀기 중 추적 손실"로 센다. 그 손의 `bHavePrevious`만 지운다.
+- **손바닥 축(−Z) 추정이 기기에서 맞았다:** 밀기 중 손바닥–문 각이 10–41°였다(조사 기록 2026-10-12 "P2 실측").
+- **토큰:** 새 대화 한 세션(23:39–23:52), **4.4M**, 하위 에이전트 0. 새 시험 하나가 처음에 실패해서 빌드 4번·시험 3번이 됐다. 실제 실패 수정이라 규칙 위반이 아니다.
 
 ### 1회차에 확인한 것
 
@@ -48,7 +65,11 @@
 
 ## 열린 항목
 
-### R1-3 손잡이가 ISDK 손바닥 잡기에 감지되지 않아 문을 열 수 없다 — 반영함 (fix: restore door contacts and push handoff) (가장 먼저)
+없음.
+
+## 1회차 항목 (모두 반영함)
+
+### R1-3 손잡이가 ISDK 손바닥 잡기에 감지되지 않아 문을 열 수 없다 — 반영함 (`5d75550`) (가장 먼저)
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRHingedDoor.cpp:57-60`. 손잡이 `UBoxComponent`가 `SetCollisionResponseToAllChannels(ECR_Ignore)`, `SetGenerateOverlapEvents(false)`다.
@@ -71,7 +92,7 @@
 - 실제 overlap: 시험 world에서 문을 만들고, ISDK 손바닥 구와 같은 설정의 `USphereComponent`(반지름 4 cm, `ECC_WorldDynamic`, 모든 채널 Overlap, overlap 이벤트 켬)를 바깥 손잡이 안으로 옮긴다. 손잡이와 overlap이 생기고, `UIsdkFunctionLibrary::FindGrabbableByComponent`(손잡이 상자)가 바깥 손잡이 grabbable을 돌려준다.
 - 안쪽 손잡이도 같다. 문 메시와는 overlap이 없다.
 
-### R1-1 "밀기 무시" 집계가 문에 닿지 않은 손까지 매 frame 세어, 무관한 손을 거르는지 볼 수 없다 — 반영함 (fix: restore door contacts and push handoff)
+### R1-1 "밀기 무시" 집계가 문에 닿지 않은 손까지 매 frame 세어, 무관한 손을 거르는지 볼 수 없다 — 반영함 (`5d75550`)
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRDoorMotion.cpp`
@@ -100,7 +121,7 @@
 - 문 가장자리 3 cm 밖에서 면을 넘음 → `Outside` 1. 가장자리 30 cm 밖 → 0.
 - 기존 E7·E8·E9 시험은 정확한 횟수로 바꾼다.
 
-### R1-2 미는 손이 추적을 잃으면 문 전체가 보류되어, 다른 손이 밀지도 잡지도 못한다 (Claude 명세 모호) — 반영함 (fix: restore door contacts and push handoff)
+### R1-2 미는 손이 추적을 잃으면 문 전체가 보류되어, 다른 손이 밀지도 잡지도 못한다 (Claude 명세 모호) — 반영함 (`5d75550`)
 
 **문제**
 - **위치:**
