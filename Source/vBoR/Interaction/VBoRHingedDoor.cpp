@@ -57,7 +57,9 @@ AVBoRHingedDoor::AVBoRHingedDoor()
 		Handle->SetBoxExtent(FVector(9, 4, 4));
 		Handle->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 		Handle->SetCollisionResponseToAllChannels(ECR_Ignore);
-		Handle->SetGenerateOverlapEvents(false);
+		// Palm detector 의 overlap 만 허용함 (손잡이 감지, P2 E20)
+		Handle->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Overlap);
+		Handle->SetGenerateOverlapEvents(true);
 	}
 	OutsideHandle->SetRelativeLocation(FVector(100, 9, 60));
 	InsideHandle->SetRelativeLocation(FVector(85, -9, 50));
@@ -253,15 +255,15 @@ FString AVBoRHingedDoor::GetMeasurementText(const FVBoRDoorMetrics* Baseline) co
 {
 	const FVBoRDoorMetrics M = Baseline ? Motion.Metrics.Since(*Baseline) : Motion.Metrics;
 	return FString::Printf(TEXT("Unlock=%d latch=%d last unlock=%s\nPush L outside/inside=%d/%d R=%d/%d | moved %.2f deg\n"
-		"Ignored frames: locked=%d palm direction=%d behind=%d near axis=%d outside=%d tracking Low=%d\n"
+		"Ignored contacts: locked=%d palm direction=%d behind=%d near axis=%d outside=%d tracking Low=%d\n"
 		"Handle attempts/grabs: L outside=%d/%d inside=%d/%d R outside=%d/%d inside=%d/%d | held %.3f s\n"
-		"Rate capped frames=%d | pauses=%d %.3f s | recovery unapplied=%.2f cm | ignored SDK release=%d\n"
+		"Rate capped frames=%d | grab pauses=%d %.3f s | recovery unapplied=%.2f cm | ignored SDK release=%d | push tracking losses=%d\n"
 		"Palm-to-face angle L=%.1f R=%.1f deg (-1: no candidate) | palm axis -Z inferred; not-tested"),
 		M.Unlocks, M.Latches, M.LastUnlockHandle == 0 ? TEXT("outside") : M.LastUnlockHandle == 1 ? TEXT("inside") : TEXT("none"),
 		M.PushStarts[0][0], M.PushStarts[0][1], M.PushStarts[1][0], M.PushStarts[1][1], M.PushedDeg,
 		M.Ignored[0], M.Ignored[1], M.Ignored[2], M.Ignored[3], M.Ignored[4], M.Ignored[5],
 		M.Attempts[0][0], M.Grabs[0][0], M.Attempts[0][1], M.Grabs[0][1], M.Attempts[1][0], M.Grabs[1][0], M.Attempts[1][1], M.Grabs[1][1],
-		M.HeldSeconds, M.RateLimitedFrames, M.Pauses, M.PausedSeconds, M.RecoveryDistanceCm, M.IgnoredReleases, Motion.PalmAngleDeg[0], Motion.PalmAngleDeg[1]);
+		M.HeldSeconds, M.RateLimitedFrames, M.Pauses, M.PausedSeconds, M.RecoveryDistanceCm, M.IgnoredReleases, M.PushTrackingLosses, Motion.PalmAngleDeg[0], Motion.PalmAngleDeg[1]);
 }
 
 void AVBoRHingedDoor::EndPlay(const EEndPlayReason::Type Reason)

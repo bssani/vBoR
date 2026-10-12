@@ -18,7 +18,7 @@ struct FVBoRDoorMetrics
 	int32 PushStarts[2][2] = {}; // 손, 면 (0 바깥 / 1 안쪽)
 	int32 Ignored[static_cast<int32>(EVBoRDoorIgnore::Count)] = {};
 	int32 Attempts[2][2] = {}, Grabs[2][2] = {}; // 손, 손잡이
-	int32 RateLimitedFrames = 0, Pauses = 0, IgnoredReleases = 0;
+	int32 RateLimitedFrames = 0, Pauses = 0, IgnoredReleases = 0, PushTrackingLosses = 0;
 	double PushedDeg = 0, HeldSeconds = 0, PausedSeconds = 0, RecoveryDistanceCm = 0;
 	FVBoRDoorMetrics Since(const FVBoRDoorMetrics& Before) const;
 };
@@ -43,10 +43,14 @@ struct FVBoRDoorMotion
 private:
 	FVBoRDoorHand Previous[2];
 	bool bHavePrevious[2] = {false, false};
+	bool bContactNear[2] = {false, false};
+	int32 ContactFace[2] = {INDEX_NONE, INDEX_NONE};
+	EVBoRDoorIgnore LastIgnored[2] = {EVBoRDoorIgnore::Count, EVBoRDoorIgnore::Count};
 	double PreviousAngleDeg = 0;
 	FVector LastGrabPoint = FVector::ZeroVector;
 	double GrabReferenceBearingDeg = 0, GrabReferenceAngleDeg = 0;
 	void RebaseGrab(const FVector& Point);
-	bool FindPush(int32 Hand, const FVBoRDoorHand& Input, int32 Face, double& OutAngle);
+	bool FindPush(int32 Hand, const FVBoRDoorHand& Input, int32 Face, double& OutAngle, EVBoRDoorIgnore& OutReason);
+	void RecordIgnore(int32 Hand, EVBoRDoorIgnore Reason);
 	void MoveTo(double Desired, double DeltaSeconds, bool bPushing);
 };

@@ -25,6 +25,7 @@ bool FP2DoorGrabTest::RunTest(const FString& Parameters)
 	FVBoRDoorHand Hands[2] = {DoorHand(FVector(100, 10, 60)), {}};
 	Door.Advance(Hands, 0.1);
 	TestEqual(TEXT("E1 locked ignores outside push"), Door.AngleDeg, 0.0);
+	TestEqual(TEXT("Hand outside face has no locked contact"), Door.Metrics.Ignored[0], 0);
 	TestTrue(TEXT("E2 outside handle unlocks"), Door.BeginGrab(0, 0, Hands[0]));
 	TestFalse(TEXT("Unlocked"), Door.bLocked);
 	TestEqual(TEXT("Unlock once"), Door.Metrics.Unlocks, 1);
@@ -49,7 +50,6 @@ bool FP2DoorGrabTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Latch terminates grab"), Door.GrabHand, INDEX_NONE);
 	Door.Advance(Hands, 0.1);
 	TestEqual(TEXT("Latch sound/event count remains one"), Door.Metrics.Latches, 1);
-	TestTrue(TEXT("Locked count"), Door.Metrics.Ignored[0] > 0);
 	return true;
 }
 
@@ -88,28 +88,30 @@ bool FP2DoorPushGatesTest::RunTest(const FString& Parameters)
 	Door.Advance(Hands, 0.1);
 	Door.Advance(Hands, 0.1);
 	TestEqual(TEXT("E8 appearing behind does not start"), Door.AngleDeg, 0.0);
-	TestTrue(TEXT("Behind counted"), Door.Metrics.Ignored[2] > 0);
+	TestEqual(TEXT("Behind contact is one episode"), Door.Metrics.Ignored[2], 1);
 	Hands[0] = DoorHand(FVector(80, -10, 50), FVector(1, 0, 0));
 	Door.Advance(Hands, 0.1);
 	Hands[0].Points[0] = FVector(80, 0, 50);
 	Door.Advance(Hands, 0.1);
 	TestEqual(TEXT("E7 hand edge"), Door.AngleDeg, 0.0);
-	TestTrue(TEXT("Direction counted"), Door.Metrics.Ignored[1] > 0);
+	TestEqual(TEXT("Direction contact is one episode"), Door.Metrics.Ignored[1], 1);
 	Hands[0] = DoorHand(FVector(5, -8, 50), FVector(0, 1, 0));
 	Door.Advance(Hands, 0.1);
 	Hands[0] = DoorHand(FVector(5, 0, 50), FVector(0, 1, 0));
 	Door.Advance(Hands, 0.1);
 	TestEqual(TEXT("E9 near hinge"), Door.AngleDeg, 0.0);
-	TestTrue(TEXT("Near axis counted"), Door.Metrics.Ignored[3] > 0);
-	Hands[0] = DoorHand(FVector(120, 0, 50), FVector(0, 1, 0));
+	TestEqual(TEXT("Near axis contact is one episode"), Door.Metrics.Ignored[3], 1);
+	Hands[0] = DoorHand(FVector(113, -8, 50), FVector(0, 1, 0));
 	Door.Advance(Hands, 0.1);
-	TestTrue(TEXT("Outside counted"), Door.Metrics.Ignored[4] > 0);
+	Hands[0] = DoorHand(FVector(113, 0, 50), FVector(0, 1, 0));
+	Door.Advance(Hands, 0.1);
+	TestEqual(TEXT("Edge band counted once"), Door.Metrics.Ignored[4], 1);
 	Hands[0] = DoorHand(FVector(80, 0, 110), FVector(0, 1, 0));
 	Door.Advance(Hands, 0.1);
 	TestEqual(TEXT("Outside height"), Door.AngleDeg, 0.0);
 	Hands[0].bTracked = false;
 	Door.Advance(Hands, 0.1);
-	TestTrue(TEXT("Tracking counted"), Door.Metrics.Ignored[5] > 0);
+	TestEqual(TEXT("Tracking loss after edge contact counted once"), Door.Metrics.Ignored[5], 1);
 	Hands[0] = DoorHand(FVector(80, -8, 50), FVector(0, 1, 0));
 	Door.Advance(Hands, 0.1);
 	Hands[0] = DoorHand(FVector(80, 0, 50), FVector(0, 1, 0));
@@ -167,6 +169,7 @@ bool FP2DoorPauseTest::RunTest(const FString& Parameters)
 	Hands[0].bTracked = false;
 	Door.Advance(Hands, 0.1);
 	TestTrue(TEXT("E14 pause"), Door.bPaused);
+	TestFalse(TEXT("E14 paused grab rejects other hand"), Door.BeginGrab(1, 1, Hands[1]));
 	TestFalse(TEXT("E14 SDK release ignored"), Door.ReleaseGrab(false));
 	TestEqual(TEXT("Ignored release counted"), Door.Metrics.IgnoredReleases, 1);
 	Hands[0] = DoorHand(FVector(80, 48, 50));
@@ -190,10 +193,83 @@ bool FP2DoorPauseTest::RunTest(const FString& Parameters)
 	const double Stop = Door.AngleDeg;
 	Hands[0].bTracked = false;
 	Door.Advance(Hands, 0.1);
+	TestFalse(TEXT("E15 push loss is not a grab pause"), Door.bPaused);
+	TestEqual(TEXT("E15 push loss measured separately"), Door.Metrics.PushTrackingLosses, 1);
 	Hands[0] = DoorHand(FVector(80, 40, 50), FVector(0, 1, 0));
 	Door.Advance(Hands, 0.1);
 	Door.Advance(Hands, 0.1);
 	TestEqual(TEXT("E15 recovery behind does not resume push"), Door.AngleDeg, Stop);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2DoorIgnoreEpisodesTest, "vBoR.P2Door.IgnoreContactEpisodes", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP2DoorIgnoreEpisodesTest::RunTest(const FString& Parameters)
+{
+	FVBoRDoorMotion Door;
+	FVBoRDoorHand Hands[2] = {DoorHand(FVector(80, 35, 50)), DoorHand(FVector(80, -35, 50), FVector(0, 1, 0))};
+	for (int32 I = 0; I < 60; ++I) { Door.Advance(Hands, 1.0 / 60); }
+	Hands[0] = DoorHand(FVector(160, 0, 50), FVector(0, 0, -1)); Hands[1] = {};
+	for (int32 I = 0; I < 60; ++I) { Door.Advance(Hands, 1.0 / 60); }
+	for (int32 Count : Door.Metrics.Ignored) { TestEqual(TEXT("Distant and untracked hands produce no ignored contacts"), Count, 0); }
+	Hands[0] = DoorHand(FVector(80, 8, 50)); Door.Advance(Hands, 0.1);
+	Hands[0] = DoorHand(FVector(80, 0, 50));
+	for (int32 I = 0; I < 60; ++I) { Door.Advance(Hands, 1.0 / 60); }
+	TestEqual(TEXT("Locked push for one second is one episode"), Door.Metrics.Ignored[0], 1);
+	Door.Reset(); Door.bLocked = false;
+	for (int32 Episode = 1; Episode <= 2; ++Episode)
+	{
+		Hands[0] = DoorHand(FVector(80, -8, 50), FVector(0, -1, 0)); Door.Advance(Hands, 0.1);
+		Hands[0] = DoorHand(FVector(80, 0, 50), FVector(0, -1, 0));
+		for (int32 I = 0; I < 60; ++I) { Door.Advance(Hands, 1.0 / 60); }
+		TestEqual(TEXT("Back of hand counted once until withdrawal"), Door.Metrics.Ignored[1], Episode);
+	}
+	Hands[0].bTracked = false;
+	for (int32 I = 0; I < 60; ++I) { Door.Advance(Hands, 1.0 / 60); }
+	TestEqual(TEXT("Reason change to Low is one episode"), Door.Metrics.Ignored[5], 1);
+	Hands[0] = DoorHand(FVector(113, -8, 50), FVector(0, 1, 0)); Door.Advance(Hands, 0.1);
+	Hands[0] = DoorHand(FVector(113, 0, 50), FVector(0, 1, 0));
+	for (int32 I = 0; I < 60; ++I) { Door.Advance(Hands, 1.0 / 60); }
+	TestEqual(TEXT("Three cm beyond edge is one outside contact"), Door.Metrics.Ignored[4], 1);
+	Hands[0] = DoorHand(FVector(140, -8, 50), FVector(0, 1, 0)); Door.Advance(Hands, 0.1);
+	Hands[0] = DoorHand(FVector(140, 0, 50), FVector(0, 1, 0)); Door.Advance(Hands, 0.1);
+	TestEqual(TEXT("Thirty cm beyond edge adds no contact"), Door.Metrics.Ignored[4], 1);
+	TestEqual(TEXT("Rejected contacts never move door"), Door.AngleDeg, 0.0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2DoorPushLossTest, "vBoR.P2Door.PushLossAllowsOtherHand", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP2DoorPushLossTest::RunTest(const FString& Parameters)
+{
+	for (int32 Mode = 0; Mode < 2; ++Mode)
+	{
+		FVBoRDoorMotion Door; Door.bLocked = false;
+		FVBoRDoorHand Hands[2] = {{}, DoorHand(FVector(80, -8, 50), FVector(0, 1, 0))};
+		Door.Advance(Hands, 0.1);
+		Hands[1] = DoorHand(FVector(80, 10, 50), FVector(0, 1, 0));
+		Door.Advance(Hands, 0.1);
+		double Before = Door.AngleDeg;
+		Hands[0] = DoorHand(DoorPoint(Before, FVector(70, -8, 50)), DoorPoint(Before, FVector(0, 1, 0)));
+		// 손실 직전에도 밀기가 진행 중이어야 함 (면 도착 후 종료와 구별, P2 E15b)
+		Hands[1] = DoorHand(FVector(80, 40, 50), FVector(0, 1, 0));
+		Door.Advance(Hands, 0.01);
+		Before = Door.AngleDeg;
+		TestEqual(TEXT("Right hand is still pushing before loss"), Door.PushHand, 1);
+		Hands[1].bTracked = false;
+		Door.Advance(Hands, 0.1);
+		TestFalse(TEXT("E15b losing right push never pauses whole door"), Door.bPaused);
+		TestEqual(TEXT("Push loss once"), Door.Metrics.PushTrackingLosses, 1);
+		TestEqual(TEXT("Push loss is not counted as grab pause"), Door.Metrics.Pauses, 0);
+		TestEqual(TEXT("Push loss holds angle"), Door.AngleDeg, Before);
+		if (Mode == 0)
+		{
+			Hands[0] = DoorHand(DoorPoint(Before, FVector(70, 10, 50)), DoorPoint(Before, FVector(0, 1, 0)));
+			Door.Advance(Hands, 0.1);
+			TestTrue(TEXT("E15b next frame left push moves door"), Door.AngleDeg > Before);
+		}
+		else { TestTrue(TEXT("E15b next frame left grab accepted"), Door.BeginGrab(0, 1, Hands[0])); }
+		FVBoRDoorMetrics Baseline; Baseline.PushTrackingLosses = 0;
+		TestEqual(TEXT("Trial includes push tracking loss"), Door.Metrics.Since(Baseline).PushTrackingLosses, 1);
+	}
 	return true;
 }
 #endif

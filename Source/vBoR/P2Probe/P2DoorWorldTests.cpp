@@ -4,15 +4,49 @@
 #include "P2DoorBenchGameMode.h"
 #include "../Interaction/VBoRHingedDoor.h"
 #include "Components/BoxComponent.h"
+#include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/WorldSettings.h"
 #include "Interaction/IsdkGrabbableComponent.h"
+#include "IsdkFunctionLibrary.h"
 #include "Interaction/IsdkGrabberComponent.h"
 #include "Rig/IsdkGrabInteractionRigComponent.h"
 #include "Rig/IsdkRayInteractionRigComponent.h"
 #include "StructTypesNonGenerated.h"
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2DoorHandleOverlapTest, "vBoR.P2Door.World.PalmHandleOverlap", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP2DoorHandleOverlapTest::RunTest(const FString& Parameters)
+{
+	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
+	AVBoRHingedDoor* Door = World->SpawnActor<AVBoRHingedDoor>();
+	AActor* PalmActor = World->SpawnActor<AActor>();
+	USphereComponent* Palm = NewObject<USphereComponent>(PalmActor);
+	PalmActor->SetRootComponent(Palm);
+	Palm->InitSphereRadius(4);
+	Palm->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	Palm->SetCollisionObjectType(ECC_WorldDynamic);
+	Palm->SetCollisionResponseToAllChannels(ECR_Overlap);
+	Palm->SetGenerateOverlapEvents(true);
+	Palm->SetWorldLocation(FVector(300, 300, 300));
+	Palm->RegisterComponent();
+	World->InitializeActorsForPlay(FURL());
+	World->GetWorldSettings()->NotifyBeginPlay();
+	for (int32 H = 0; H < 2; ++H)
+	{
+		UBoxComponent* Handle = H == 0 ? Door->OutsideHandle.Get() : Door->InsideHandle.Get();
+		UIsdkGrabbableComponent* Grab = H == 0 ? Door->OutsideGrab.Get() : Door->InsideGrab.Get();
+		Palm->SetWorldLocation(Handle->GetComponentLocation());
+		TestTrue(TEXT("E20 palm sphere overlaps handle after movement"), Palm->IsOverlappingComponent(Handle));
+		TestTrue(TEXT("E20 collider resolves to correct ISDK grabbable"), UIsdkFunctionLibrary::FindGrabbableByComponent(Handle) == Grab);
+		TestFalse(TEXT("Door mesh never overlaps palm"), Palm->IsOverlappingComponent(Door->DoorMesh));
+		Palm->SetWorldLocation(FVector(300, 300, 300));
+		TestFalse(TEXT("Withdrawal ends handle overlap"), Palm->IsOverlappingComponent(Handle));
+	}
+	World->EndPlay(EEndPlayReason::Quit); World->DestroyWorld(false);
+	return true;
+}
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2DoorAssemblyTest, "vBoR.P2Door.World.AssemblyAndRig", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP2DoorAssemblyTest::RunTest(const FString& Parameters)

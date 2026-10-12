@@ -48,7 +48,7 @@
 
 ## 열린 항목
 
-### R1-3 손잡이가 ISDK 손바닥 잡기에 감지되지 않아 문을 열 수 없다 — 열림 (가장 먼저)
+### R1-3 손잡이가 ISDK 손바닥 잡기에 감지되지 않아 문을 열 수 없다 — 반영함 (fix: restore door contacts and push handoff) (가장 먼저)
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRHingedDoor.cpp:57-60`. 손잡이 `UBoxComponent`가 `SetCollisionResponseToAllChannels(ECR_Ignore)`, `SetGenerateOverlapEvents(false)`다.
@@ -71,7 +71,7 @@
 - 실제 overlap: 시험 world에서 문을 만들고, ISDK 손바닥 구와 같은 설정의 `USphereComponent`(반지름 4 cm, `ECC_WorldDynamic`, 모든 채널 Overlap, overlap 이벤트 켬)를 바깥 손잡이 안으로 옮긴다. 손잡이와 overlap이 생기고, `UIsdkFunctionLibrary::FindGrabbableByComponent`(손잡이 상자)가 바깥 손잡이 grabbable을 돌려준다.
 - 안쪽 손잡이도 같다. 문 메시와는 overlap이 없다.
 
-### R1-1 "밀기 무시" 집계가 문에 닿지 않은 손까지 매 frame 세어, 무관한 손을 거르는지 볼 수 없다 — 열림
+### R1-1 "밀기 무시" 집계가 문에 닿지 않은 손까지 매 frame 세어, 무관한 손을 거르는지 볼 수 없다 — 반영함 (fix: restore door contacts and push handoff)
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRDoorMotion.cpp`
@@ -100,7 +100,7 @@
 - 문 가장자리 3 cm 밖에서 면을 넘음 → `Outside` 1. 가장자리 30 cm 밖 → 0.
 - 기존 E7·E8·E9 시험은 정확한 횟수로 바꾼다.
 
-### R1-2 미는 손이 추적을 잃으면 문 전체가 보류되어, 다른 손이 밀지도 잡지도 못한다 (Claude 명세 모호) — 열림
+### R1-2 미는 손이 추적을 잃으면 문 전체가 보류되어, 다른 손이 밀지도 잡지도 못한다 (Claude 명세 모호) — 반영함 (fix: restore door contacts and push handoff)
 
 **문제**
 - **위치:**
@@ -127,3 +127,92 @@
 ## 질문
 
 없음.
+
+## Codex 반영 — 리뷰 1회차 (2026-10-12)
+
+커밋 제목: `fix: restore door contacts and push handoff`. R1-3·R1-1·R1-2 반영, 질문 없음.
+
+① 바뀐 파일
+- Source/vBoR/Interaction/VBoRHingedDoor.cpp: 두 손잡이의 WorldDynamic
+  overlap 허용, overlap 이벤트 켬. Ignored contacts·push tracking losses 표시.
+- Source/vBoR/Interaction/VBoRDoorMotion.h/.cpp: 접촉 후보 먼저 검사,
+  손별·이유별 무시 에피소드 집계, 밀기 추적 손실과 잡기 보류 분리.
+- Source/vBoR/P2Probe/P2DoorMotionTests.cpp: 정확한 무시 횟수,
+  문과 먼 손·가장자리·이유 변경·밀던 손 손실 후 다른 손 시험.
+- Source/vBoR/P2Probe/P2DoorWorldTests.cpp: 실제 Palm 구 이동으로
+  양쪽 손잡이 overlap·ISDK grabbable 검색·문 메시 비접촉 확인.
+- Docs/Reviews/P2-door-hand.md: R1-3·R1-1·R1-2 상태와 이 보고.
+- HANDOFF.md는 git 무시 파일로 결과를 별도 기록함.
+
+② 명세 §6 완료 조건별 충족 여부
+1. 충족: 패널·LogP2Door의 무시 집계는 Ignored contacts,
+   밀던 손 추적 손실은 push tracking losses로 표시함.
+   Since 차분에도 새 횟수를 포함함. 기존 측정 유지.
+2. 코드·합성 시험 충족: 각도 범위·속도 상한·잠금·잡기 우선 유지.
+   밀기 손실은 해당 밀기만 종료, 잡기 손실은 기존 보류·release 무시·
+   복구 rebase 유지. P0·P1 코드 동작 변경 없음, 기존 69개 통과.
+3. 충족: E7·E8·E9를 정확한 횟수로 검증함.
+   먼 손 0, 잠긴 접촉 1, 손등 접촉 1→철회 후 2,
+   가장자리 3 cm는 1·30 cm는 0, Low 에피소드 1 확인.
+   E14·E15·E15b, E20 실제 overlap 확인. P2 총 10개 통과.
+4. 충족: 설치된 엔진·ISDK 헤더와 소스를 대조함. ④ 참조.
+5. 충족: 최종 non-unity·unity 성공, vBoR 컴파일·링크 warning/error 0.
+   샘플·두 로컬 도구 플러그인을 끈 vBoR.* 79/79 Success,
+   Fail 0, TEST COMPLETE EXIT CODE 0, 프로세스 종료 코드 0.
+6. 이번 리뷰는 레벨 작업 없음. 기존 Content/P2/L_P2_Door.umap 유지.
+   MCP 호출·에디터 단계 없음. 기존 저장 결과의 변경 없음은 git으로 확인.
+7. 충족: 이 보고와 HANDOFF.md Codex 결과, 아래 로컬 확인 사항 기록.
+
+③ 명세와 다르게 한 것과 이유
+- 구현 범위 이탈 없음. 세 리뷰의 제안대로 구현함.
+- 접촉 검사는 가로·세로 5 cm 여유 띠, 문 두께 안의 침투 또는
+  직전 앞면에서 실제 crossing·진행 중인 밀기를 사용함.
+  면 뒤 전체 반공간을 접촉으로 잡으면 먼 손까지 다시 세기 때문임.
+  직전 점의 면 쪽을 사용해 손등을 댄 경우도 올바른 방향 무시로 기록함.
+  거절된 crossing의 에피소드는 이어도 새 밀기 시작 조건은 완화하지 않음.
+- 최종 검증에서 새 E15b 시험 입력 1건이 실패함(처음 전체 78/79).
+  손이 면에 도착한 뒤 밀기가 끝났는데 손실 횟수 1을 기대했음.
+  손실 직전에도 밀도록 입력을 고치고, 구동 손을 명시적으로 확인함.
+  제품 코드는 최초 빌드 뒤 변경하지 않음.
+  이 실제 실패 때문에 non-unity·unity 각 1회 추가, 전체 1회 추가함.
+  실제 횟수는 non-unity 2·unity 2·전체 시험 2.
+  의도적 red·스트레스 실행·하위 에이전트·자체 리뷰 루프 없음.
+- Config·Content·Plugins 변경 없음, MCP 없음, push·머지 없음.
+
+④ 실제 헤더/API 확인 (추정 없음)
+엔진 경로 기준 C:/Program Files/Epic Games/UE_5.7/Engine/Source/:
+- Runtime/Engine/Classes/Components/PrimitiveComponent.h:373,1288,2852
+  SetGenerateOverlapEvents, IsOverlappingComponent, SetCollisionResponseToChannel.
+- Runtime/Engine/Classes/Components/SphereComponent.h:65 InitSphereRadius.
+- Runtime/Engine/Classes/Components/SceneComponent.h:556 SetWorldLocation.
+- Runtime/Engine/Classes/Components/ActorComponent.h:1305 RegisterComponent.
+- Runtime/Engine/Classes/GameFramework/Actor.h:2486 SetRootComponent.
+ISDK 경로 기준 Plugins/MetaXRInteraction/Source/OculusInteraction/:
+- Public/IsdkFunctionLibrary.h:172 FindGrabbableByComponent.
+- Private/IsdkFunctionLibrary.cpp:308 이후 collider에서 grabbable 검색 구현.
+- Private/Interaction/GrabDetectors/IsdkHandGrabDetector.cpp:40-53
+  QueryOnly·WorldDynamic·Overlap의 Palm 구 등록과 overlap 이벤트 연결.
+- Public/Interaction/GrabDetectors/IsdkHandGrabDetector.h:134,143
+  Palm 구 반지름 4 cm, collision object type WorldDynamic.
+새 MetaXR API 호출 없음. 위 호출은 실제 로컬 컴파일로도 확인함.
+
+⑤ 로컬에서 확인할 것 / 검증 기록
+- 최초 빌드: Saved/Logs/P2R1CodexNonUnityBuild.log,
+  P2R1CodexUnityBuild.log. vBoR 소스 전체 수정 시각 갱신 후
+  .cpp 33개와 gen 파일 개별 컴파일. vBoR warning/error 0.
+- 시험 입력 수정 뒤 빌드: Saved/Logs/P2R1CodexFixtureNonUnityBuild.log,
+  P2R1CodexFixtureUnityBuild.log. 둘 다 성공, warning/error 0.
+- 최초 전체: Saved/Logs/P2R1CodexAutomationFirst.log, 78 Success/1 Fail.
+  로그 이름 인자가 잘못 분리돼 vBoR.log에 기록됐고 별도로 복사함.
+- 최종 전체: Saved/Logs/P2R1CodexAutomation.log, 79 Success/0 Fail,
+  EXIT CODE 0. 샘플·McpAutomationBridge·UnrealAgent 비활성.
+  기존 XR 확장·샘플 InfoCard CDO·시험 World 정리 잡음은
+  Agent-Workflow §2.5 기준으로 구분함.
+- 에디터: 시작·끝 닫힘 확인. 새 에셋·Blueprint·레벨 작업 없음.
+  기존 L_P2_Door에서 양쪽 손잡이 Hover·잠금 해제, 새 패널·로그 표시 확인.
+- Quest 3 Link/VR Preview: 바깥/안쪽 손잡이 실제 잡기, 당겨 열기·닫기,
+  밀기·걸쇠, 무관한 손과 손등 스침의 무시 에피소드, 밀던 손을
+  시야 밖으로 내린 뒤 다른 손으로 바로 밀기·잡기, 잡은 손의
+  손실·복구 rebase를 다시 확인할 것(명세 §7).
+  관련 T-03·T-09와 이번 기기 재시험은 not-tested.
+- 질문 없음. Claude 다음 리뷰 대기.

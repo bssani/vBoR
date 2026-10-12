@@ -6,6 +6,7 @@ FVBoRDoorMetrics FVBoRDoorMetrics::Since(const FVBoRDoorMetrics& Before) const
 	Result.Unlocks -= Before.Unlocks; Result.Latches -= Before.Latches;
 	Result.RateLimitedFrames -= Before.RateLimitedFrames; Result.Pauses -= Before.Pauses;
 	Result.IgnoredReleases -= Before.IgnoredReleases;
+	Result.PushTrackingLosses -= Before.PushTrackingLosses;
 	Result.PushedDeg -= Before.PushedDeg; Result.HeldSeconds -= Before.HeldSeconds; Result.PausedSeconds -= Before.PausedSeconds;
 	for (int32 H = 0; H < 2; ++H)
 	{
@@ -37,6 +38,7 @@ bool FVBoRDoorMotion::BeginGrab(int32 Hand, int32 Handle, const FVBoRDoorHand& I
 	if (GrabHand != INDEX_NONE || bPaused || Input.Points[0].SizeSquared2D() < SMALL_NUMBER) { return false; }
 	GrabHand = Hand; GrabHandle = Handle;
 	PushHand = PushFace = INDEX_NONE;
+	for (int32 H = 0; H < 2; ++H) { bContactNear[H] = false; ContactFace[H] = INDEX_NONE; LastIgnored[H] = EVBoRDoorIgnore::Count; }
 	RebaseGrab(Input.Points[0]);
 	++Metrics.Grabs[Hand][Handle];
 	if (bLocked) { bLocked = false; bLatchArmed = false; ++Metrics.Unlocks; Metrics.LastUnlockHandle = Handle; }
@@ -55,38 +57,57 @@ bool FVBoRDoorMotion::ReleaseGrab(bool bTracked)
 	return true;
 }
 
-bool FVBoRDoorMotion::FindPush(int32 Hand, const FVBoRDoorHand& Input, int32 Face, double& OutAngle)
+void FVBoRDoorMotion::RecordIgnore(int32 Hand, EVBoRDoorIgnore Reason)
+{
+	// 같은 손·같은 이유는 1회만 집계함 (접촉 에피소드, P2 R1-1)
+	if (Reason != EVBoRDoorIgnore::Count && LastIgnored[Hand] != Reason) { ++Metrics.Ignored[static_cast<int32>(Reason)]; }
+	LastIgnored[Hand] = Reason;
+}
+
+bool FVBoRDoorMotion::FindPush(int32 Hand, const FVBoRDoorHand& Input, int32 Face, double& OutAngle, EVBoRDoorIgnore& OutReason)
 {
 	const double Sign = Face == 0 ? 1.0 : -1.0;
-	const FVector Inward(0, -Sign, 0);
-	const FVector Palm = ToDoor(Input.PalmNormal).GetSafeNormal();
-	const double PalmAngle = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Palm, Inward), -1.0, 1.0)));
-	PalmAngleDeg[Hand] = PalmAngle;
-	EVBoRDoorIgnore Reason = EVBoRDoorIgnore::Outside;
-	if (Palm.IsNearlyZero() || PalmAngle > PalmLimitDeg) { ++Metrics.Ignored[static_cast<int32>(EVBoRDoorIgnore::PalmDirection)]; return false; }
+	constexpr double EdgeMarginCm = 5; // 가장자리 스침만 집계함 (자리값, P2 R1-1)
+	const bool bRejectedCrossing = bContactNear[Hand] && ContactFace[Hand] == Face &&
+		(LastIgnored[Hand] == EVBoRDoorIgnore::PalmDirection || LastIgnored[Hand] == EVBoRDoorIgnore::NearAxis || LastIgnored[Hand] == EVBoRDoorIgnore::Outside);
+	bool bCrossing = false, bAwayFromAxis = false, bInside = false;
+	bContactNear[Hand] = false;
+	OutReason = EVBoRDoorIgnore::Count;
 	double Depth = 0;
 	int32 Deepest = INDEX_NONE;
 	for (int32 I = 0; I < 5; ++I)
 	{
 		const FVector P = ToDoor(Input.Points[I]);
-		if (P.ContainsNaN() || P.X < 0 || P.X > WidthCm || P.Z < 0 || P.Z > HeightCm) { continue; }
+		if (P.ContainsNaN() || P.X < -EdgeMarginCm || P.X > WidthCm + EdgeMarginCm || P.Z < -EdgeMarginCm || P.Z > HeightCm + EdgeMarginCm) { continue; }
 		const double D = Sign * P.Y - ThicknessCm * 0.5;
 		if (D >= -1.e-6) { continue; }
-		if (Input.Points[I].SizeSquared2D() < FMath::Square(MinAxisDistanceCm)) { Reason = EVBoRDoorIgnore::NearAxis; continue; }
 		const bool bContinuing = PushHand == Hand && PushFace == Face;
 		const FVector Prev = FQuat(FVector::UpVector, FMath::DegreesToRadians(-PreviousAngleDeg)).RotateVector(Previous[Hand].Points[I]);
+		const bool bFromFront = bHavePrevious[Hand] && Sign * Prev.Y - ThicknessCm * 0.5 >= -FrontToleranceCm;
+		// 면 뒤의 먼 손은 제외함 (실제 crossing·연속 밀기만 예외, P2 R1-1)
+		if (D < -ThicknessCm && !bFromFront && !bContinuing) { continue; }
+		bContactNear[Hand] = true;
 		// 같은 밀기에는 crossing 을 다시 요구하지 않음 (속도 상한으로 면 뒤에 남는 손, P2 E8b)
-		if (!bContinuing && (!bHavePrevious[Hand] || Sign * Prev.Y - ThicknessCm * 0.5 < -FrontToleranceCm))
-		{
-			Reason = EVBoRDoorIgnore::Behind; continue;
-		}
-		if (-D > Depth) { Depth = -D; Deepest = I; }
+		if (!bContinuing && !bFromFront && !bRejectedCrossing) { continue; }
+		bCrossing = true;
+		if (Input.Points[I].SizeSquared2D() < FMath::Square(MinAxisDistanceCm)) { continue; }
+		bAwayFromAxis = true;
+		if (P.X < 0 || P.X > WidthCm || P.Z < 0 || P.Z > HeightCm) { continue; }
+		bInside = true;
+		if ((bContinuing || bFromFront) && -D > Depth) { Depth = -D; Deepest = I; }
 	}
-	if (Deepest == INDEX_NONE)
-	{
-		++Metrics.Ignored[static_cast<int32>(Reason)];
-		return false;
-	}
+	if (!bContactNear[Hand]) { ContactFace[Hand] = INDEX_NONE; return false; }
+	ContactFace[Hand] = Face;
+	const FVector Palm = ToDoor(Input.PalmNormal).GetSafeNormal();
+	const double PalmAngle = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Palm, FVector(0, -Sign, 0)), -1.0, 1.0)));
+	PalmAngleDeg[Hand] = PalmAngle;
+	if (bLocked) { OutReason = EVBoRDoorIgnore::Locked; }
+	else if (!bCrossing) { OutReason = EVBoRDoorIgnore::Behind; }
+	else if (!bAwayFromAxis) { OutReason = EVBoRDoorIgnore::NearAxis; }
+	else if (Palm.IsNearlyZero() || PalmAngle > PalmLimitDeg) { OutReason = EVBoRDoorIgnore::PalmDirection; }
+	else if (!bInside) { OutReason = EVBoRDoorIgnore::Outside; }
+	else if (Deepest == INDEX_NONE) { OutReason = EVBoRDoorIgnore::Behind; }
+	if (OutReason != EVBoRDoorIgnore::Count) { return false; }
 	const FVector& Point = Input.Points[Deepest];
 	const double Radius = Point.Size2D();
 	// y = ±두께/2 가 되는 회전. x>=0 인 문 면 해만 사용함 (감도 없이 기하 추종, P2 D1)
@@ -120,7 +141,7 @@ void FVBoRDoorMotion::Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSecon
 	if (!FMath::IsFinite(DeltaSeconds) || DeltaSeconds <= 0) { return; }
 	PalmAngleDeg[0] = PalmAngleDeg[1] = -1;
 	// ── 1) 추적 손실·복구 ──
-	const int32 Driver = GrabHand != INDEX_NONE ? GrabHand : PushHand;
+	const int32 Driver = GrabHand;
 	if (Driver != INDEX_NONE && !Hands[Driver].bTracked)
 	{
 		if (!bPaused) { ++Metrics.Pauses; bPaused = true; }
@@ -131,11 +152,17 @@ void FVBoRDoorMotion::Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSecon
 	const bool bRecovering = bPaused;
 	if (bRecovering && Driver != INDEX_NONE)
 	{
-		const FVector OldPoint = GrabHand != INDEX_NONE ? LastGrabPoint : Previous[Driver].Points[0];
-		Metrics.RecoveryDistanceCm = FVector::Distance(OldPoint, Hands[Driver].Points[0]);
-		if (GrabHand != INDEX_NONE) { RebaseGrab(Hands[Driver].Points[0]); }
+		Metrics.RecoveryDistanceCm = FVector::Distance(LastGrabPoint, Hands[Driver].Points[0]);
+		RebaseGrab(Hands[Driver].Points[0]);
 		PushHand = PushFace = INDEX_NONE;
 		bPaused = false;
+	}
+	if (PushHand != INDEX_NONE && !Hands[PushHand].bTracked)
+	{
+		// 밀기는 소유가 없으므로 그 손만 끝냄 (다른 손은 바로 사용, P2 E15b)
+		++Metrics.PushTrackingLosses;
+		bHavePrevious[PushHand] = false;
+		PushHand = PushFace = INDEX_NONE;
 	}
 	// ── 2) 먼저 잡은 손 > 밀기 ──
 	if (GrabHand != INDEX_NONE)
@@ -156,17 +183,30 @@ void FVBoRDoorMotion::Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSecon
 		for (int32 Pass = 0; Pass < 2; ++Pass)
 		{
 			const int32 H = Pass == 0 ? First : 1 - First;
-			if (!Hands[H].bTracked) { ++Metrics.Ignored[static_cast<int32>(EVBoRDoorIgnore::TrackingLow)]; continue; }
-			const FVector Palm = ToDoor(Hands[H].PalmNormal);
-			const int32 Face = Palm.Y <= 0 ? 0 : 1;
-			PalmAngleDeg[H] = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FMath::Abs(Palm.Y), 0.0, 1.0)));
-			if (bLocked) { ++Metrics.Ignored[static_cast<int32>(EVBoRDoorIgnore::Locked)]; continue; }
+			if (!Hands[H].bTracked)
+			{
+				if (bContactNear[H]) { RecordIgnore(H, bLocked ? EVBoRDoorIgnore::Locked : EVBoRDoorIgnore::TrackingLow); }
+				else { RecordIgnore(H, EVBoRDoorIgnore::Count); }
+				continue;
+			}
+			if (bFound) { bContactNear[H] = false; ContactFace[H] = INDEX_NONE; RecordIgnore(H, EVBoRDoorIgnore::Count); continue; }
+			int32 Face = ContactFace[H];
+			if (PushHand == H) { Face = PushFace; }
+			else if (bHavePrevious[H])
+			{
+				const FVector Prev = FQuat(FVector::UpVector, FMath::DegreesToRadians(-PreviousAngleDeg)).RotateVector(Previous[H].Points[0]);
+				if (FMath::Abs(Prev.Y) >= ThicknessCm * 0.5) { Face = Prev.Y >= 0 ? 0 : 1; }
+			}
+			if (Face == INDEX_NONE) { Face = ToDoor(Hands[H].PalmNormal).Y <= 0 ? 0 : 1; }
 			double Target = AngleDeg;
-			if (!FindPush(H, Hands[H], Face, Target)) { continue; }
+			EVBoRDoorIgnore Reason;
+			const bool bPush = FindPush(H, Hands[H], Face, Target, Reason);
+			RecordIgnore(H, Reason);
+			if (!bPush) { continue; }
 			if (PushHand != H || PushFace != Face) { ++Metrics.PushStarts[H][Face]; }
 			PushHand = H; PushFace = Face;
 			MoveTo(Target, DeltaSeconds, true);
-			bFound = true; break;
+			bFound = true;
 		}
 		if (!bFound) { PushHand = PushFace = INDEX_NONE; }
 	}
@@ -180,5 +220,6 @@ void FVBoRDoorMotion::Reset()
 	AngleDeg = 0; bLocked = true; bLatchArmed = bPaused = false;
 	GrabHand = GrabHandle = PushHand = PushFace = INDEX_NONE;
 	bHavePrevious[0] = bHavePrevious[1] = false;
+	for (int32 H = 0; H < 2; ++H) { bContactNear[H] = false; ContactFace[H] = INDEX_NONE; LastIgnored[H] = EVBoRDoorIgnore::Count; }
 	PalmAngleDeg[0] = PalmAngleDeg[1] = -1;
 }
