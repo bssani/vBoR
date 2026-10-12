@@ -18,6 +18,7 @@
 | 회차 | 날짜 | 리뷰 대상 | 리뷰어 | 결과 |
 |---|---|---|---|---|
 | 1 | 2026-10-12 | `bfb72d7` P2 문 시험대 + 레벨 | Claude | **2건.** 빌드·시험 재현: non-unity(`.cpp` 33개)·unity 경고·오류 0, `vBoR.*` 76/76. 기하·잠금·속도 상한·잡기 우선은 명세대로다. "밀기 무시"가 문에 닿지 않은 손까지 매 frame 세어 핵심 값이 의미를 잃음(R1-1). 미는 손의 추적 손실이 문 전체를 보류해 다른 손이 못 씀(R1-2, Claude 명세 모호). **토큰 규칙을 지켰다(6.1M, 하위 에이전트 0)** |
+| 1+ | 2026-10-12 | 사용자 VR(`bfb72d7`) | Claude | **R1-3 추가(가장 먼저): 손잡이가 잡히지 않아 문을 열 수 없다.** 손잡이 잡기 시도 0번(ISDK가 손잡이를 감지하지 못함), 잠금 해제 0번. 손잡이 상자가 모든 채널 Ignore·overlap 이벤트 꺼짐이라 ISDK 손바닥 구 콜라이더의 overlap이 생기지 않는다. 시험은 ISDK 이벤트를 직접 넣어 이 경로를 건너뛰었다 |
 
 ### 1회차에 확인한 것
 
@@ -46,6 +47,29 @@
 - **정리 때 바꿀 것(이번 항목 아님):** 범용 손 리그 Pawn의 `ReadRawPalmAndTips`가 문 전용 구조체 `FVBoRDoorHand`를 돌려준다(`VBoRHandRigPawn.h:40`). 다른 부품이 손바닥을 쓸 때 `FVBoRHandPoints` 같은 이름으로 옮긴다.
 
 ## 열린 항목
+
+### R1-3 손잡이가 ISDK 손바닥 잡기에 감지되지 않아 문을 열 수 없다 — 열림 (가장 먼저)
+
+**문제**
+- **위치:** `Source/vBoR/Interaction/VBoRHingedDoor.cpp:57-60`. 손잡이 `UBoxComponent`가 `SetCollisionResponseToAllChannels(ECR_Ignore)`, `SetGenerateOverlapEvents(false)`다.
+- **발생 조건:** 늘 그렇다. VR에서 손바닥으로 손잡이를 쥐어도 감지가 안 된다.
+- **영향:** 사용자 VR(2026-10-12): "문이 안 열린다."
+  - 로그에서 손잡이 잡기 시도(Hover)가 손·손잡이 모두 0번, 잠금 해제가 0번이었다. 손은 추적됐다(손바닥–문 각 값이 나옴).
+  - 잠금을 풀 방법이 없어서 §7의 거의 모든 확인(당겨 열기, 밀어 열기·닫기, 걸쇠)을 할 수 없다.
+- **원인:**
+  - ISDK 손바닥 잡기는 손바닥에 붙인 구 콜라이더(반지름 4 cm, object type `ECC_WorldDynamic`, 모든 채널 Overlap)의 **overlap 이벤트**로 잡을 물체를 찾는다(`Plugins/MetaXRInteraction/Source/OculusInteraction/Private/Interaction/GrabDetectors/IsdkHandGrabDetector.cpp:40-53, 302-311`, 헤더 `IsdkHandGrabDetector.h:134, 143`).
+  - overlap 이벤트는 두 컴포넌트가 서로의 채널에 Overlap/Block으로 응답하고, 둘 다 overlap 이벤트를 켜야 생긴다. 손잡이는 둘 다 막혀 있다.
+  - P1 골프백 메시는 `ECC_WorldDynamic`에 Block이라 잡혔다(`VBoRCarryObject.cpp:63-67`).
+  - 자동화 시험은 `HandlePointer`에 이벤트를 직접 넣어 이 경로를 확인하지 못했다.
+
+**제안**
+- 손잡이 상자: `SetGenerateOverlapEvents(true)`, `ECC_WorldDynamic`에 `ECR_Overlap`, 나머지 채널은 Ignore로 둔다. 차체·다른 물체와 막힘·간섭이 없게 하려는 것이다.
+- 문 메시는 지금처럼 NoCollision이다(밀기는 손 점 계산이라 충돌이 필요 없다).
+- 손잡이가 크기 18×8×8 cm인데 손바닥 구가 4 cm라 감지 범위가 좁다. VR에서 잡기 어려우면 상자를 키운다(보이는 막대 크기는 그대로). 지금은 자리값 그대로 두고 VR에서 본다.
+
+**확인할 시험**
+- 실제 overlap: 시험 world에서 문을 만들고, ISDK 손바닥 구와 같은 설정의 `USphereComponent`(반지름 4 cm, `ECC_WorldDynamic`, 모든 채널 Overlap, overlap 이벤트 켬)를 바깥 손잡이 안으로 옮긴다. 손잡이와 overlap이 생기고, `UIsdkFunctionLibrary::FindGrabbableByComponent`(손잡이 상자)가 바깥 손잡이 grabbable을 돌려준다.
+- 안쪽 손잡이도 같다. 문 메시와는 overlap이 없다.
 
 ### R1-1 "밀기 무시" 집계가 문에 닿지 않은 손까지 매 frame 세어, 무관한 손을 거르는지 볼 수 없다 — 열림
 
