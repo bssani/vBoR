@@ -14,7 +14,7 @@ class UIsdkOneGrabRotateTransformer;
 class UIsdkOneGrabTranslateTransformer;
 class UMaterialInstanceDynamic;
 class UAudioComponent;
-class AVBoRHingedDoor;
+class AVBoRHingedPanel;
 struct FIsdkInteractionPointerEvent;
 
 UENUM(BlueprintType)
@@ -96,7 +96,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="Axis part") FVBoRAxisEvent OnPartReleased;
 	UFUNCTION(BlueprintPure, Category="Axis part") float GetOpenRatio() const;
 	UFUNCTION(BlueprintPure, Category="Axis part") FString GetDebugText() const;
-	void ConnectDoor(AVBoRHingedDoor* Door, int32 Handle);
+	void ConnectDoor(AVBoRHingedPanel* Door, int32 Handle);
 	void EndDoorHold(bool bLatch);
 	int32 GetHoldingHand() const { return HoldingHand; }
 protected:
@@ -105,11 +105,12 @@ protected:
 	virtual bool IsHandTracked() const;
 private:
 	friend class UVBoRAxisTransformer;
-	friend class AVBoRHingedDoor;
+	friend class AVBoRHingedPanel;
 	friend struct FP2bTestAccess;
+	friend struct FP2cTestAccess;
 	UPROPERTY() TObjectPtr<UVBoRAxisTransformer> Transformer;
 	UPROPERTY() TObjectPtr<UIsdkGrabberComponent> HoldingGrabber;
-	UPROPERTY() TObjectPtr<AVBoRHingedDoor> LinkedDoor;
+	UPROPERTY() TObjectPtr<AVBoRHingedPanel> LinkedDoor;
 	UPROPERTY() TObjectPtr<UMaterialInstanceDynamic> StateOverlay;
 	UPROPERTY() TObjectPtr<UAudioComponent> StateAudio;
 	FTransform RestPivot;

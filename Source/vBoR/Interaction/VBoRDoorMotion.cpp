@@ -41,7 +41,7 @@ bool FVBoRDoorMotion::BeginGrab(int32 Hand, int32 Handle, const FVBoRDoorHand& I
 	for (int32 H = 0; H < 2; ++H) { bContactNear[H] = false; ContactFace[H] = INDEX_NONE; LastIgnored[H] = EVBoRDoorIgnore::Count; }
 	RebaseGrab(Input.Points[0]);
 	++Metrics.Grabs[Hand][Handle];
-	if (bLocked) { bLocked = false; bLatchArmed = false; ++Metrics.Unlocks; Metrics.LastUnlockHandle = Handle; }
+	if (bUseLatch && bLocked) { bLocked = false; bLatchArmed = false; ++Metrics.Unlocks; Metrics.LastUnlockHandle = Handle; }
 	return true;
 }
 
@@ -102,7 +102,7 @@ bool FVBoRDoorMotion::FindPush(int32 Hand, const FVBoRDoorHand& Input, int32 Fac
 	const FVector Palm = ToDoor(Input.PalmNormal).GetSafeNormal();
 	const double PalmAngle = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Palm, FVector(0, -Sign, 0)), -1.0, 1.0)));
 	PalmAngleDeg[Hand] = PalmAngle;
-	if (bLocked) { OutReason = EVBoRDoorIgnore::Locked; }
+	if (bUseLatch && bLocked) { OutReason = EVBoRDoorIgnore::Locked; }
 	else if (!bCrossing) { OutReason = EVBoRDoorIgnore::Behind; }
 	else if (!bAwayFromAxis) { OutReason = EVBoRDoorIgnore::NearAxis; }
 	else if (Palm.IsNearlyZero() || PalmAngle > PalmLimitDeg) { OutReason = EVBoRDoorIgnore::PalmDirection; }
@@ -127,8 +127,8 @@ void FVBoRDoorMotion::MoveTo(double Desired, double DeltaSeconds, bool bPushing)
 	const double Gap = Desired - AngleDeg;
 	if (FMath::Abs(Gap) > Budget + 1.e-6) { ++Metrics.RateLimitedFrames; }
 	AngleDeg += FMath::Clamp(Gap, -Budget, Budget);
-	if (AngleDeg > RearmAngleDeg) { bLatchArmed = true; }
-	if (bLatchArmed && AngleDeg < Before && AngleDeg <= LatchAngleDeg)
+	if (bUseLatch && AngleDeg > RearmAngleDeg) { bLatchArmed = true; }
+	if (bUseLatch && bLatchArmed && AngleDeg < Before && AngleDeg <= LatchAngleDeg)
 	{
 		AngleDeg = 0; bLocked = true; bLatchArmed = false;
 		++Metrics.Latches;
@@ -219,7 +219,7 @@ void FVBoRDoorMotion::Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSecon
 
 void FVBoRDoorMotion::Reset()
 {
-	AngleDeg = 0; bLocked = true; bLatchArmed = bPaused = false;
+	AngleDeg = 0; bLocked = bUseLatch; bLatchArmed = bPaused = false;
 	GrabHand = GrabHandle = PushHand = PushFace = INDEX_NONE;
 	bHavePrevious[0] = bHavePrevious[1] = false;
 	for (int32 H = 0; H < 2; ++H) { bContactNear[H] = false; ContactFace[H] = INDEX_NONE; LastIgnored[H] = EVBoRDoorIgnore::Count; }

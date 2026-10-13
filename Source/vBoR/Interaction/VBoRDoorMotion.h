@@ -31,6 +31,7 @@ struct FVBoRDoorMotion
 	double LatchAngleDeg = 2, RearmAngleDeg = 5;
 	double PalmLimitDeg = 60, MinAxisDistanceCm = 15, FrontToleranceCm = 0.5;
 	double AngleDeg = 0;
+	bool bUseLatch = true; // 기존 문은 잠금 켬, 공통 판은 끔 (P2c D2)
 	bool bLocked = true, bLatchArmed = false, bPaused = false;
 	int32 GrabHand = INDEX_NONE, GrabHandle = INDEX_NONE;
 	int32 PushHand = INDEX_NONE, PushFace = INDEX_NONE;

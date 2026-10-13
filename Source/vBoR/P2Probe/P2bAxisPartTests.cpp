@@ -160,7 +160,8 @@ bool FP2bDoorLogTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("End logged only once"), Logs.Count(TEXT("axis hold end")), 1);
 	FP2bTestAccess::PalmOpen(Door, Part); Door->bPalmClosed[0] = true;
 	FP2bTestAccess::Begin(Part, P2bPose(FVector(100,9,60)));
-	TestTrue(TEXT("Unlocked door regrabs directly"), FP2bTestAccess::Transfer(Door, Part, Door->Hands[0]));
+	FP2bTestAccess::Value(Part, 25);
+	TestTrue(TEXT("Unlocked door regrabs at threshold"), FP2bTestAccess::Transfer(Door, Part, Door->Hands[0]));
 	Door->Hands[0] = P2bHand(12); Door->Tick(0.1f);
 	TestTrue(TEXT("Closing latches door"), Door->GetMotion().bLocked);
 	TestEqual(TEXT("Latch end reason, angle and duration logged"), Logs.Count(TEXT("reason=latch angle=0.00 deg held=")), 1);
@@ -350,8 +351,10 @@ bool FP2bDoorTest::RunTest(const FString& Parameters)
 	Motion.ReleaseGrab(true); Door->Tick(0.016f); Part->Tick(1);
 	TestTrue(TEXT("Door release returns handle"),FMath::IsNearlyZero(Part->GetOpenRatio()));
 	FP2bTestAccess::PalmOpen(Door,Part); FP2bTestAccess::Begin(Part,P2bPose(FVector(100,9,60)));
-	TestTrue(TEXT("E11 unlocked door accepts handle immediately"),FP2bTestAccess::Transfer(Door,Part,P2bHand(45)));
-	TestEqual(TEXT("E11 no second unlock"),Motion.Metrics.Unlocks,1); TestTrue(TEXT("E11 handle never moves"),FMath::IsNearlyZero(Part->GetOpenRatio()));
+	TestFalse(TEXT("P2c D4 unlocked door waits for threshold"),FP2bTestAccess::Transfer(Door,Part,P2bHand(45)));
+	FP2bTestAccess::Value(Part,25);
+	TestTrue(TEXT("P2c D4 unlocked door accepts handle at threshold"),FP2bTestAccess::Transfer(Door,Part,P2bHand(45)));
+	TestEqual(TEXT("E11 no second unlock"),Motion.Metrics.Unlocks,1); TestTrue(TEXT("P2c D4 handle stays pulled"),Part->GetOpenRatio()>0.8f);
 	const int32 Latches = Motion.Metrics.Latches; const double Angle = Motion.AngleDeg;
 	Hands[0] = P2bHand(); Motion.Advance(Hands,1); FP2bTestAccess::Apply(Door,Angle,Motion.Metrics.Unlocks,Latches);
 	TestTrue(TEXT("E13 latch cancels hold and requires palm open"),Motion.bLocked && Part->GetHoldingHand()==INDEX_NONE && FP2bTestAccess::NeedsOpen(Part));
@@ -399,7 +402,7 @@ bool FP2bP3Test::RunTest(const FString& Parameters)
 	TestEqual(TEXT("E17 begins at 07"),Runner->GetStepIndex(),0);
 	TestNotNull(TEXT("P3 spawned outside axis handle"),Car->OutsideAxisHandle.Get()); TestNotNull(TEXT("P3 spawned stay lid"),Car->ConsoleLid.Get());
 	TestTrue(TEXT("Handle actor starts at car origin, follows door hinge"),Car->OutsideAxisHandle->GetActorLocation().Equals(Car->GetActorLocation(),0.001) && Car->OutsideAxisHandle->GetRootComponent()->GetAttachParent()==Car->Door->HingePivot);
-	TestTrue(TEXT("Console lid stays with 100 deg limit"),Car->ConsoleLid->Release==EVBoRAxisRelease::Stay && Car->ConsoleLid->MaxAngleDeg==100);
+	TestTrue(TEXT("Console lid stays with 100 deg limit"),!Car->ConsoleLid->bUseLatch && Car->ConsoleLid->MaxAngleDeg==100);
 	FP2bTestAccess::Begin(Car->OutsideAxisHandle,P2bPose(FVector(100,9,60))); FP2bTestAccess::Value(Car->OutsideAxisHandle,25);
 	TestTrue(TEXT("E17 threshold transfers same hand"),FP2bTestAccess::Transfer(Car->Door,Car->OutsideAxisHandle,P2bHand())); Runner->ProcessFlow(0.1);
 	TestEqual(TEXT("E17 unlock completes 07"),Runner->GetStepIndex(),1);
