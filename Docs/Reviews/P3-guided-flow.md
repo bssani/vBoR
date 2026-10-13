@@ -63,7 +63,7 @@
 
 ## 열린 항목
 
-### R1-1 확인 명령이 단계 시작 직후에도 받아져, 빠른 두 번 누름이나 늦은 진행자 키가 다음 단계를 넘긴다 (Claude 명세 빈틈) — 열림
+### R1-1 확인 명령이 단계 시작 직후에도 받아져, 빠른 두 번 누름이나 늦은 진행자 키가 다음 단계를 넘긴다 (Claude 명세 빈틈) — 반영함 (fix(p3): guard confirms and reposition guidance)
 
 **문제**
 - **위치:**
@@ -89,7 +89,7 @@
 - 잠금 시간 동안 확인 버튼이 숨겨지고 poke도 꺼진다.
 - `Next`는 잠금 시간에도 동작한다.
 
-### R1-2 참가자 안내 패널에 진행자·디버그 정보가 섞여 있다 (Claude 명세 빈틈) — 열림
+### R1-2 참가자 안내 패널에 진행자·디버그 정보가 섞여 있다 (Claude 명세 빈틈) — 반영함 (fix(p3): guard confirms and reposition guidance)
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRScenarioRunner.cpp:363-389`(`GetPanelText`). 참가자 패널 하나에 다 나온다:
@@ -123,7 +123,7 @@
 - `F1`을 켜면 진행자 정보가 보이고, 다시 누르면 사라진다.
 - 정렬이 없으면 진행자 정보가 꺼져 있어도 진행자 블록에 "정렬 필요"가 보인다.
 
-### R1-3 안내 문구가 눈높이보다 낮아 읽기 힘들다 — 문구는 눈높이, 버튼은 손 높이로 나눈다 (사용자 VR) — 열림
+### R1-3 안내 문구가 눈높이보다 낮아 읽기 힘들다 — 문구는 눈높이, 버튼은 손 높이로 나눈다 (사용자 VR) — 반영함 (fix(p3): guard confirms and reposition guidance)
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRScenarioRunner.cpp:338-359`(`PlacePanel`).
@@ -147,7 +147,7 @@
 - 버튼 이름 텍스트가 버튼과 같이 보이고 숨겨진다.
 - (보탬) 문구 텍스트 색이 검정이고, 바탕 브러시가 단색이며 밝은 색이다(색 값 비교).
 
-### R1-4 진행자 확인 단계에서 참가자에게 막힌 이유가 보이지 않고, 혼자 시험할 때 진행할 수 없다 (사용자 VR) — 열림
+### R1-4 진행자 확인 단계에서 참가자에게 막힌 이유가 보이지 않고, 혼자 시험할 때 진행할 수 없다 (사용자 VR) — 반영함 (fix(p3): guard confirms and reposition guidance)
 
 **문제**
 - **위치:**
@@ -168,7 +168,7 @@
 - 진행자 확인 단계에서 참가자 패널 텍스트는 "잠시 기다려 주세요"다. 진행자 정보가 꺼져 있어도 진행자 대기 줄이 있다.
 - `ConfirmBy=None`이고 규칙 대기 중인 단계에서 진행자 줄에 "→ 건너뛰기"가 있다. 확인 단계에서는 "Space"가 있다.
 
-### R1-5 "앉았을 때 맞는가"를 숫자로 볼 수 없다 — 머리와 운전석 eye의 차이를 기록한다 (사용자 VR) — 열림
+### R1-5 "앉았을 때 맞는가"를 숫자로 볼 수 없다 — 머리와 운전석 eye의 차이를 기록한다 (사용자 VR) — 반영함 (fix(p3): guard confirms and reposition guidance)
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRVehicleAlignmentComponent.cpp`, `VBoRScenarioRunner.cpp`. P3는 머리 위치를 어디에도 기록하지 않는다. P0-c는 저장 지점과의 차이를 매초 로그에 남긴다.
@@ -191,7 +191,7 @@
 - 머리를 eye에 두고 좌석 규칙 만족 → "착석 위치"가 0 근처다.
 - 추적이 끊긴 frame에는 기록하지 않는다.
 
-### R1-6 13번 "먼 버튼"이 대시보드 안에 묻혀 보이지 않는다 (Claude 명세 빈틈, 사용자 VR) — 열림
+### R1-6 13번 "먼 버튼"이 대시보드 안에 묻혀 보이지 않는다 (Claude 명세 빈틈, 사용자 VR) — 반영함 (fix(p3): guard confirms and reposition guidance)
 
 **문제**
 - **위치:**
@@ -213,7 +213,7 @@
 - 대시보드 판 크기(자리값)를 바꿔도 위 조건이 지켜진다.
 - `HitAreaScale`은 1 그대로다(기존 시험 유지).
 
-### R1-7 머리가 옮겨 가면 문구와 버튼이 그 자리에 남고, 운전석에서는 버튼이 핸들 뒤에 가린다 (Claude 명세 빈틈, 사용자 VR) — 열림
+### R1-7 머리가 옮겨 가면 문구와 버튼이 그 자리에 남고, 운전석에서는 버튼이 핸들 뒤에 가린다 (Claude 명세 빈틈, 사용자 VR) — 반영함 (fix(p3): guard confirms and reposition guidance)
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRScenarioRunner.cpp:227`.
@@ -250,6 +250,137 @@
 - 다시 놓는 순간 머리가 추적되지 않으면 놓지 않고, 다음 추적 frame에 놓는다.
 - **가림 시험(형상):** 기본 자리값으로 확인한다. 운전석·동승석·2열 eye에서 단계를 시작했을 때, eye에서 문구 패널 중심과 두 버튼 중심까지의 선분이 `P3VehicleMock`의 어떤 판 bounds와도 만나지 않는다. 판은 충돌이 꺼져 있으니 trace 대신 bounds 상자와 선분 교차로 본다(`FMath::LineBoxIntersection`).
 - 다시 놓은 직후 0.3 s 안의 패널 확인은 버리고, 0.7 s 뒤에는 받는다.
+
+## Codex R1 반영 보고 (2026-10-13)
+
+fix(p3): guard confirms and reposition guidance
+
+① 바뀐 파일
+- Source/vBoR/Interaction/VBoRScenarioRunner.h/.cpp:
+  단계 시작·패널 재배치 뒤 0.6 s 확인 잠금, 입력 시점 잠금 보존,
+  참가자 문구·진행자 정보(F1)·버튼 이름 분리, 검정 Bold 글자와
+  밝은 불투명 WhiteBrush, 단계 키 안내, 머리 위치 로그.
+- Source/vBoR/Interaction/VBoRVehicleAlignmentComponent.h/.cpp:
+  TRACKED Stage 머리를 현재 Pawn transform 으로 읽음,
+  현재 시점 eye 기준 mm 표시, 암전 중 Pawn 이동 알림.
+- Source/vBoR/Interaction/VBoRParticipantZones.h/.cpp:
+  추적·좌석 내부 상태 조회 (착석 1.0 s 배치와 이탈 후 재배치).
+- Source/vBoR/P3Probe/P3VehicleMock.h/.cpp:
+  편집 가능한 대시보드 판 값, 윗면에서 먼 버튼 높이·XY 계산,
+  4 cm 크기·HitAreaScale=1 유지, 파란 기본 재질.
+- Source/vBoR/P3Probe/P3FlowTests.cpp:
+  합성 XR 입력으로 리뷰 경계 시험 6개 추가, 기존 확인 시험에
+  잠금 대기 적용, 참가자·진행자 문자열 기대값 수정.
+- Docs/Reviews/P3-guided-flow.md: R1-1~R1-7 상태와 이 보고.
+- HANDOFF.md Codex 결과·Saved/Logs/P3R1-work/*는 git 무시 파일.
+
+② 명세 §6 완료 조건
+1. 충족: 참가자는 안내·진행·상태와 버튼 이름만 봄.
+   진행자 측정 정보는 F1 블록, 단계 키·시작 차단 사유는 늘 표시.
+   LogP3Flow 에 시작·착석·F1 매초 머리 좌표와 시점도 기록함.
+2. 코드·합성 시험 충족: 저장 정렬 계산과 차량 고정 유지,
+   추적 손실 보류·원본 ID·명령 세대·권한·복귀 규칙 유지.
+   P0·P1·P2 제품 코드·에셋 변경 없음, 기존 시험 79개 통과.
+3. 충족: 기존 E1~E20 유지, 시간 잠금과 E21·E22 추가.
+   R1 확인 재입력·F1·눈높이/색·머리 로그·대시보드 버튼·
+   이동/착석/추적 복구 배치 및 세 시점 선분–판 bounds 검증.
+4. 충족: 아래 로컬 헤더·소스 대조, 모듈 의존 변경 없음.
+5. 최종 non-unity·unity 성공, vBoR warning/error 0.
+   샘플·로컬 도구를 끈 전체 97/97 Success, Fail 0,
+   TEST COMPLETE EXIT CODE 0, 프로세스 0. P3 시험 18/18.
+6. 이번 리뷰는 C++만 맡김. 기존 Content/P3/L_P3_Flow.umap·
+   DA_P3_Scenario.uasset 및 사용자 작은 방 자리값 그대로 유지.
+   에디터/MCP 호출·레벨 저장·데이터 기본 단계 변경 없음.
+7. 충족: 아래 로컬 확인과 HANDOFF.md Codex 결과 기록함.
+   Quest 3 Link/VR Preview 재확인·정식 T-ID는 not-tested.
+
+③ 구현 선택·차이·검증 횟수
+- 리뷰 제안대로 구현, 범위 확장·질문 없음. C++ 생성자에서
+  새 프로퍼티 기본값을 정함. 문구 70 cm 앞·눈높이,
+  버튼 45 cm 앞·눈 아래 30 cm, 기존 패널 크기 50×32 cm.
+- 확인 잠금은 참가자·진행자 모두에 적용. Next·Previous·F5·O·
+  시점 행동은 시간 잠금 대상이 아님. 받은 때 잠긴 확인은
+  처리 frame 이 늦어져도 버림. 숨긴 버튼의 ISDK poke 도 끔.
+- 패널 배치는 단계 시작·암전 중 Pawn 이동 직후·좌석 1.0 s
+  최초 체류에만 수행. 좌석 이탈 뒤 새 체류는 다시 수행.
+  머리 추적이 없으면 카메라 대체 없이 첫 추적 frame 까지 미룸.
+  이동과 같은 Tick 의 이전 dt 로 새 잠금을 깎지 않음.
+- P3 camera 는 Pawn root 에 붙어 있음. 이동 직후 오래된 XR
+  tracking-to-world cache 대신 TRACKED pose × 현재 Pawn 을 씀.
+  tracking origin·recenter·base 설정 API 를 호출하지 않음.
+- 진행자 한 줄도 판 뒤에 가리지 않게 머리 앞 40 cm·아래
+  15 cm 에 둠. 긴 F1 정보는 앞 45 cm·아래 38 cm 에 둠.
+  참가자 문구·버튼의 배치는 명세 거리대로 유지함.
+- non-unity 2회·unity 2회·실제 전체 시험 2회.
+  첫 전체는 96/97: 문구·버튼 외에 진행자 줄까지 가림 시험에
+  포함하니 Steering/SeatBack 에 가림. 줄 위치만 수정하고
+  재빌드·전체 재검증함. 최종 97/97. 한번 규칙에서 벗어난
+  이유는 최종 검증에서 나온 실제 가림 실패 수정임.
+- 별도 자동화 시작 실패 1회: 절대 경로에 -log 를 써 로그 없이
+  프로세스 255 종료. 성공 실행의 -abslog 인자로 수정함.
+  실제 시험 발견/완료 근거 없는 실행은 전체 시험 수에서 뺌.
+- 하위 에이전트·자체 리뷰 루프·의도적 red·스트레스 없음.
+  push·PR·머지 없음.
+
+④ 헤더/API 확인 (추정 없음)
+엔진 경로는 C:/Program Files/Epic Games/UE_5.7/Engine/ 기준.
+- Source/Runtime/HeadMountedDisplay/Public/IXRTrackingSystem.h:
+  120,137,189 — IsTracking, GetCurrentPose, cached world transform.
+- Plugins/Runtime/XRBase/Source/XRBase/Public/XRTrackingSystemBase.h:
+  31,136 — 합성 XR 기반 클래스, tracking-to-world cache.
+- Source/Runtime/Slate/Public/Widgets/Layout/SBorder.h:66,75,138,159
+  — BorderImage·색과 시험용 조회.
+- Source/Runtime/Slate/Public/Widgets/Text/STextBlock.h:268,274
+  — 텍스트 색·글꼴 조회. Bold 40 px, 밝은 배경 alpha=1.
+- Source/Runtime/SlateCore/Private/Styling/StarshipCoreStyle.cpp:213
+  — WhiteBrush 는 단색 FSlateColorBrush.
+- Source/Runtime/UMG/Public/Components/WidgetComponent.h:
+  219,254,279,343 — SlateWidget·DrawSize·TwoSided·World space.
+- Source/Runtime/Engine/Classes/Components/SceneComponent.h:1244
+  — SetWorldLocationAndRotation.
+- Source/Runtime/Engine/Classes/GameFramework/Actor.h:1868
+  — SetActorRelativeLocation.
+- Source/Runtime/Engine/Classes/Engine/StaticMesh.h:2182
+  — GetBoundingBox. 판·버튼의 상대 bounds 에서 resting 위치 계산.
+- Source/Runtime/Engine/Public/Materials/MaterialInstanceDynamic.h:
+  109,128,176 — Set/GetVectorParameterValue, Create.
+- Source/Runtime/Core/Public/Math/UnrealMathUtility.h:1919
+  — LineBoxIntersection. 충돌 없는 판에 trace 를 쓰지 않음.
+- Source/Runtime/Engine/Classes/Components/ActorComponent.h:563,569
+  — Activate/Deactivate (숨은 버튼은 입력도 꺼짐).
+- Source/Runtime/Engine/Classes/Components/InputComponent.h:1020
+  — F1 BindKey.
+- Source/Runtime/Core/Public/Delegates/DelegateSignatureImpl.inl:969
+  — Pawn 이동 알림 AddUObject.
+- Plugins/MetaXRInteraction/Source/OculusInteraction/Public/
+  IsdkContentAssetPaths.h:137 — GrabbableDefault (GrabbableLit).
+  ColorParam 존재·설정은 기존 재질 시험과 새 버튼 색 시험 통과.
+- 같은 플러그인의 Interaction/IsdkPokeInteractable.h:164
+  — 실제 pointer delegate 경로. 기존 버튼 이벤트와 공통 명령 재사용.
+- Source/vBoR/Interaction/VBoRBuckAlignment.cpp:54
+  — DescribeTip 의 eye Yaw 기준 cm→mm 좌표 표시 재사용.
+- Source/vBoR/Interaction/VBoRHandRigPawn.cpp:66
+  — Camera 가 Pawn root 에 붙는 P3 rig 구성 확인.
+
+⑤ 로컬에서 확인할 것 / 검증 근거
+- 최종 빌드 로그: Saved/Logs/P3R1-work/NonUnityBuild2.log,
+  UnityBuild2.log. Result: Succeeded, vBoR 경고·오류 0.
+- 최종 자동화: Saved/Logs/P3R1-work/AllAutomation2.log.
+  발견·완료 97, 성공 97, 실패 0, EXIT CODE 0, 프로세스 0.
+  첫 실패는 AllAutomation.log, 실행 인자 실패는 AutomationConsole.log.
+  Workflow 의 XR 확장·샘플 InfoCard CDO·시험 World 정리 잡음은
+  실제 vBoR 진단·시험 결과와 구분함.
+- 에디터: 시작·종료 시 닫힘. 기존 사용자 레벨·자리값과
+  DA_P3_Scenario 기본 단계 보존 확인. 새 에디터 작업/MCP/
+  스크린샷 없음. 레벨을 열어 패널·라벨·F1 줄의 실제 가독성,
+  먼 버튼 색과 resting/pressed 표시를 확인할 것.
+- Quest 3 Link/VR Preview: 빠른 두 번 poke·자동 단계 완료 직후
+  Space, 검정 한국어 문구, 눈높이와 버튼 도달, 진행자 키 안내,
+  시작/착석 로그, 13 먼 버튼, 14·15 이동·운전석 복귀 직후 배치,
+  앉기/재착석·추적 손실 뒤 배치·확인 잠금을 재시험할 것.
+  정식 T-04·T-05·T-06·T-09 및 이번 기기 재시험은 not-tested.
+  빌드·합성 시험이 기기 가독성/조작감 증거를 대신하지 않음.
+- R1-1~R1-7 반영 완료, 질문 없음. Claude 2회차 리뷰 대기.
 
 ## 질문
 

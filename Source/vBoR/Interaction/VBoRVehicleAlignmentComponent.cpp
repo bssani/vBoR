@@ -127,6 +127,7 @@ void UVBoRVehicleAlignmentComponent::AdvanceSwitch(double DeltaSeconds)
 		AlignmentPawn->SetActorTransform(FVBoRBuckAlignment::CalculatePawn(Saved.Capture, Eye), false, nullptr, ETeleportType::TeleportPhysics);
 		CurrentViewpoint = PendingViewpoint; bMoved = true;
 		SwitchElapsed = FadeSeconds;
+		OnPawnMoved.Broadcast();
 		if (APlayerController* PC = Cast<APlayerController>(AlignmentPawn->GetController()))
 		{ if (PC->PlayerCameraManager) { PC->PlayerCameraManager->StartCameraFade(1, 0, FadeSeconds, FLinearColor::Black, false, false); } }
 		return;
@@ -136,6 +137,25 @@ void UVBoRVehicleAlignmentComponent::AdvanceSwitch(double DeltaSeconds)
 		bSwitching = false; ++SwitchCompletions;
 		UE_LOG(LogP3Flow, Log, TEXT("시점 완료 %s requests=%d complete=%d discarded=%d"), CurrentViewpoint ? *CurrentViewpoint->GetName() : TEXT("기준"), SwitchRequests, SwitchCompletions, SwitchDiscards);
 	}
+}
+
+bool UVBoRVehicleAlignmentComponent::ReadWorldHead(FTransform& OutHead) const
+{
+	if (!AlignmentPawn || !GEngine || !GEngine->XRSystem.IsValid()) { return false; }
+	const auto& XR = GEngine->XRSystem;
+	FQuat Rotation; FVector Position;
+	if (!XR->IsTracking(IXRTrackingSystem::HMDDeviceId) || !XR->GetCurrentPose(IXRTrackingSystem::HMDDeviceId, Rotation, Position)) { return false; }
+	// P3 camera 는 Pawn root 에 붙음. 이동 직후 XR 의 cached world transform 을 쓰지 않음 (R1-7)
+	OutHead = FTransform(Rotation, Position) * AlignmentPawn->GetActorTransform();
+	return !OutHead.ContainsNaN();
+}
+
+FString UVBoRVehicleAlignmentComponent::DescribeHead(bool bTracked, const FVector& WorldHead) const
+{
+	if (!bTracked || !BaseEye || WorldHead.ContainsNaN()) { return FString(); }
+	const FTransform Eye = CurrentViewpoint ? CurrentViewpoint->GetComponentTransform() : BaseEye->GetComponentTransform();
+	return FString::Printf(TEXT("시점 %s | %s"), CurrentViewpoint ? *CurrentViewpoint->GetName() : TEXT("기준"),
+		*FVBoRBuckAlignment::DescribeTip(true, WorldHead, Eye));
 }
 
 FString UVBoRVehicleAlignmentComponent::Describe() const

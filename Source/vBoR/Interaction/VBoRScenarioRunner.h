@@ -15,6 +15,7 @@ class UWidgetComponent;
 class UArrowComponent;
 class UStaticMeshComponent;
 class STextBlock;
+class SBorder;
 
 enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment };
 enum class EVBoRCommandSource : uint8 { Participant, Operator };
@@ -24,6 +25,7 @@ struct FVBoRFlowCommand
 	EVBoRFlowCommand Action = EVBoRFlowCommand::Confirm;
 	EVBoRCommandSource Source = EVBoRCommandSource::Participant;
 	FVBoRFlowToken Token;
+	bool bConfirmLocked = false;
 };
 
 UCLASS(Blueprintable)
@@ -35,9 +37,13 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="안내") TObjectPtr<UVBoRScenarioAsset> Scenario;
 	UPROPERTY(VisibleAnywhere, Category="안내") TObjectPtr<UWidgetComponent> Panel;
-	UPROPERTY(EditAnywhere, Category="안내", meta=(Units="cm")) float PanelDistanceCm = 60;
-	UPROPERTY(EditAnywhere, Category="안내", meta=(Units="cm")) float PanelBelowCm = 15;
+	UPROPERTY(EditAnywhere, Category="안내", meta=(Units="cm")) float PanelDistanceCm = 70;
+	UPROPERTY(EditAnywhere, Category="안내", meta=(Units="cm")) float PanelBelowCm = 0;
 	UPROPERTY(EditAnywhere, Category="안내", meta=(Units="cm")) FVector2D PanelSizeCm = FVector2D(50, 32);
+	UPROPERTY(EditAnywhere, Category="안내", meta=(Units="cm")) float ButtonDistanceCm;
+	UPROPERTY(EditAnywhere, Category="안내", meta=(Units="cm")) float ButtonBelowCm;
+	UPROPERTY(EditAnywhere, Category="안내", meta=(Units="s", ClampMin="0")) float ConfirmLockSeconds;
+	UPROPERTY(EditAnywhere, Category="안내", meta=(Units="s", ClampMin="0.01")) float SeatedPanelSeconds;
 	bool InitializeFlow();
 	void QueueCommand(const FVBoRFlowCommand& Command);
 	void ProcessFlow(double DeltaSeconds);
@@ -46,9 +52,11 @@ public:
 	bool IsFinished() const { return bFinished; }
 	bool IsRunning() const { return bRunning; }
 	FString GetPanelText() const;
+	FString GetOperatorText() const;
 	FText GetInstructionText() const;
 	FString LastRecord, LastCompletion, LastViewRequest, ValidationProblems;
 	int32 StaleDiscards = 0, PermissionDiscards = 0, RuleDiscards = 0, TransitionDiscards = 0;
+	int32 ConfirmLockDiscards = 0;
 	int32 PreviousCount = 0, RetryCount = 0, SkipCount = 0;
 	bool bAlignmentIgnored = false;
 protected:
@@ -61,18 +69,27 @@ private:
 	UPROPERTY() TObjectPtr<UVBoRSeatZoneComponent> Seat;
 	UPROPERTY() TObjectPtr<AVBoRPokeButton> ConfirmButton;
 	UPROPERTY() TObjectPtr<AVBoRPokeButton> ActionButton;
+	UPROPERTY() TObjectPtr<UWidgetComponent> OperatorPanel;
+	UPROPERTY() TArray<TObjectPtr<UWidgetComponent>> ButtonLabels;
 	UPROPERTY() TObjectPtr<UArrowComponent> MarkerArrow;
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> MarkerRing;
 	UPROPERTY() TArray<TObjectPtr<UObject>> Targets;
 	UPROPERTY() TArray<TObjectPtr<USceneComponent>> Markers;
 	TMap<TWeakObjectPtr<AVBoRPokeButton>, int32> ButtonCounts;
 	TSharedPtr<STextBlock> PanelText;
+	TSharedPtr<STextBlock> OperatorText;
+	TSharedPtr<SBorder> PanelBorder;
+	TArray<TSharedPtr<STextBlock>> ButtonLabelTexts;
 	TArray<FVBoRFlowCommand> PendingCommands;
 	FVBoRFlowToken LiveToken;
 	uint64 LiveFrame = MAX_uint64, Generation = 0;
 	int32 StepIndex = INDEX_NONE, ButtonBaseline = 0;
 	bool bInitialized = false, bRunning = false, bFinished = false, bRestartPending = false;
 	double StepElapsed = 0;
+	double ConfirmLockRemaining = 0, HeadLogElapsed = 0;
+	bool bOperatorInfo = false, bPanelPlacementPending = true, bSeatedPanelPlaced = false;
+	bool bStartHeadPending = false, bSeatHeadRecorded = false;
+	bool bPawnMovedBeforeFlow = false;
 	EVBoRFlowCommand PanelAction = EVBoRFlowCommand::ReturnBase;
 	const FVBoRScenarioStep* CurrentStep() const;
 	bool RuleSatisfied() const;
@@ -84,6 +101,11 @@ private:
 	void QueueLive(EVBoRFlowCommand Action, EVBoRCommandSource Source);
 	void FreezeLiveToken();
 	void PlacePanel();
+	void HandlePawnMoved();
+	void SampleHead(bool bTracked, const FTransform& Head, double DeltaSeconds);
+	void PlacePanelAtHead(const FTransform& Head);
+	bool RecordHead(const TCHAR* Label, bool bTracked, const FTransform& Head);
+	FString ActionLabel() const;
 	void RefreshPanel();
 	void UpdateMarker();
 	void Record(const FString& Text);
@@ -91,4 +113,5 @@ private:
 	UFUNCTION() void HandleActionPoke(const FIsdkInteractionPointerEvent& Event);
 	UFUNCTION() void HandleTargetPoke(const FIsdkInteractionPointerEvent& Event);
 	void KeyConfirm(); void KeyNext(); void KeyPrevious(); void KeyPassenger(); void KeyRear(); void KeyReturn(); void KeyRestart(); void KeyIgnore();
+	void KeyOperatorInfo();
 };

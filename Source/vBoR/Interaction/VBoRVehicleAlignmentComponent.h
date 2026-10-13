@@ -8,6 +8,7 @@
 class APawn;
 class UVBoREyePointComponent;
 class UVBoRViewpointComponent;
+DECLARE_MULTICAST_DELEGATE(FVBoRPawnMoved);
 
 UENUM(BlueprintType)
 enum class EVBoRAlignmentState : uint8 { Applied, NoSavedValue, NeedsCheck };
@@ -25,6 +26,9 @@ public:
 	bool IsSwitching() const { return bSwitching; }
 	bool IsAtViewpoint(const UVBoRViewpointComponent* Viewpoint) const { return !bSwitching && CurrentViewpoint == Viewpoint; }
 	FString Describe() const;
+	bool ReadWorldHead(FTransform& OutHead) const;
+	FString DescribeHead(bool bTracked, const FVector& WorldHead) const;
+	FVBoRPawnMoved OnPawnMoved;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="정렬") TObjectPtr<UVBoREyePointComponent> BaseEye;
 	UPROPERTY(EditAnywhere, Category="정렬", meta=(Units="s", ClampMin="0.01")) float FadeSeconds = 0.3;
 	UPROPERTY(EditAnywhere, Category="정렬", meta=(Units="cm", ClampMin="0")) float PlayAreaToleranceCm = 1;

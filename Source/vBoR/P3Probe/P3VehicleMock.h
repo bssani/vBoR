@@ -26,6 +26,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector RearEyeCm = FVector(-100,-37,118);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector DoorHingeCm = FVector(35,-92.5,35);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector ReachButtonCm = FVector(40,25,90);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector DashboardCenterCm;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm", ClampMin="4")) FVector DashboardSizeCm;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) float ApproachSurroundCm = 150;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) float StartOutsideCm = 250;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<UVBoREyePointComponent> DriverEye;
@@ -40,6 +42,8 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 private:
+	friend struct FP3FlowTestAccess;
+	void PlaceReachButton();
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Plates;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> StartMarker;
 	UPROPERTY() TObjectPtr<UWidgetComponent> MockLabel;

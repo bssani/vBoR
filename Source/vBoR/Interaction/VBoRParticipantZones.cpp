@@ -69,7 +69,8 @@ void UVBoRSeatZoneComponent::SampleHead(bool bTracked, const FVector& WorldHead,
 	const bool bRecovered = !bWasTracked; bWasTracked = true;
 	const FVector P = GetComponentTransform().InverseTransformPosition(WorldHead).GetAbs();
 	const FVector E = GetUnscaledBoxExtent();
-	if (P.X > E.X || P.Y > E.Y || P.Z > E.Z) { DwellSeconds = 0; }
+	bInside = P.X <= E.X && P.Y <= E.Y && P.Z <= E.Z;
+	if (!bInside) { DwellSeconds = 0; }
 	// 복구 frame 의 dt 에 추적 손실 시간이 섞일 수 있어 세지 않음 (P3 E7)
 	else if (!bRecovered) { DwellSeconds += FMath::Max(0.0, DeltaSeconds); }
 }

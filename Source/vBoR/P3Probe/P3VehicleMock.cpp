@@ -12,9 +12,13 @@
 #include "UObject/ConstructorHelpers.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Text/STextBlock.h"
+#include "IsdkContentAssetPaths.h"
+#include "Materials/MaterialInterface.h"
+#include "Materials/MaterialInstanceDynamic.h"
 
 AP3VehicleMock::AP3VehicleMock()
 {
+	DashboardCenterCm = FVector(50,0,85); DashboardSizeCm = FVector(25,175,12);
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("FixedVehicleOrigin")));
 	DriverEye = CreateDefaultSubobject<UVBoREyePointComponent>(TEXT("DriverEye")); DriverEye->SetupAttachment(RootComponent);
 	PassengerView = CreateDefaultSubobject<UVBoRViewpointComponent>(TEXT("PassengerView")); PassengerView->SetupAttachment(RootComponent); PassengerView->ComponentTags.Add(TEXT("Car.PassengerView"));
@@ -55,10 +59,11 @@ void AP3VehicleMock::OnConstruction(const FTransform& Transform)
 	Plate(8,FVector(-80,-Y,Z/2),FVector(5,4,Z));
 	Plate(9,DriverEyeCm+FVector(0,0,-70),FVector(48,46,10));
 	Plate(10,DriverEyeCm+FVector(-28,0,-40),FVector(8,46,60));
-	Plate(11,FVector(50,0,85),FVector(25,BodySizeCm.Y-10,12));
+	Plate(11,DashboardCenterCm,DashboardSizeCm);
 	Plate(12,DriverEyeCm+FVector(55,0,-28),FVector(5,30,30));
 	StartMarker->SetRelativeLocation(FVector(DriverEyeCm.X,-Y-StartOutsideCm,0.5)); StartMarker->SetRelativeScale3D(FVector(0.6,0.6,0.005));
 	MockLabel->SetRelativeLocation(FVector(DriverEyeCm.X,-Y-StartOutsideCm+40,60)); MockLabel->SetRelativeRotation(FRotator(0,-90,0)); MockLabel->SetRelativeScale3D(FVector(0.08));
+	PlaceReachButton();
 }
 
 void AP3VehicleMock::BeginPlay()
@@ -72,6 +77,26 @@ void AP3VehicleMock::BeginPlay()
 	ReachButton->Tags.Add(TEXT("Car.ReachButton")); ReachButton->HitAreaScale = 1;
 	ReachButton->ButtonMesh->SetRelativeScale3D(FVector(0.04,0.04,0.01));
 	ReachButton->FinishSpawning(FTransform(GetActorRotation(), GetActorTransform().TransformPosition(ReachButtonCm))); ReachButton->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+	PlaceReachButton();
+	UMaterialInterface* ColorMaterial = LoadObject<UMaterialInterface>(nullptr, IsdkContentAssetPaths::Materials::GrabbableDefault);
+	if (ColorMaterial)
+	{
+		UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(ColorMaterial, ReachButton);
+		Material->SetVectorParameterValue(TEXT("ColorParam"), FLinearColor(0.05, 0.25, 1, 1));
+		ReachButton->ButtonMesh->SetMaterial(0, Material);
+	}
+}
+
+void AP3VehicleMock::PlaceReachButton()
+{
+	if (!ReachButton || !ReachButton->ButtonMesh->GetStaticMesh()) { return; }
+	// 윗면·크기를 판에서 읽음. Z 자리값은 쓰지 않음 (대시보드에 묻힘 방지, R1-6)
+	const FBox Dashboard = Plates[11]->GetStaticMesh()->GetBoundingBox().TransformBy(Plates[11]->GetRelativeTransform());
+	const FBox Button = ReachButton->ButtonMesh->GetStaticMesh()->GetBoundingBox().TransformBy(
+		ReachButton->ButtonMesh->GetComponentTransform().GetRelativeTransform(ReachButton->GetActorTransform()));
+	const FVector Position(FMath::Clamp(ReachButtonCm.X, Dashboard.Min.X - Button.Min.X, Dashboard.Max.X - Button.Max.X),
+		FMath::Clamp(ReachButtonCm.Y, Dashboard.Min.Y - Button.Min.Y, Dashboard.Max.Y - Button.Max.Y), Dashboard.Max.Z - Button.Min.Z);
+	ReachButton->SetActorRelativeLocation(Position);
 }
 
 void AP3VehicleMock::EndPlay(const EEndPlayReason::Type EndPlayReason)

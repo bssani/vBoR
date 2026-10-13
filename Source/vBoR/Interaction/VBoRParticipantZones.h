@@ -36,8 +36,11 @@ public:
 	UVBoRSeatZoneComponent();
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	void SampleHead(bool bTracked, const FVector& WorldHead, double DeltaSeconds);
+	bool IsHeadInside() const { return bInside; }
+	bool IsHeadTracked() const { return bWasTracked; }
 	double DwellSeconds = 0;
 	int32 TrackingPauses = 0;
 private:
 	bool bWasTracked = true;
+	bool bInside = false;
 };
