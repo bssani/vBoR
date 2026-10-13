@@ -4,6 +4,7 @@
 #include "../Interaction/VBoRParticipantZones.h"
 #include "../Interaction/VBoRVehicleAlignmentComponent.h"
 #include "../Interaction/VBoRHingedDoor.h"
+#include "../Interaction/VBoRAxisPart.h"
 #include "../Interaction/VBoRPokeButton.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
@@ -73,6 +74,21 @@ void AP3VehicleMock::BeginPlay()
 	Door = GetWorld()->SpawnActorDeferred<AVBoRHingedDoor>(AVBoRHingedDoor::StaticClass(), FTransform(FRotator(0,180,0).Quaternion(), GetActorTransform().TransformPosition(DoorHingeCm)), this);
 	const FTransform DoorWorld(FRotator(0,GetActorRotation().Yaw+180,0), GetActorTransform().TransformPosition(DoorHingeCm));
 	Door->Tags.Add(TEXT("Car.DriverDoor")); Door->FinishSpawning(DoorWorld); Door->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+	// Actor 원점은 차 원점, 메시·축만 부품 자리로 옮김 (차 원점 피벗 흉내, P2b D3)
+	OutsideAxisHandle = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
+	OutsideAxisHandle->AxisPivot->SetRelativeLocation(OutsideHandlePivotCm);
+	OutsideAxisHandle->MeshRestFromRoot = FTransform(FQuat::Identity, OutsideHandlePivotCm - FVector(0,0,2), FVector(0.18,0.04,0.04));
+	OutsideAxisHandle->Axis = EAxis::X; OutsideAxisHandle->bReverse = true;
+	OutsideAxisHandle->FinishSpawning(GetActorTransform());
+	OutsideAxisHandle->AttachToComponent(Door->HingePivot, FAttachmentTransformRules::KeepWorldTransform);
+	Door->SetAxisHandle(0, OutsideAxisHandle);
+	ConsoleLid = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
+	ConsoleLid->AxisPivot->SetRelativeLocation(ConsoleLidPivotCm);
+	ConsoleLid->MeshRestFromRoot = FTransform(FQuat::Identity, ConsoleLidPivotCm + FVector(17.5,0,0), FVector(0.35,0.24,0.03));
+	ConsoleLid->Axis = EAxis::Y; ConsoleLid->bReverse = true;
+	ConsoleLid->MaxAngleDeg = 100; ConsoleLid->Release = EVBoRAxisRelease::Stay;
+	ConsoleLid->FinishSpawning(GetActorTransform());
+	ConsoleLid->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	ReachButton = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), FTransform::Identity, this);
 	ReachButton->Tags.Add(TEXT("Car.ReachButton")); ReachButton->HitAreaScale = 1;
 	ReachButton->ButtonMesh->SetRelativeScale3D(FVector(0.04,0.04,0.01));
@@ -102,6 +118,8 @@ void AP3VehicleMock::PlaceReachButton()
 void AP3VehicleMock::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (Door) { Door->Destroy(); }
+	if (OutsideAxisHandle) { OutsideAxisHandle->Destroy(); }
+	if (ConsoleLid) { ConsoleLid->Destroy(); }
 	if (ReachButton) { ReachButton->Destroy(); }
 	MockLabel->SetSlateWidget(nullptr);
 	Super::EndPlay(EndPlayReason);

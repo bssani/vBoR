@@ -26,6 +26,7 @@ struct FVBoRDoorMetrics
 struct FVBoRDoorMotion
 {
 	double WidthCm = 110, HeightCm = 105, ThicknessCm = 10;
+	FVector FaceMinCm = FVector(0,-5,0), FaceMaxCm = FVector(110,5,105);
 	double MaxAngleDeg = 70, MaxSpeedDegPerSecond = 180;
 	double LatchAngleDeg = 2, RearmAngleDeg = 5;
 	double PalmLimitDeg = 60, MinAxisDistanceCm = 15, FrontToleranceCm = 0.5;

@@ -16,6 +16,7 @@ class UMaterialInstanceDynamic;
 class UAudioComponent;
 struct FIsdkInteractionPointerEvent;
 class AVBoRHingedDoor;
+class AVBoRAxisPart;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVBoRDoorEvent, AVBoRHingedDoor*, Door);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVBoRDoorAngleEvent, float, AngleDeg);
@@ -52,12 +53,18 @@ class VBOR_API AVBoRHingedDoor : public AActor
 	GENERATED_BODY()
 public:
 	AVBoRHingedDoor();
+	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void PreInitializeComponents() override;
 	virtual void Tick(float DeltaSeconds) override;
 	UFUNCTION(BlueprintCallable, Category = "Door") void ResetDoor();
 	const FVBoRDoorMotion& GetMotion() const { return Motion; }
 	FString GetStateText() const;
 	FString GetMeasurementText(const FVBoRDoorMetrics* Baseline = nullptr) const;
+	void SetAxisHandle(int32 Handle, AVBoRAxisPart* Part);
+	bool BeginGrabFromAxisPart(AVBoRAxisPart* Part);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door") FTransform MeshRestFromRoot = FTransform(FQuat::Identity, FVector(55,0,52.5), FVector(1.1,0.1,1.05));
+	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Door") TObjectPtr<AVBoRAxisPart> OutsideAxisHandle;
+	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Door") TObjectPtr<AVBoRAxisPart> InsideAxisHandle;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Door") TObjectPtr<USceneComponent> HingePivot;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Door") TObjectPtr<UStaticMeshComponent> DoorMesh;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Door") TObjectPtr<UBoxComponent> OutsideHandle;
@@ -86,6 +93,9 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 private:
+	friend struct FP2bTestAccess;
+	UPROPERTY() TObjectPtr<AVBoRAxisPart> HoldingAxisPart;
+	bool BeginAxisGrab(AVBoRAxisPart* Part, const FVBoRDoorHand& Input);
 	UPROPERTY() TObjectPtr<UVBoRDoorTransformer> DoorTransformer;
 	UPROPERTY() TObjectPtr<AVBoRHandRigPawn> HandPawn;
 	UPROPERTY() TObjectPtr<UIsdkGrabberComponent> HoldingGrabber;
