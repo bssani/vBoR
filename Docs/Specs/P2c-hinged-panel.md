@@ -8,7 +8,7 @@
 | 베이스 브랜치 | `main` @ P2b 머지 뒤 Claude 문서 커밋 |
 | 작업 브랜치 | `codex/P2c-hinged-panel` |
 | 리뷰 파일 | `Docs/Reviews/P2c-hinged-panel.md` (첫 리뷰 때 생김) |
-| 상태 | 명세 — 구현 전 |
+| 상태 | 리뷰 1회차(`d8e2cc7`) 열린 항목 없음, `vBoR.*` 124/124 → 사용자 결정으로 VR 전 머지(2026-10-14). VR 확인(§7)은 다음 VR 때. 시험 상태 `not-tested` |
 
 ## 0. 결정
 
