@@ -1,5 +1,5 @@
 #include "VBoRAxisPart.h"
-#include "VBoRHingedDoor.h"
+#include "VBoRHingedPanel.h"
 #include "VBoRHandRigPawn.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
@@ -107,7 +107,6 @@ FTransform UVBoRAxisTransformer::UpdateTracked(const TArray<FIsdkGrabPose>& Pose
 {
 	AVBoRAxisPart* Part = GetTypedOuter<AVBoRAxisPart>();
 	if (!bActive || Poses.IsEmpty() || Part->bDoorHold) { return Part->AxisPivot->GetRelativeTransform(); }
-	if (Part->LinkedDoor && !Part->LinkedDoor->GetMotion().bLocked) { return Part->AxisPivot->GetRelativeTransform(); }
 	if (!bTracked)
 	{
 		if (!Part->bPaused) { ++Part->Pauses; }
@@ -250,7 +249,7 @@ void AVBoRAxisPart::ReleasePart(bool bCancelSDK)
 	UE_LOG(LogAxisPart, Log, TEXT("%s released | %s"), *GetName(), *GetDebugText());
 }
 
-void AVBoRAxisPart::ConnectDoor(AVBoRHingedDoor* Door, int32 Handle)
+void AVBoRAxisPart::ConnectDoor(AVBoRHingedPanel* Door, int32 Handle)
 {
 	LinkedDoor = Door; DoorHandle = Handle; Release = EVBoRAxisRelease::Return;
 }
@@ -312,7 +311,8 @@ void AVBoRAxisPart::Tick(float DeltaSeconds)
 	}
 	EvaluateState();
 	// Move delegate 안에서 ForceCancel 을 부르지 않음 (SDK 선택 배열 재진입 방지, P2b D5)
-	if (LinkedDoor && HoldingHand != INDEX_NONE && !bDoorHold && (GetOpenRatio() >= OpenThreshold || !LinkedDoor->GetMotion().bLocked))
+	// 풀린 문도 손잡이를 먼저 젖힘 (같은 손 넘김은 문턱에서만, P2c D4)
+	if (LinkedDoor && HoldingHand != INDEX_NONE && !bDoorHold && GetOpenRatio() >= OpenThreshold)
 	{
 		if (LinkedDoor->BeginGrabFromAxisPart(this)) { bDoorHold = true; GrabComponent->CancelSelection(); }
 	}

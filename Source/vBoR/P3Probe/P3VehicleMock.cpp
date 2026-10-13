@@ -7,6 +7,7 @@
 #include "../Interaction/VBoRAxisPart.h"
 #include "../Interaction/VBoRPokeButton.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/BoxComponent.h"
 #include "Components/WidgetComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -82,11 +83,13 @@ void AP3VehicleMock::BeginPlay()
 	OutsideAxisHandle->FinishSpawning(GetActorTransform());
 	OutsideAxisHandle->AttachToComponent(Door->HingePivot, FAttachmentTransformRules::KeepWorldTransform);
 	Door->SetAxisHandle(0, OutsideAxisHandle);
-	ConsoleLid = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
-	ConsoleLid->AxisPivot->SetRelativeLocation(ConsoleLidPivotCm);
+	// +Y 윗면·+Z 차 -Y 축. 양의 열림이 위로 향함 (가로 경첩, P2c D3)
+	ConsoleLid = GetWorld()->SpawnActorDeferred<AVBoRHingedPanel>(AVBoRHingedPanel::StaticClass(), GetActorTransform(), this);
+	ConsoleLid->HingePivot->SetRelativeTransform(FTransform(FQuat(FVector::XAxisVector, PI / 2), ConsoleLidPivotCm));
 	ConsoleLid->MeshRestFromRoot = FTransform(FQuat::Identity, ConsoleLidPivotCm + FVector(17.5,0,0), FVector(0.35,0.24,0.03));
-	ConsoleLid->Axis = EAxis::Y; ConsoleLid->bReverse = true;
-	ConsoleLid->MaxAngleDeg = 100; ConsoleLid->Release = EVBoRAxisRelease::Stay;
+	ConsoleLid->OutsideHandle->SetRelativeLocation(FVector(35,5.5,0));
+	ConsoleLid->InsideHandle->SetRelativeLocation(FVector(35,-5.5,0));
+	ConsoleLid->MaxAngleDeg = 100;
 	ConsoleLid->FinishSpawning(GetActorTransform());
 	ConsoleLid->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	ReachButton = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), FTransform::Identity, this);
