@@ -18,6 +18,42 @@ namespace
 	}
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2DoorAsymmetricFacesTest, "vBoR.P2Door.AsymmetricFacePlanes", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP2DoorAsymmetricFacesTest::RunTest(const FString& Parameters)
+{
+	FVBoRDoorMotion Door;
+	Door.FaceMinCm.Y = -20; Door.FaceMaxCm.Y = 5; Door.ThicknessCm = 25;
+	Door.bLocked = false; Door.AngleDeg = 30;
+	FVBoRDoorHand Hands[2] = {DoorHand(DoorPoint(30, FVector(80,8,50)), DoorPoint(30, FVector(0,-1,0))), {}};
+	Door.Advance(Hands, 0.1);
+	Hands[0] = DoorHand(DoorPoint(30, FVector(80,0,50)), DoorPoint(30, FVector(0,-1,0)));
+	Door.Advance(Hands, 0.1);
+	TestTrue(TEXT("Outside +8 approach closes via +5 plane"), Door.AngleDeg < 30);
+	TestEqual(TEXT("Outside face selected"), Door.PushFace, 0);
+	TestTrue(TEXT("Point follows asymmetric outside plane"), FMath::IsNearlyEqual(Door.ToDoor(Hands[0].Points[0]).Y, 5.0, 0.001));
+	Door.Reset(); Door.bLocked = false;
+	Hands[0] = DoorHand(FVector(80,-23,50), FVector(0,1,0)); Door.Advance(Hands, 0.1);
+	Hands[0] = DoorHand(FVector(80,-12,50), FVector(0,1,0)); Door.Advance(Hands, 0.1);
+	TestTrue(TEXT("Inside -23 approach opens via -20 plane"), Door.AngleDeg > 0);
+	TestEqual(TEXT("Inside face selected"), Door.PushFace, 1);
+	TestTrue(TEXT("Point follows asymmetric inside plane"), FMath::IsNearlyEqual(Door.ToDoor(Hands[0].Points[0]).Y, -20.0, 0.001));
+	for (const FVector& Normal : {FVector(0,1,0), FVector(0,-1,0)})
+	{
+		Door.Reset(); Door.bLocked = false;
+		Hands[0] = DoorHand(FVector(80,-8,50), Normal);
+		Door.Advance(Hands, 0.1); Door.Advance(Hands, 0.1);
+		TestEqual(TEXT("Hand appearing between planes never pushes"), Door.AngleDeg, 0.0);
+		TestEqual(TEXT("No push owner between planes"), Door.PushHand, INDEX_NONE);
+	}
+	Door.Reset(); Door.bLocked = false;
+	const int32 WrongPalm = Door.Metrics.Ignored[static_cast<int32>(EVBoRDoorIgnore::PalmDirection)];
+	Hands[0] = DoorHand(FVector(80,8,50), FVector(0,1,0)); Door.Advance(Hands, 0.1);
+	Hands[0] = DoorHand(FVector(80,4,50), FVector(0,1,0)); Door.Advance(Hands, 0.1);
+	TestEqual(TEXT("Exterior approach chooses outside even with misleading palm normal"), Door.Metrics.Ignored[static_cast<int32>(EVBoRDoorIgnore::PalmDirection)], WrongPalm + 1);
+	TestEqual(TEXT("Wrong-facing palm cannot move door"), Door.AngleDeg, 0.0);
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2DoorGrabTest, "vBoR.P2Door.GrabLatchStop", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP2DoorGrabTest::RunTest(const FString& Parameters)
 {

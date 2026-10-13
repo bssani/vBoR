@@ -14,6 +14,11 @@
 #include "Interaction/IsdkGrabbableComponent.h"
 #include "Interaction/GrabDetectors/IsdkHandGrabDetector.h"
 #include "IsdkFunctionLibrary.h"
+#include "IsdkRuntimeSettings.h"
+#include "P2bTestFixture.h"
+#include "P2DoorBench.h"
+#include "Misc/OutputDevice.h"
+#include "Misc/OutputDeviceRedirector.h"
 
 struct FP2bTestAccess
 {
@@ -63,6 +68,123 @@ namespace
 		for (FVector& Point : Hand.Points) { Point = FQuat(FVector::UpVector, FMath::DegreesToRadians(Angle)).RotateVector(FVector(100,9,60)); }
 		return Hand;
 	}
+	struct FP2bDoorLogs : FOutputDevice
+	{
+		TArray<FString> Lines;
+		FP2bDoorLogs() { GLog->FlushThreadedLogs(); GLog->AddOutputDevice(this); Lines.Reset(); }
+		~FP2bDoorLogs() { GLog->RemoveOutputDevice(this); }
+		virtual void Serialize(const TCHAR* Message, ELogVerbosity::Type Verbosity, const FName& Category) override
+		{
+			if (Category == TEXT("LogAxisDoor")) { Lines.Add(Message); }
+		}
+		int32 Count(const FString& Text)
+		{
+			GLog->FlushThreadedLogs();
+			return Lines.FilterByPredicate([&](const FString& Line) { return Line.Contains(Text); }).Num();
+		}
+	};
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2bSDKReleaseTest, "vBoR.P2b.Axis.SDKReleaseBeforeTransformer", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP2bSDKReleaseTest::RunTest(const FString& Parameters)
+{
+	FP2bWorld W;
+	AP2bTrackedPart* Part = W.World->SpawnActor<AP2bTrackedPart>();
+	Part->Release = EVBoRAxisRelease::Stay;
+	AActor* Actor = W.World->SpawnActor<AActor>();
+	UIsdkGrabberComponent* Grabber = NewObject<UIsdkGrabberComponent>(Actor);
+	Actor->SetRootComponent(Grabber);
+	Grabber->InteractorTags.AddTag(IsdkGameplayTags::TAG_Isdk_Type_Device_Left);
+	Grabber->SetWorldLocation(FVector(300));
+	Grabber->SetGrabDetectionTypeAllowed(EIsdkGrabDetectorType::DistanceGrab, false);
+	Grabber->SetGrabDetectionTypeAllowed(EIsdkGrabDetectorType::RayGrab, false);
+	Grabber->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, true);
+	Grabber->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch, false);
+	Grabber->RegisterComponent();
+	W.Play(); Grabber->Activate(true);
+	UP2bPointerObserver* Observer = NewObject<UP2bPointerObserver>(W.World);
+	Observer->Grab = Part->GrabComponent;
+	Part->Grabbable->GetInteractionPointerEventDelegate().AddDynamic(Observer, &UP2bPointerObserver::Pointer);
+	Part->GrabComponent->GetCancelGrabEventDelegate()->AddDynamic(Observer, &UP2bPointerObserver::Cancel);
+	Part->OnPartReleased.AddDynamic(Observer, &UP2bPointerObserver::Released);
+	Grabber->SetWorldLocation(Part->GrabBox->GetComponentLocation());
+	Grabber->TickComponent(0.016f, LEVELTICK_All, nullptr);
+	Grabber->PalmGrab();
+	TestTrue(TEXT("Real SDK grab owns part"), Grabber->GetGrabbedComponent() == Part->Grabbable && Part->GetHoldingHand() == 0);
+	FP2bTestAccess::Value(Part, 18);
+	Grabber->PalmRelease();
+	TestEqual(TEXT("Our event executes before transformer removes pose"), Observer->UnselectPoses, 1);
+	TestEqual(TEXT("Zero ForceCancel calls in pointer callbacks"), Part->GrabComponent->CancelCalls, 0);
+	TestEqual(TEXT("No reentrant SDK cancel"), Observer->CancelEvents, 0);
+	TestEqual(TEXT("One application release"), Observer->ReleaseEvents, 1);
+	TestEqual(TEXT("Application holding hand cleared"), Part->GetHoldingHand(), INDEX_NONE);
+	TestTrue(TEXT("SDK grabber released without crash"), !Grabber->IsGrabbing() && !Grabber->GetGrabbedComponent());
+	TestEqual(TEXT("Transformer selection cleared by SDK release"), Part->GrabComponent->GetNumGrabbers(), 0);
+	TestTrue(TEXT("Lid stays at release angle"), FMath::IsNearlyEqual(Part->GetOpenRatio(), 0.6f));
+
+	Part->bTracked = false;
+	Grabber->TickComponent(0.016f, LEVELTICK_All, nullptr); Grabber->PalmGrab();
+	TestEqual(TEXT("Low Select rejected by application"), Part->GetHoldingHand(), INDEX_NONE);
+	TestTrue(TEXT("Low Select remains in SDK until Tick"), Grabber->IsGrabbing());
+	TestEqual(TEXT("Low Select also calls ForceCancel zero times in event"), Part->GrabComponent->CancelCalls, 0);
+	Part->Tick(0.016f);
+	TestEqual(TEXT("One deferred ForceCancel on Tick"), Part->GrabComponent->CancelCalls, 1);
+	TestEqual(TEXT("One SDK cancellation"), Observer->CancelEvents, 1);
+	TestTrue(TEXT("Low Select cleared from grabber and transformer"), !Grabber->IsGrabbing() && Part->GrabComponent->GetNumGrabbers() == 0);
+	TestEqual(TEXT("Low rejection does not emit application release"), Observer->ReleaseEvents, 1);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2bDoorLogTest, "vBoR.P2b.Door.TransferEndReasons", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP2bDoorLogTest::RunTest(const FString& Parameters)
+{
+	FP2bWorld W; FP2bDoorLogs Logs;
+	AP2bTrackedDoor* Door = W.World->SpawnActor<AP2bTrackedDoor>();
+	AVBoRAxisPart* Part = W.World->SpawnActor<AVBoRAxisPart>();
+	W.Play(); Door->SetAxisHandle(0, Part);
+	Door->Hands[0] = P2bHand();
+	FP2bTestAccess::Begin(Part, P2bPose(FVector(100,9,60))); FP2bTestAccess::Value(Part, 25);
+	TestTrue(TEXT("Starts same-hand door hold"), FP2bTestAccess::Transfer(Door, Part, Door->Hands[0]));
+	TestEqual(TEXT("Start logs handle, hand, prior lock, angle"), Logs.Count(TEXT("handle=outside hand=L locked=1 angle=0.00 deg")), 1);
+	Door->Hands[0] = P2bHand(30); Door->Tick(0.1f);
+	Door->Hands[0].bTracked = false; Door->Tick(0.2f); Door->Tick(0.2f);
+	TestEqual(TEXT("Tracking loss logged once as pause"), Logs.Count(TEXT("axis hold pause")), 1);
+	TestEqual(TEXT("Tracking loss does not end hold"), Logs.Count(TEXT("axis hold end")), 0);
+	TestEqual(TEXT("Hand retained during pause"), Part->GetHoldingHand(), 0);
+	Door->Hands[0] = P2bHand(30); Door->Tick(0.1f);
+	TestEqual(TEXT("Recovery logged once"), Logs.Count(TEXT("axis hold resume")), 1);
+	Door->bPalmClosed[0] = false; Door->Tick(0.1f);
+	TestEqual(TEXT("Palm open logs reason and angle"), Logs.Count(TEXT("reason=palm open angle=18.00 deg held=")), 1);
+	TestEqual(TEXT("Palm open releases transferred part"), Part->GetHoldingHand(), INDEX_NONE);
+	Door->Tick(0.1f);
+	TestEqual(TEXT("End logged only once"), Logs.Count(TEXT("axis hold end")), 1);
+	FP2bTestAccess::PalmOpen(Door, Part); Door->bPalmClosed[0] = true;
+	FP2bTestAccess::Begin(Part, P2bPose(FVector(100,9,60)));
+	TestTrue(TEXT("Unlocked door regrabs directly"), FP2bTestAccess::Transfer(Door, Part, Door->Hands[0]));
+	Door->Hands[0] = P2bHand(12); Door->Tick(0.1f);
+	TestTrue(TEXT("Closing latches door"), Door->GetMotion().bLocked);
+	TestEqual(TEXT("Latch end reason, angle and duration logged"), Logs.Count(TEXT("reason=latch angle=0.00 deg held=")), 1);
+	TestEqual(TEXT("Latch releases part"), Part->GetHoldingHand(), INDEX_NONE);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2bBenchSizeTest, "vBoR.P2b.Door.BenchSizeBounds", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP2bBenchSizeTest::RunTest(const FString& Parameters)
+{
+	FP2bWorld W;
+	for (const FVector& Size : {FVector(90,8,100), FVector(110,10,105)})
+	{
+		AP2DoorBench* Bench = W.World->SpawnActor<AP2DoorBench>(); Bench->DoorSizeCm = Size;
+		Bench->PlaceFromHead(FTransform(FRotator(0,40,0), FVector(300,20,165)), 25);
+		AVBoRHingedDoor* Door = Bench->Door;
+		if (!TestNotNull(TEXT("Bench creates door"), Door)) { continue; }
+		const FBox Bounds = Door->DoorMesh->GetStaticMesh()->GetBoundingBox().TransformBy(Door->DoorMesh->GetRelativeTransform());
+		TestTrue(TEXT("Mesh bounds follow requested size"), Bounds.GetSize().Equals(Size, 0.001));
+		TestTrue(TEXT("Push faces exactly match resized mesh"), Door->GetMotion().FaceMinCm.Equals(Bounds.Min) && Door->GetMotion().FaceMaxCm.Equals(Bounds.Max));
+		TestTrue(TEXT("Outside handle follows resized trailing edge and face"), Door->OutsideHandle->GetRelativeLocation().Equals(FVector(Size.X - Bench->OutsideHandleInsetCm, Bounds.Max.Y + 4, Bench->OutsideHandleHeightCm - Bench->BottomHeightCm)));
+		TestTrue(TEXT("Inside handle follows resized trailing edge and face"), Door->InsideHandle->GetRelativeLocation().Equals(FVector(Size.X - Bench->InsideHandleInsetCm, Bounds.Min.Y - 4, Bench->InsideHandleHeightCm - Bench->BottomHeightCm)));
+	}
+	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2bPivotTest, "vBoR.P2b.Axis.PivotEquivalence", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

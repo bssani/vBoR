@@ -27,6 +27,14 @@ void UVBoRAxisGrabComponent::Configure()
 	MultiGrabBehavior = EIsdkMultiGrabBehavior::SingleGrabFirstRetained;
 }
 
+void UVBoRAxisGrabComponent::CancelSelection()
+{
+#if WITH_DEV_AUTOMATION_TESTS
+	++CancelCalls;
+#endif
+	ForceCancel();
+}
+
 UIsdkTransformer* UVBoRAxisTransformer::Selected() const
 {
 	const AVBoRAxisPart* Part = GetTypedOuter<AVBoRAxisPart>();
@@ -219,24 +227,25 @@ void AVBoRAxisPart::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 	{
 		if (HoldingHand != INDEX_NONE || bNeedsPalmOpen[Hand] || !PartMesh->GetStaticMesh()) { return; }
 		HoldingHand = Hand; HoldingGrabber = Grabber;
-		if (!IsHandTracked()) { HoldingHand = INDEX_NONE; HoldingGrabber = nullptr; GrabComponent->ForceCancel(); return; }
+		if (!IsHandTracked()) { HoldingHand = INDEX_NONE; HoldingGrabber = nullptr; bCancelPending = true; return; }
 		++Grabs;
 		bPaused = bRebase = false;
 		UE_LOG(LogAxisPart, Log, TEXT("%s grab hand=%d"), *GetName(), Hand);
 	}
 	else if ((Event.Type == EIsdkPointerEventType::Unselect || Event.Type == EIsdkPointerEventType::Cancel) && HoldingGrabber == Grabber && !bDoorHold)
 	{
-		if (IsHandTracked() && !bPaused) { ReleasePart(); }
+		if (IsHandTracked() && !bPaused) { ReleasePart(false); }
 		else { if (!bPaused) { ++Pauses; } bPaused = bRebase = true; }
 	}
 }
 
-void AVBoRAxisPart::ReleasePart()
+void AVBoRAxisPart::ReleasePart(bool bCancelSDK)
 {
 	if (HoldingHand == INDEX_NONE) { return; }
 	HoldingHand = INDEX_NONE; HoldingGrabber = nullptr;
 	bPaused = bRebase = bDoorHold = false;
-	GrabComponent->ForceCancel();
+	// SDK 이벤트 중에도 들어옴. 취소는 Tick 에서만 실행함 (grabber 재진입 방지, P2b R1-3)
+	bCancelPending |= bCancelSDK;
 	OnPartReleased.Broadcast();
 	UE_LOG(LogAxisPart, Log, TEXT("%s released | %s"), *GetName(), *GetDebugText());
 }
@@ -249,14 +258,18 @@ void AVBoRAxisPart::EndDoorHold(bool bLatch)
 {
 	if (bLatch && HoldingHand != INDEX_NONE) { bNeedsPalmOpen[HoldingHand] = true; }
 	ReleasePart();
-	GrabComponent->ForceCancel();
+	bCancelPending = true;
 }
 
 void AVBoRAxisPart::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	if (!FMath::IsFinite(DeltaSeconds) || DeltaSeconds <= 0) { return; }
-	if (bDoorHold || (HoldingHand == INDEX_NONE && GrabComponent->GetNumGrabbers())) { GrabComponent->ForceCancel(); }
+	if (bCancelPending || bDoorHold || (HoldingHand == INDEX_NONE && GrabComponent->GetNumGrabbers()))
+	{
+		bCancelPending = false;
+		GrabComponent->CancelSelection();
+	}
 	AVBoRHandRigPawn* Pawn = Cast<AVBoRHandRigPawn>(UGameplayStatics::GetPlayerPawn(this,0));
 	for (int32 H = 0; H < 2; ++H)
 	{
@@ -301,7 +314,7 @@ void AVBoRAxisPart::Tick(float DeltaSeconds)
 	// Move delegate 안에서 ForceCancel 을 부르지 않음 (SDK 선택 배열 재진입 방지, P2b D5)
 	if (LinkedDoor && HoldingHand != INDEX_NONE && !bDoorHold && (GetOpenRatio() >= OpenThreshold || !LinkedDoor->GetMotion().bLocked))
 	{
-		if (LinkedDoor->BeginGrabFromAxisPart(this)) { bDoorHold = true; GrabComponent->ForceCancel(); }
+		if (LinkedDoor->BeginGrabFromAxisPart(this)) { bDoorHold = true; GrabComponent->CancelSelection(); }
 	}
 }
 

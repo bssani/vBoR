@@ -73,7 +73,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Door") TObjectPtr<UIsdkGrabbableComponent> InsideGrab;
 	UPROPERTY(VisibleAnywhere, Category = "Door") TObjectPtr<UVBoRDoorGrabTransformer> OutsideTransformer;
 	UPROPERTY(VisibleAnywhere, Category = "Door") TObjectPtr<UVBoRDoorGrabTransformer> InsideTransformer;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door", meta = (Units = "cm", ClampMin = "1")) FVector DoorSizeCm = FVector(110, 10, 105);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door", meta = (Units = "deg", ClampMin = "0", ClampMax = "180")) float MaxAngleDeg = 70;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door", meta = (Units = "deg/s", ClampMin = "0")) float MaxSpeedDegPerSecond = 180;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door", meta = (Units = "deg", ClampMin = "0")) float LatchAngleDeg = 2;
@@ -92,9 +91,14 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
+	virtual bool ReadHand(int32 Hand, FVBoRDoorHand& Input);
+	virtual bool ReadPalmClosed(int32 Hand, bool& bClosed) const;
 private:
 	friend struct FP2bTestAccess;
 	UPROPERTY() TObjectPtr<AVBoRAxisPart> HoldingAxisPart;
+	int32 AxisHoldHand = INDEX_NONE, AxisHoldHandle = INDEX_NONE;
+	double AxisHoldStartSeconds = 0;
+	void EndAxisHold(const TCHAR* Reason, bool bLatch);
 	bool BeginAxisGrab(AVBoRAxisPart* Part, const FVBoRDoorHand& Input);
 	UPROPERTY() TObjectPtr<UVBoRDoorTransformer> DoorTransformer;
 	UPROPERTY() TObjectPtr<AVBoRHandRigPawn> HandPawn;
@@ -103,14 +107,13 @@ private:
 	UPROPERTY() TObjectPtr<UAudioComponent> StateAudio;
 	TSet<TWeakObjectPtr<UIsdkGrabberComponent>> Hovering[2];
 	bool bNeedsPalmOpen[2] = {false, false};
+	bool bCancelPending = false;
 	FVBoRDoorMotion Motion;
 	FQuat ClosedHingeRotation = FQuat::Identity;
 	FTransform HingeFrame() const;
-	bool ReadHand(int32 Hand, FVBoRDoorHand& Input);
-	bool ReadPalmClosed(int32 Hand, bool& bClosed) const;
 	void SyncSettings();
 	void ApplyState(double BeforeAngle, int32 BeforeUnlocks, int32 BeforeLatches);
-	void CancelSelections();
+	void CancelSelections(const TCHAR* Reason);
 	UFUNCTION() void HandleOutsidePointer(const FIsdkInteractionPointerEvent& Event);
 	UFUNCTION() void HandleInsidePointer(const FIsdkInteractionPointerEvent& Event);
 	void HandlePointer(int32 Handle, const FIsdkInteractionPointerEvent& Event);

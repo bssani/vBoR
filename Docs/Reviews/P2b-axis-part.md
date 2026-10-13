@@ -51,7 +51,7 @@
 
 ## 열린 항목
 
-### R1-3 ISDK "놓음" 이벤트 안에서 `ForceCancel`을 불러 에디터가 크래시한다 (사용자 VR, 가장 먼저) — 열림
+### R1-3 ISDK "놓음" 이벤트 안에서 `ForceCancel`을 불러 에디터가 크래시한다 (사용자 VR, 가장 먼저) — 반영함 (fix(p2b): defer SDK cancel and fix door bounds)
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRAxisPart.cpp`
@@ -78,7 +78,7 @@
 - Select 거절(추적 Low) 경로도 같은 순서로 돌려 크래시가 없다. 다음 Tick에 SDK 선택이 취소된다.
 - `HandlePointer`가 도는 동안 `ForceCancel`이 0번 불린다(호출 수를 세어 확인).
 
-### R1-4 문을 손잡이로 넘겨 잡은 뒤의 잡기 시작·끝을 기록하지 않아, 08이 왜 오래 걸렸는지 볼 수 없다 (사용자 VR) — 열림
+### R1-4 문을 손잡이로 넘겨 잡은 뒤의 잡기 시작·끝을 기록하지 않아, 08이 왜 오래 걸렸는지 볼 수 없다 (사용자 VR) — 반영함 (fix(p2b): defer SDK cancel and fix door bounds)
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRHingedDoor.cpp` `BeginAxisGrab`, Tick의 넘김 끝(`HoldingAxisPart->EndDoorHold(false)`), `CancelSelections`
@@ -101,7 +101,7 @@
 - 넘김 시작 → 손바닥 펴기 → 끝 이유 "손바닥 펴짐"과 각도가 기록된다.
 - 넘김 중 문을 닫아 걸쇠 → 끝 이유 "걸쇠"가 기록된다.
 
-### R1-1 P2 시험대의 `DoorSizeCm`이 더는 문 메시와 문 면을 바꾸지 못한다 — 문 크기 값이 두 군데로 갈렸다 — 열림
+### R1-1 P2 시험대의 `DoorSizeCm`이 더는 문 메시와 문 면을 바꾸지 못한다 — 문 크기 값이 두 군데로 갈렸다 — 반영함 (fix(p2b): defer SDK cancel and fix door bounds)
 
 **문제**
 - **위치:**
@@ -124,7 +124,7 @@
 - 시험대 `DoorSizeCm` (90, 8, 100)으로 문을 만든다. 문 메시 bounds, 밀기 문 면(`FaceMinCm/FaceMaxCm`), 손잡이 상자가 모두 90 × 8 × 100 문에 맞는다.
 - 기본값 (110, 10, 105)에서는 지금과 같다(기존 P2 시험 유지).
 
-### R1-2 문 면 고르기가 아직 "Y = 0 둘레 대칭 두께"를 가정한다 — 비대칭 문 메시에서 바깥·안쪽 면을 잘못 고른다 — 열림
+### R1-2 문 면 고르기가 아직 "Y = 0 둘레 대칭 두께"를 가정한다 — 비대칭 문 메시에서 바깥·안쪽 면을 잘못 고른다 — 반영함 (fix(p2b): defer SDK cancel and fix door bounds)
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRDoorMotion.cpp:199`: `if (FMath::Abs(Prev.Y) >= ThicknessCm * 0.5) { Face = Prev.Y >= 0 ? 0 : 1; }`
@@ -157,6 +157,107 @@
 - **쉴 때 overlay:** 부품이 쉬고 있을 때 overlay 색을 투명(`FLinearColor::Transparent`)으로 두고 재질은 계속 씌운다(`VBoRAxisPart.cpp:316-319`). 버튼 부모는 쉬면 overlay를 아예 뗀다(`VBoRPokeButton.cpp:109`). VR에서 평소 부품이 원래 재질 그대로 보이면 그대로 둬도 된다. 어둡게 덮이면 버튼처럼 뗀다.
 - **Blueprint 자식에서 메시 자리:** `PartMesh`·`DoorMesh`는 뷰포트에서 옮겨도 생성 때마다 `MeshRestFromRoot`로 되돌아간다. 메시 자리는 이 값으로, 회전 중심은 `AxisPivot`(문은 `HingePivot`)을 옮겨서 정한다. 사용자 안내에 적는다.
 - **실제 문 메시의 밀기 면은 bounds 상자다.** 휜 문은 보이는 표면보다 몇 cm 앞에서 밀기가 잡힐 수 있다. 실제 데이터로 VR에서 볼 항목이다(명세 범위 안의 근사).
+
+## Codex R1 반영 보고 (2026-10-14)
+
+**완료 — R1-3 → R1-4 → R1-1·R1-2 반영.** `codex/P2b-axis-part`,
+리뷰·명세 개정 `1200418` 위 새 커밋. 질문 없음. Claude 2회차 리뷰 대기.
+
+① 바뀐 파일 (아래 Source 경로는 `Source/vBoR/` 기준)
+- `Interaction/VBoRAxisPart.h`, `.cpp`: Unselect·Cancel에서는 앱 상태만 정리하고
+  SDK가 진행 중인 release를 다시 취소하지 않음. Low Select·Tick의 손바닥 펴기·
+  문 보유 종료는 취소 예약. `ForceCancel`은 Tick에서만 실행.
+- `Interaction/VBoRHingedDoor.h`, `.cpp`: 문 선택 취소도 Tick에 예약.
+  `LogAxisDoor`에 넘김 시작(부품·안/바깥·손·직전 잠김·각도),
+  끝(손바닥 펴짐·걸쇠·reset·기타·EndPlay, 각도·보유 시간)을 한 줄씩 기록.
+  추적 손실은 끝으로 처리하지 않고 pause/resume으로 별도 기록.
+  보유 시간은 문 측정의 동작 시간 + 보류 시간 차이로 기록.
+  무효한 문의 `DoorSizeCm` 프로퍼티 제거, 메시 자리·bounds를 크기 기준으로 사용.
+- `Interaction/VBoRDoorMotion.h`, `.cpp`: 쓰지 않는 WidthCm·HeightCm 제거.
+  접근 면 선택도 FaceMinCm.Y·FaceMaxCm.Y 평면으로 판정.
+- `P2Probe/P2DoorBench.cpp`: deferred 문 생성 전에 MeshRestFromRoot를 설정.
+- `P2Probe/P2bAxisPartTests.cpp`, `P2DoorMotionTests.cpp`, `P2bTestFixture.h`:
+  회귀시험 4개와 합성 추적·손바닥 입력 fixture 추가.
+- `vBoR.Build.cs`: 시험의 SDK native handedness tag 사용에 필요한
+  엔진 GameplayTags 직접 링크 의존성을 Private으로 추가.
+- 이 리뷰 파일. `HANDOFF.md` 결과는 git 무시 파일에 기록.
+
+② 명세 §6 완료 조건
+1. §2 1–4 유지, R1-1~R1-4 수정 완료. E1–E18 기존 시험 유지.
+2. 전체 발견 111·완료 111·Success 111·Fail 0. P2b 13/13,
+   P2Door 11/11, P3Flow 18/18. `TEST COMPLETE. EXIT CODE: 0`, 프로세스 0.
+   - R1-3: SDK detector → PalmGrab → PalmRelease → ReleaseByInputMethod →
+     실제 PostEvent 경로. 앱 핸들러 뒤 observer에서도 SDK 선택 pose가 1개여서
+     transformer보다 먼저 실행됨을 확인. 이벤트 중 ForceCancel 0회,
+     앱 놓음 1회, 앱·SDK 소유 해제. Low Select는 이벤트 중 0회,
+     Tick에서 ForceCancel 1회·SDK 취소 1회, 소유 해제.
+   - R1-4: 시작 → 18° → 추적 손실 2 frame → 복구 → 손바닥 펴짐,
+     pause/resume 각 1회·끝 1회와 각도·이유 로그 확인.
+     재잡기 → 걸쇠의 `reason=latch angle=0.00 deg held=` 확인.
+   - R1-1: 시험대 (90,8,100)·기본 (110,10,105) cm의 메시 bounds·
+     FaceMin/Max·안/바깥 손잡이 자리 일치 확인.
+   - R1-2: Y -20~+5 cm 문에 +8/-23 cm에서 접근한 밀기의 면·방향·
+     접촉 평면 확인. 면 사이 -8 cm에서 나타난 손은 양 방향 모두 밀지 않음.
+     +8 cm 접근에서 손바닥 방향이 반대여도 바깥 면으로 분류하여
+     PalmDirection으로 거절하는 시험으로 옛 대칭 가정 회귀 방지.
+3. 최종 non-unity·unity 성공, vBoR 컴파일·링크 warning/error 0.
+4. 보고 ①–⑤를 커밋 본문·이 파일·HANDOFF 결과에 기록.
+5. Quest 3·정식 시험 상태는 not-tested 유지.
+
+③ 명세·제안과 다르게 한 것과 이유
+- 기능 범위 차이 없음. 제안의 ReleasePart 인자 방식 사용.
+- SDK는 PostEvent에서 delegate를 먼저 broadcast하고 transformer를 직접
+  처리함. 따라서 별도 이벤트 재배선 없이 실제 순서로 시험했고 observer로 확인.
+- 추적 손실을 '끝' 이유로 기록하면 D7과 어긋나므로 pause/resume으로 기록.
+  종료 이유 토큰은 English (`palm open`, `latch`, `reset`, `other`, `end play`).
+- 추적 함수만 virtual로 열어 fixture가 합성 입력을 공급함.
+  취소 wrapper의 호출 카운터는 WITH_DEV_AUTOMATION_TESTS에서만 존재.
+- 의도적 red·반복·스트레스 실행 없음. 최종 빌드에서 시험 include 경로 오류,
+  이어 GameplayTags 링크 누락이 발견되어 필요한 빌드만 재실행.
+  실행 횟수 non-unity 3(첫 두 번 실패, 세 번째 성공)·unity 1·전체 시험 1.
+  첫 실행에서 vBoR 모든 cpp·생성 cpp를 파일별 컴파일했고, 둘째에서 수정한
+  시험 cpp를 재컴파일, 셋째에서 직접 의존성을 추가해 최종 링크 성공.
+- 하위 에이전트·자체 리뷰 루프·MCP·GUI·에셋 편집·push·PR·머지 없음.
+  Content/Config/Plugins 및 P3 단계 데이터·규칙 코드는 보존.
+
+④ 실제 헤더/API 확인 (추정 없음, 로컬 빌드로 호출 확인)
+- SDK 루트 `Plugins/MetaXRInteraction/Source/OculusInteraction/`:
+  - `Public/Interaction/Grabbable/IsdkGrabTransformerComponent.h:102,110,228`:
+    GetCancelGrabEventDelegate·ForceCancel·GetNumGrabbers.
+  - `Public/Interaction/IsdkGrabbableComponent.h:99,105`: delegate·PostEvent.
+  - `Public/Interaction/IsdkGrabberComponent.h:75,87,109,118`: 실제
+    PalmGrab·PalmRelease·IsGrabbing·GetGrabbedComponent.
+  - `Public/Interaction/IsdkSceneInteractorComponent.h:150`·
+    `Public/IsdkRuntimeSettings.h:39`: InteractorTags·native left handedness tag.
+  - 원인 소스 `Private/Interaction/IsdkGrabbableComponent.cpp:288-291`:
+    앱 delegate가 transformer보다 먼저 실행됨.
+  - `Private/Interaction/IsdkGrabberComponent.cpp:765-768,891-899`·
+    `Private/Interaction/Grabbable/IsdkGrabTransformerComponent.cpp:143-154`:
+    Unselect 중 ForceCancel 재진입으로 GrabbedComponent가 먼저 비워지는 경로.
+- MetaXR `Plugins/MetaXR/Source/OculusXRInput/Public/OculusXRInputFunctionLibrary.h:216,258`:
+  기존 신뢰도·위치 유효성 호출 유지.
+- 엔진 루트 `C:/Program Files/Epic Games/UE_5.7/Engine/Source/`:
+  - `Runtime/Engine/Classes/Engine/StaticMesh.h:2182`: GetBoundingBox.
+  - `Runtime/Core/Public/Math/Box.h:420`: GetSize.
+  - `Runtime/Core/Public/Math/TransformNonVectorized.h:525`: GetRelativeTransform.
+  - `Runtime/Core/Public/Misc/OutputDeviceRedirector.h:70,77,88`:
+    로그 observer 등록·해제·FlushThreadedLogs. 기존 backlog는 fixture에서 비움.
+
+⑤ 로컬에서 확인할 것 / 검증 기록
+- 최종 로그: `Saved/Logs/P2bR1-work/NonUnityBuild3.log`, `UnityBuild.log`,
+  `AllAutomation.log`. 빌드 성공 및 warning/error 0.
+  초기 오류 로그 NonUnityBuild.log·NonUnityBuild2.log도 보존.
+- 자동화 전체 111/111, 신규 4개 통과. Workflow §2.5의 샘플 InfoCard CDO·
+  XR 확장 잡음은 시험 실패와 구분. headless 시험에서 샘플·로컬 도구 플러그인 꺼짐.
+- 에디터는 시작·종료 시 닫힘. Blueprint 자식의 메시 교체·MeshRestFromRoot·
+  AxisPivot/HingePivot 편집 사용성은 이번에도 not-tested.
+  메시 자리는 MeshRestFromRoot로 정하고, 축 자리만 축 컴포넌트에서 바꿈.
+- Quest 3 Link/VR Preview에서 콘솔 뚜껑 반복 놓음의 크래시 재시험,
+  07→08 같은 손 넘김, 문 다시 잠김 원인의 LogAxisDoor 확인,
+  손 시야 밖 보류/복구, 직선 손잡이·복귀/머묾·색/소리 확인 필요.
+  관련 정식 T-03·T-06·T-09와 이번 수정 기기 재시험은 **not-tested**.
+  실제 grabber 자동화도 인식기 신호를 함수로 대신하며 합성 추적 입력 사용.
+  자동화 통과를 Quest 3 동작·크래시 해소의 실기기 증거로 취급하지 않음.
 
 ## 질문
 

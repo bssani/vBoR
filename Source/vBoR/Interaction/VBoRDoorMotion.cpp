@@ -111,7 +111,7 @@ bool FVBoRDoorMotion::FindPush(int32 Hand, const FVBoRDoorHand& Input, int32 Fac
 	if (OutReason != EVBoRDoorIgnore::Count) { return false; }
 	const FVector& Point = Input.Points[Deepest];
 	const double Radius = Point.Size2D();
-	// y = ±두께/2 가 되는 회전. x>=0 인 문 면 해만 사용함 (감도 없이 기하 추종, P2 D1)
+	// bounds 면의 Y 가 되는 회전. x>=0 인 문 면 해만 사용함 (P2 D1·P2b R1-2, cm)
 	const double Target = FMath::RadiansToDegrees(FMath::Atan2(Point.Y, Point.X) -
 		FMath::Asin(FMath::Clamp(PlaneY / Radius, -1.0, 1.0)));
 	OutAngle = AngleDeg + FMath::FindDeltaAngleDegrees(AngleDeg, Target);
@@ -196,7 +196,8 @@ void FVBoRDoorMotion::Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSecon
 			else if (bHavePrevious[H])
 			{
 				const FVector Prev = FQuat(FVector::UpVector, FMath::DegreesToRadians(-PreviousAngleDeg)).RotateVector(Previous[H].Points[0]);
-				if (FMath::Abs(Prev.Y) >= ThicknessCm * 0.5) { Face = Prev.Y >= 0 ? 0 : 1; }
+				if (Prev.Y >= FaceMaxCm.Y) { Face = 0; }
+				else if (Prev.Y <= FaceMinCm.Y) { Face = 1; }
 			}
 			if (Face == INDEX_NONE) { Face = ToDoor(Hands[H].PalmNormal).Y <= 0 ? 0 : 1; }
 			double Target = AngleDeg;

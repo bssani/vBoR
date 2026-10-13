@@ -30,6 +30,10 @@ class VBOR_API UVBoRAxisGrabComponent : public UIsdkGrabTransformerComponent
 public:
 	UVBoRAxisGrabComponent();
 	void Configure();
+	void CancelSelection();
+#if WITH_DEV_AUTOMATION_TESTS
+	int32 CancelCalls = 0;
+#endif
 };
 
 // ISDK 에 쉬는 축 좌표를 넘김 (회전·직선의 기준을 같게, P2b D3·D7)
@@ -98,6 +102,7 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
+	virtual bool IsHandTracked() const;
 private:
 	friend class UVBoRAxisTransformer;
 	friend class AVBoRHingedDoor;
@@ -111,6 +116,7 @@ private:
 	TSet<TWeakObjectPtr<UIsdkGrabberComponent>> Hovering;
 	int32 HoldingHand = INDEX_NONE, DoorHandle = INDEX_NONE;
 	bool bPaused = false, bRebase = false, bDoorHold = false;
+	bool bCancelPending = false;
 	bool bNeedsPalmOpen[2] = {false,false};
 	bool bOpenArmed = true, bClosedArmed = false;
 	double Value = 0, MaximumRatio = 0, PausedSeconds = 0, RecoveryDiscard = 0;
@@ -119,8 +125,7 @@ private:
 	FVector LocalAxis() const;
 	FTransform ValueTransform() const;
 	void AcceptTransform(const FTransform& Transform);
-	bool IsHandTracked() const;
 	void EvaluateState();
-	void ReleasePart();
+	void ReleasePart(bool bCancelSDK = true);
 	UFUNCTION() void HandlePointer(const FIsdkInteractionPointerEvent& Event);
 };

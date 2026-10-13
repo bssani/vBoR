@@ -76,10 +76,8 @@ void AP2DoorBench::PlaceFromHead(const FTransform& Head, double FloorZ)
 		Door = GetWorld()->SpawnActorDeferred<AVBoRHingedDoor>(DoorClass, Pose, this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 		if (Door)
 		{
-			Door->DoorSizeCm = DoorSizeCm;
-			Door->DoorMesh->SetRelativeLocation(FVector(DoorSizeCm.X * 0.5, 0, DoorSizeCm.Z * 0.5));
 			const FVector MeshSize = Door->DoorMesh->GetStaticMesh()->GetBoundingBox().GetSize();
-			Door->DoorMesh->SetRelativeScale3D(DoorSizeCm / MeshSize);
+			Door->MeshRestFromRoot = FTransform(FQuat::Identity, FVector(DoorSizeCm.X * 0.5, 0, DoorSizeCm.Z * 0.5), DoorSizeCm / MeshSize);
 			Door->OutsideHandle->SetRelativeLocation(FVector(DoorSizeCm.X - OutsideHandleInsetCm, DoorSizeCm.Y * 0.5 + 4, OutsideHandleHeightCm - BottomHeightCm));
 			Door->InsideHandle->SetRelativeLocation(FVector(DoorSizeCm.X - InsideHandleInsetCm, -DoorSizeCm.Y * 0.5 - 4, InsideHandleHeightCm - BottomHeightCm));
 			Door->FinishSpawning(Pose);
