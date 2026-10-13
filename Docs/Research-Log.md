@@ -11,6 +11,32 @@
 
 ---
 
+## 2026-10-13 — Stage 원점이 VR 시작 때마다 머리 자리로 옮겨 가는 것으로 보임 (P3 VR, 확인 중)
+
+- **현상:** 사용자가 P3 레벨을 의자 왼쪽 1 m에 서서 시작하자, 운전석(의자) 자리에서 시작했다. 정렬이 맞다면 운전석이 오른쪽 1 m에 보여야 한다.
+- **코드는 원점을 건드리지 않는다:**
+  - 프로젝트·MetaXR·ISDK 소스에 시작 때 `ResetOrientationAndPosition`·`SetBase*`·`SetTrackingOrigin`를 부르는 곳이 없다.
+  - 엔진 OpenXR은 세션 때 Stage를 고르고 `BasePosition`·`BaseOrientation`을 0으로 둔다(`Engine/Plugins/Runtime/OpenXR/Source/OpenXRHMD/Private/OpenXRHMD.cpp:2325-2350`). `OnBeginPlay`는 리셋하지 않는다(`:2715`).
+  - P3 정렬은 저장값만으로 Pawn을 놓는다(`VBoRVehicleAlignmentComponent.cpp` `InitializeAlignment`).
+- **저장값 두 개가 모두 원점 바로 옆·정면 0°다:**
+  - 2026-10-11 저장: Stage (−5, 1, 122) cm, Yaw 0.5°
+  - 2026-10-13 저장: (−21, 3, 126) cm, Yaw 4.4°
+  - 고정된 방 원점이라면 의자가 두 번 다 방 정중앙에 정면 방향까지 맞춰 놓였다는 뜻이다. 그보다는 **VR을 켤 때 머리의 수평 위치·방향이 원점이 되는**(LOCAL_FLOOR와 비슷한) 동작으로 보는 것이 맞다. 높이(Z 122–126)는 바닥 기준으로 남는다.
+- 같은 날 로그에 실행 중 "가디언 변경 의심"(플레이 영역 크기 순간 변화)과 접근 이탈 → 0.3 s 뒤 재접근이 같은 순간에 찍혔다. 원점이 한 번 튀었을 가능성이 있다.
+  - `VRHeadsetRecenter`(재중심 delegate)는 오지 않았다. 런타임에는 `XR_OCULUS_recenter_event`가 있다.
+- **의미:** P0-c의 전제(D3 "Stage 기준 저장값은 레벨·세션이 바뀌어도 그대로 쓴다", U-07 "설치 때 한 번")가 이 PC·Link·가디언 설정에서는 성립하지 않을 수 있다. P0-c 명세 §1 "지속성"이 확인하려던 바로 그 항목이다.
+- **확인할 것(사용자):**
+  - 가디언 종류(룸스케일 / 정지형)
+  - P0-c 레벨에서 의자 왼쪽 1 m에 서서 시작했을 때 패널·로그의 "Stage delta distance"가 0 근처인지 약 1000 mm인지
+  - 헤드셋을 벗었다 다시 쓸 때 값이 튀는지
+- **결과에 따른 다음:**
+  - 정지형이면 룸스케일로 바꿔 다시 본다.
+  - 룸스케일에서도 시작 때 옮겨 가면 둘 중 하나다:
+    - 운영 절차: 헤드셋을 지그(시팅벅)에 둔 채 앱을 시작한다
+    - 물리 위치에 고정되는 Meta 공간 앵커(P0-c 명세 범위 밖 표에 "Stage 지속성이 부족하면 검토"로 남겨 둔 것)
+
+---
+
 ## 2026-10-12 — P2 실측: 문 손 조작 (R1 반영본, 참고용)
 
 사용자가 Quest 3 + Link, VR Preview로 `L_P2_Door`를 두 번 실행했다. 숫자는 `Saved/Logs/vBoR.log`의 `LogP2Door`에서 Claude가 뽑았다. 명세 §7의 정식 반복이 아니다. 시험 상태 `not-tested`.
