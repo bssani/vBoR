@@ -19,6 +19,7 @@
 |---|---|---|---|---|
 | 1 | 2026-10-13 | `a4062eb` 1축 부품 부모·문 연결·문 메시 피벗 보정·P3 손잡이·콘솔 뚜껑 | Claude | **2건, 둘 다 문 메시 피벗 보정(D4) 쪽.** 빌드·시험 재현: non-unity(`.cpp` 42개)·unity 성공, vBoR 경고·오류 0, `vBoR.*` **107/107**(P2b 10). 1축 부품·문 넘기기·P3 연결은 명세대로이고, E1–E18 시험이 있다. P2 시험대의 `DoorSizeCm`이 더는 문 메시를 바꾸지 못한다(R1-1). 문 면 고르기 한 곳이 아직 대칭 두께를 가정한다(R1-2). **토큰 7.04M(캐시 6.80M), 22분, 하위 에이전트 0, exec 46** |
 | 1+ | 2026-10-14 | 사용자 VR(`a4062eb`) | Claude | **R1-3(크래시, 가장 먼저)·R1-4 추가.** 콘솔 뚜껑을 놓는 순간 에디터 크래시: `UIsdkGrabberComponent::ReleaseByInputMethod` null 접근(`IsdkGrabberComponent.cpp:768`). 크래시 전: 07은 손잡이로 5.5 s 만에 완료(열림 0.928). 08(문 45°)은 32 s, 손잡이 잡기 8번 뒤 완료 — 문 쪽 잡기 기록이 없어 원인을 볼 수 없다(R1-4) |
+| 2 | 2026-10-14 | `462e520` R1-1~R1-4 반영 + 사용자 VR 2차 | Claude | **통과 — 머지.** 빌드·시험 재현: non-unity(`.cpp` 42개)·unity 성공, vBoR 경고·오류 0, `vBoR.*` **111/111**(P2b 13·P2Door 11·P3 18). R1-3은 이벤트 안 `ForceCancel` 0번, 우리 처리가 변환기보다 먼저 받는 순서의 SDK 놓음 시험이 있다. R1-4 `LogAxisDoor` 시작·끝·보류 기록이 있다. R1-1 시험대 (90, 8, 100) 크기 시험이 있고, 쓰이지 않던 `DoorSizeCm`을 지웠다. R1-2 비대칭 면 시험이 있다. `vBoR.Build.cs`에 `GameplayTags`를 더했다(시험 fixture가 ISDK 손 태그를 씀, 엔진 모듈). VR 2차: 크래시 없음. 손잡이 → 문 넘김 1번(18.9°까지, 손바닥 펴서 끝). 콘솔 뚜껑 5번 잡기. **사용자 요청 두 가지는 P2c로 넘김**: 열린 문에서도 손잡이가 젖혀짐(E11 대체, 사용자 결정), 콘솔 뚜껑·선바이저를 문처럼 밀기(경첩 판 공통 부모). **토큰 5.83M(캐시 5.65M), 14분, 하위 에이전트 0** |
 
 ### 1회차에 확인한 것
 
@@ -51,7 +52,7 @@
 
 ## 열린 항목
 
-### R1-3 ISDK "놓음" 이벤트 안에서 `ForceCancel`을 불러 에디터가 크래시한다 (사용자 VR, 가장 먼저) — 반영함 (fix(p2b): defer SDK cancel and fix door bounds)
+### R1-3 ISDK "놓음" 이벤트 안에서 `ForceCancel`을 불러 에디터가 크래시한다 (사용자 VR, 가장 먼저) — 반영함 (`462e520`)
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRAxisPart.cpp`
@@ -78,7 +79,7 @@
 - Select 거절(추적 Low) 경로도 같은 순서로 돌려 크래시가 없다. 다음 Tick에 SDK 선택이 취소된다.
 - `HandlePointer`가 도는 동안 `ForceCancel`이 0번 불린다(호출 수를 세어 확인).
 
-### R1-4 문을 손잡이로 넘겨 잡은 뒤의 잡기 시작·끝을 기록하지 않아, 08이 왜 오래 걸렸는지 볼 수 없다 (사용자 VR) — 반영함 (fix(p2b): defer SDK cancel and fix door bounds)
+### R1-4 문을 손잡이로 넘겨 잡은 뒤의 잡기 시작·끝을 기록하지 않아, 08이 왜 오래 걸렸는지 볼 수 없다 (사용자 VR) — 반영함 (`462e520`)
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRHingedDoor.cpp` `BeginAxisGrab`, Tick의 넘김 끝(`HoldingAxisPart->EndDoorHold(false)`), `CancelSelections`
@@ -101,7 +102,7 @@
 - 넘김 시작 → 손바닥 펴기 → 끝 이유 "손바닥 펴짐"과 각도가 기록된다.
 - 넘김 중 문을 닫아 걸쇠 → 끝 이유 "걸쇠"가 기록된다.
 
-### R1-1 P2 시험대의 `DoorSizeCm`이 더는 문 메시와 문 면을 바꾸지 못한다 — 문 크기 값이 두 군데로 갈렸다 — 반영함 (fix(p2b): defer SDK cancel and fix door bounds)
+### R1-1 P2 시험대의 `DoorSizeCm`이 더는 문 메시와 문 면을 바꾸지 못한다 — 문 크기 값이 두 군데로 갈렸다 — 반영함 (`462e520`)
 
 **문제**
 - **위치:**
@@ -124,7 +125,7 @@
 - 시험대 `DoorSizeCm` (90, 8, 100)으로 문을 만든다. 문 메시 bounds, 밀기 문 면(`FaceMinCm/FaceMaxCm`), 손잡이 상자가 모두 90 × 8 × 100 문에 맞는다.
 - 기본값 (110, 10, 105)에서는 지금과 같다(기존 P2 시험 유지).
 
-### R1-2 문 면 고르기가 아직 "Y = 0 둘레 대칭 두께"를 가정한다 — 비대칭 문 메시에서 바깥·안쪽 면을 잘못 고른다 — 반영함 (fix(p2b): defer SDK cancel and fix door bounds)
+### R1-2 문 면 고르기가 아직 "Y = 0 둘레 대칭 두께"를 가정한다 — 비대칭 문 메시에서 바깥·안쪽 면을 잘못 고른다 — 반영함 (`462e520`)
 
 **문제**
 - **위치:** `Source/vBoR/Interaction/VBoRDoorMotion.cpp:199`: `if (FMath::Abs(Prev.Y) >= ThicknessCm * 0.5) { Face = Prev.Y >= 0 ? 0 : 1; }`
