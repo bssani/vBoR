@@ -18,6 +18,7 @@
 | 회차 | 날짜 | 리뷰 대상 | 리뷰어 | 결과 |
 |---|---|---|---|---|
 | 1 | 2026-10-13 | `a4062eb` 1축 부품 부모·문 연결·문 메시 피벗 보정·P3 손잡이·콘솔 뚜껑 | Claude | **2건, 둘 다 문 메시 피벗 보정(D4) 쪽.** 빌드·시험 재현: non-unity(`.cpp` 42개)·unity 성공, vBoR 경고·오류 0, `vBoR.*` **107/107**(P2b 10). 1축 부품·문 넘기기·P3 연결은 명세대로이고, E1–E18 시험이 있다. P2 시험대의 `DoorSizeCm`이 더는 문 메시를 바꾸지 못한다(R1-1). 문 면 고르기 한 곳이 아직 대칭 두께를 가정한다(R1-2). **토큰 7.04M(캐시 6.80M), 22분, 하위 에이전트 0, exec 46** |
+| 1+ | 2026-10-14 | 사용자 VR(`a4062eb`) | Claude | **R1-3(크래시, 가장 먼저)·R1-4 추가.** 콘솔 뚜껑을 놓는 순간 에디터 크래시: `UIsdkGrabberComponent::ReleaseByInputMethod` null 접근(`IsdkGrabberComponent.cpp:768`). 크래시 전: 07은 손잡이로 5.5 s 만에 완료(열림 0.928). 08(문 45°)은 32 s, 손잡이 잡기 8번 뒤 완료 — 문 쪽 잡기 기록이 없어 원인을 볼 수 없다(R1-4) |
 
 ### 1회차에 확인한 것
 
@@ -49,6 +50,56 @@
 - **범위:** 명세 밖으로 커진 것은 없다. P3 단계 데이터·규칙, 레벨·에셋은 그대로다.
 
 ## 열린 항목
+
+### R1-3 ISDK "놓음" 이벤트 안에서 `ForceCancel`을 불러 에디터가 크래시한다 (사용자 VR, 가장 먼저) — 열림
+
+**문제**
+- **위치:** `Source/vBoR/Interaction/VBoRAxisPart.cpp`
+  - `:227-229`: `HandlePointer`의 Unselect 처리에서 `ReleasePart()`를 부르고, 그 안 `:239`에서 `GrabComponent->ForceCancel()`을 부른다.
+  - `:222`: Select 처리에서 손이 High가 아니면 바로 `ForceCancel()`을 부른다. 같은 종류다.
+- **발생 조건:** 손바닥 잡기 인식기가 놓음을 알릴 때. 그리고 부품의 `HandlePointer`가 grab transformer보다 먼저 그 이벤트를 받을 때. 두 핸들러는 같은 이벤트 delegate에 묶여 있어서 실행 순서가 정해져 있지 않다.
+- **경로**(크래시 덤프 `Saved/Crashes/UECC-Windows-448D8635…`, 2026-10-13 15:02 UTC, 콘솔 뚜껑 `VBoRAxisPart_1` 놓은 직후):
+  1. `UIsdkHandPalmGrabRecognizer::UpdateState`(`IsdkHandPalmGrabRecognizer.cpp:118`)가 놓음을 알린다. → grabber `ReleaseByInputMethod`가 `PostEvent(Unselect)`를 보낸다(`IsdkGrabberComponent.cpp:765`).
+  2. 우리 `HandlePointer`(Unselect)가 `ReleasePart`를 부르고, 그 안에서 `ForceCancel`이 불린다. → `CancelGrabEvent.Broadcast`(`IsdkGrabTransformerComponent.cpp:150-153`)
+  3. grabber `HandleGrabbableCancelEvent`(`IsdkGrabberComponent.cpp:891-899`)가 안쪽 `ReleaseByInputMethod`를 부른다. → `ResetGrabState`로 `GrabbedComponent = nullptr`
+  4. 바깥 `ReleaseByInputMethod`로 돌아와 `:768` `GrabbedComponent->GetGrabTransformer()`가 null을 읽는다. → `EXCEPTION_ACCESS_VIOLATION`
+- **영향:** VR 시험 중 에디터가 꺼진다. 손잡이에서는 이번에 안 났지만, 같은 경로라 순서에 따라 날 수 있다.
+- **원인:** 구현이 Move delegate 안에서는 `ForceCancel`을 부르지 않게 했다(`:301-305` 주석). 그런데 포인터 이벤트 처리(`HandlePointer`)에서는 같은 원칙을 지키지 않았다. 시험은 SDK가 먼저 놓는 경로(인식기 → grabber → Unselect → 우리 처리 → `ForceCancel`)를 우리 핸들러가 먼저 받는 순서로 돌리지 않았다.
+
+**제안**
+- **ISDK 포인터 이벤트 처리 안에서는 SDK 상태를 바꾸는 호출(`ForceCancel` 등)을 하지 않는다.** 표시만 남기고 Tick에서 한다(`:301-305`와 같은 원칙).
+  - Unselect·Cancel은 SDK가 이미 놓는 중이다. 우리 쪽 상태만 정리하고 `ForceCancel`은 부르지 않는다.
+  - Select에서 추적이 낮아 거절할 때는 "취소 예약"만 하고, 다음 Tick에서 `ForceCancel`을 부른다.
+- `ReleasePart`를 Tick에서 부를 때(손바닥 펴기 감지)와 이벤트에서 부를 때를 나눈다. 예: 인자 하나, 또는 예약 플래그.
+- 문 쪽 `CancelSelections`도 같은 원칙을 따르는지 확인한다. `EndDoorHold` → `ReleasePart` → `ForceCancel`이 SDK 이벤트 안에서 불리는 경로가 없어야 한다.
+
+**확인할 시험**
+- 실제 grabber가 부품을 잡은 상태에서, **우리 `HandlePointer`가 transformer보다 먼저 이벤트를 받게** 묶는다. 그리고 SDK 쪽에서 놓는다(손바닥 놓음 → `ReleaseByInputMethod`). 크래시가 없고, 부품이 놓이고, grabber가 잡지 않은 상태다.
+- Select 거절(추적 Low) 경로도 같은 순서로 돌려 크래시가 없다. 다음 Tick에 SDK 선택이 취소된다.
+- `HandlePointer`가 도는 동안 `ForceCancel`이 0번 불린다(호출 수를 세어 확인).
+
+### R1-4 문을 손잡이로 넘겨 잡은 뒤의 잡기 시작·끝을 기록하지 않아, 08이 왜 오래 걸렸는지 볼 수 없다 (사용자 VR) — 열림
+
+**문제**
+- **위치:** `Source/vBoR/Interaction/VBoRHingedDoor.cpp` `BeginAxisGrab`, Tick의 넘김 끝(`HoldingAxisPart->EndDoorHold(false)`), `CancelSelections`
+  - 문이 잡히고 놓이는 것을 로그에 남기지 않는다. 남는 것은 부품의 `released` 줄뿐이다.
+- **발생 조건:** 늘 그렇다.
+- **영향:**
+  - 사용자 VR에서 08이 손잡이 잡기 8번, 32 s 뒤에 끝났다.
+  - 첫 넘김은 약 1 s 만에 끝났다(열림 15:01:32.98, 손잡이 놓임 15:01:34.06).
+  - 그 뒤 열림 0.88·0.84·1.00이 다시 나왔다. 문이 다시 잠겼다는 뜻이다(걸쇠).
+  - 손바닥이 펴져서 놓였는지, 추적이 끊겼는지, 걸쇠가 걸렸는지 알 수 없다.
+- **원인:** 명세 측정 항목에 문 넘기기 기록이 없었다(Claude).
+
+**제안**
+- 문이 손잡이로부터 잡기를 시작할 때와 끝날 때 한 줄씩 남긴다.
+  - 시작: 어느 손잡이(바깥·안쪽)와 손, 잠김 여부, 각도
+  - 끝: 이유(손바닥 펴짐·추적 손실 보류·걸쇠·기타), 각도, 잡은 시간
+- 로그 분류는 지금 문 측정과 같은 곳이나 `LogAxisPart`. 구현자가 정한다.
+
+**확인할 시험**
+- 넘김 시작 → 손바닥 펴기 → 끝 이유 "손바닥 펴짐"과 각도가 기록된다.
+- 넘김 중 문을 닫아 걸쇠 → 끝 이유 "걸쇠"가 기록된다.
 
 ### R1-1 P2 시험대의 `DoorSizeCm`이 더는 문 메시와 문 면을 바꾸지 못한다 — 문 크기 값이 두 군데로 갈렸다 — 열림
 
