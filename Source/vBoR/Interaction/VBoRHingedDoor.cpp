@@ -1,5 +1,6 @@
 #include "VBoRHingedDoor.h"
 #include "VBoRHandRigPawn.h"
+#include "VBoRAxisPart.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/AudioComponent.h"
@@ -14,6 +15,8 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Sound/SoundBase.h"
 #include "UObject/ConstructorHelpers.h"
+
+DEFINE_LOG_CATEGORY_STATIC(LogAxisDoor, Log, All);
 
 UVBoRDoorGrabTransformer::UVBoRDoorGrabTransformer() { ConfigureDoor(); }
 void UVBoRDoorGrabTransformer::ConfigureDoor()
@@ -88,10 +91,57 @@ AVBoRHingedDoor::AVBoRHingedDoor()
 
 void AVBoRHingedDoor::SyncSettings()
 {
-	Motion.WidthCm = DoorSizeCm.X; Motion.HeightCm = DoorSizeCm.Z; Motion.ThicknessCm = DoorSizeCm.Y;
+	if (DoorMesh->GetStaticMesh())
+	{
+		const FBox Bounds = DoorMesh->GetStaticMesh()->GetBoundingBox().TransformBy(DoorMesh->GetRelativeTransform());
+		Motion.FaceMinCm = Bounds.Min; Motion.FaceMaxCm = Bounds.Max;
+		Motion.ThicknessCm = Bounds.GetSize().Y;
+	}
 	Motion.MaxAngleDeg = MaxAngleDeg; Motion.MaxSpeedDegPerSecond = MaxSpeedDegPerSecond;
 	Motion.LatchAngleDeg = LatchAngleDeg; Motion.RearmAngleDeg = RearmAngleDeg;
 	Motion.PalmLimitDeg = PalmLimitDeg; Motion.MinAxisDistanceCm = MinAxisDistanceCm;
+}
+
+void AVBoRHingedDoor::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	DoorMesh->SetRelativeTransform(MeshRestFromRoot.GetRelativeTransform(HingePivot->GetRelativeTransform()));
+	SyncSettings();
+}
+
+void AVBoRHingedDoor::SetAxisHandle(int32 Handle, AVBoRAxisPart* Part)
+{
+	if (Handle == 0) { OutsideAxisHandle = Part; } else { InsideAxisHandle = Part; }
+	UBoxComponent* Box = Handle == 0 ? OutsideHandle.Get() : InsideHandle.Get();
+	UIsdkGrabbableComponent* Grab = Handle == 0 ? OutsideGrab.Get() : InsideGrab.Get();
+	Box->SetCollisionEnabled(Part ? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryOnly);
+	Box->SetVisibility(!Part, true);
+	Grab->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, !Part);
+	if (Part) { Part->ConnectDoor(this, Handle); }
+}
+
+bool AVBoRHingedDoor::BeginGrabFromAxisPart(AVBoRAxisPart* Part)
+{
+	if (!Part || (Part != OutsideAxisHandle && Part != InsideAxisHandle) || Part->HoldingHand == INDEX_NONE) { return false; }
+	FVBoRDoorHand Input; ReadHand(Part->HoldingHand, Input);
+	return BeginAxisGrab(Part, Input);
+}
+
+bool AVBoRHingedDoor::BeginAxisGrab(AVBoRAxisPart* Part, const FVBoRDoorHand& Input)
+{
+	const int32 Hand = Part->HoldingHand, Handle = Part == OutsideAxisHandle ? 0 : 1;
+	if (bNeedsPalmOpen[Hand] || (Motion.bLocked && Part->GetOpenRatio() < Part->OpenThreshold)) { return false; }
+	const int32 Unlocks = Motion.Metrics.Unlocks;
+	const bool bWasLocked = Motion.bLocked;
+	if (!Motion.BeginGrab(Hand, Handle, Input)) { return false; }
+	HoldingAxisPart = Part;
+	AxisHoldHand = Hand; AxisHoldHandle = Handle;
+	AxisHoldStartSeconds = Motion.Metrics.HeldSeconds + Motion.Metrics.PausedSeconds;
+	UE_LOG(LogAxisDoor, Log, TEXT("%s axis hold begin part=%s handle=%s hand=%s locked=%d angle=%.2f deg"),
+		*GetName(), *Part->GetName(), Handle == 0 ? TEXT("outside") : TEXT("inside"), Hand == 0 ? TEXT("L") : TEXT("R"), bWasLocked, Motion.AngleDeg);
+	bNeedsPalmOpen[Hand] = true;
+	ApplyState(Motion.AngleDeg, Unlocks, Motion.Metrics.Latches);
+	return true;
 }
 
 void AVBoRHingedDoor::PreInitializeComponents()
@@ -121,6 +171,7 @@ void AVBoRHingedDoor::BeginPlay()
 	StateOverlay = Material ? UMaterialInstanceDynamic::Create(Material, this) : nullptr;
 	OutsideGrab->GetInteractionPointerEventDelegate().AddUniqueDynamic(this, &AVBoRHingedDoor::HandleOutsidePointer);
 	InsideGrab->GetInteractionPointerEventDelegate().AddUniqueDynamic(this, &AVBoRHingedDoor::HandleInsidePointer);
+	SetAxisHandle(0, OutsideAxisHandle); SetAxisHandle(1, InsideAxisHandle);
 	ApplyState(Motion.AngleDeg, Motion.Metrics.Unlocks, Motion.Metrics.Latches);
 }
 
@@ -156,6 +207,7 @@ void AVBoRHingedDoor::HandleInsidePointer(const FIsdkInteractionPointerEvent& Ev
 
 void AVBoRHingedDoor::HandlePointer(int32 Handle, const FIsdkInteractionPointerEvent& Event)
 {
+	if ((Handle == 0 && OutsideAxisHandle) || (Handle == 1 && InsideAxisHandle)) { return; }
 	UIsdkGrabberComponent* Grabber = Cast<UIsdkGrabberComponent>(Event.Interactor);
 	EIsdkHandedness Handedness;
 	if (!Grabber || !UIsdkFunctionLibrary::GetHandednessFromInteractor(Grabber, Handedness)) { return; }
@@ -184,16 +236,37 @@ void AVBoRHingedDoor::HandlePointer(int32 Handle, const FIsdkInteractionPointerE
 	}
 }
 
-void AVBoRHingedDoor::CancelSelections()
+void AVBoRHingedDoor::EndAxisHold(const TCHAR* Reason, bool bLatch)
 {
+	if (!HoldingAxisPart) { return; }
+	UE_LOG(LogAxisDoor, Log, TEXT("%s axis hold end part=%s handle=%s hand=%s reason=%s angle=%.2f deg held=%.3f s"),
+		*GetName(), *HoldingAxisPart->GetName(), AxisHoldHandle == 0 ? TEXT("outside") : TEXT("inside"),
+		AxisHoldHand == 0 ? TEXT("L") : TEXT("R"), Reason, Motion.AngleDeg, Motion.Metrics.HeldSeconds + Motion.Metrics.PausedSeconds - AxisHoldStartSeconds);
+	HoldingAxisPart->EndDoorHold(bLatch); HoldingAxisPart = nullptr;
+	AxisHoldHand = AxisHoldHandle = INDEX_NONE;
+}
+
+void AVBoRHingedDoor::CancelSelections(const TCHAR* Reason)
+{
+	EndAxisHold(Reason, true);
+	for (AVBoRAxisPart* Part : {OutsideAxisHandle.Get(), InsideAxisHandle.Get()})
+	{
+		if (Part) { Part->EndDoorHold(true); }
+	}
 	HoldingGrabber = nullptr;
-	OutsideTransformer->ForceCancel(); InsideTransformer->ForceCancel();
+	// Reset 도 이벤트에서 올 수 있어 SDK 취소는 Tick 에 예약함 (P2b R1-3)
+	bCancelPending = true;
 	Hovering[0].Reset(); Hovering[1].Reset();
 }
 
 void AVBoRHingedDoor::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (bCancelPending)
+	{
+		bCancelPending = false;
+		OutsideTransformer->ForceCancel(); InsideTransformer->ForceCancel();
+	}
 	SyncSettings();
 	FVBoRDoorHand Hands[2];
 	ReadHand(0, Hands[0]); ReadHand(1, Hands[1]);
@@ -201,14 +274,26 @@ void AVBoRHingedDoor::Tick(float DeltaSeconds)
 	const int32 Unlocks = Motion.Metrics.Unlocks, Latches = Motion.Metrics.Latches;
 	const bool bRecovering = Motion.bPaused;
 	Motion.Advance(Hands, DeltaSeconds);
+	if (HoldingAxisPart && bRecovering != Motion.bPaused)
+	{
+		// 추적 손실은 끝이 아닌 보류임 (잡기 로그와 구분, P2b D7·R1-4)
+		UE_LOG(LogAxisDoor, Log, TEXT("%s axis hold %s part=%s handle=%s hand=%s reason=tracking loss pause angle=%.2f deg held=%.3f s"),
+			*GetName(), Motion.bPaused ? TEXT("pause") : TEXT("resume"), *HoldingAxisPart->GetName(),
+			AxisHoldHandle == 0 ? TEXT("outside") : TEXT("inside"), AxisHoldHand == 0 ? TEXT("L") : TEXT("R"),
+			Motion.AngleDeg, Motion.Metrics.HeldSeconds + Motion.Metrics.PausedSeconds - AxisHoldStartSeconds);
+	}
 	for (int32 H = 0; H < 2; ++H)
 	{
 		bool bClosed = true;
 		if (Hands[H].bTracked && ReadPalmClosed(H, bClosed) && !bClosed && !bRecovering && !Motion.bPaused)
 		{
 			bNeedsPalmOpen[H] = false;
-			if (Motion.GrabHand == H && Motion.ReleaseGrab(true)) { HoldingGrabber = nullptr; }
+			if (Motion.GrabHand == H && Motion.ReleaseGrab(true)) { HoldingGrabber = nullptr; EndAxisHold(TEXT("palm open"), false); }
 		}
+	}
+	if (HoldingAxisPart && Motion.GrabHand == INDEX_NONE && Motion.Metrics.Latches == Latches)
+	{
+		EndAxisHold(TEXT("other"), false);
 	}
 	ApplyState(Before, Unlocks, Latches);
 }
@@ -217,7 +302,7 @@ void AVBoRHingedDoor::ApplyState(double BeforeAngle, int32 BeforeUnlocks, int32 
 {
 	HingePivot->SetRelativeRotation(ClosedHingeRotation * FQuat(FVector::UpVector, FMath::DegreesToRadians(Motion.AngleDeg)));
 	if (Motion.Metrics.Unlocks != BeforeUnlocks) { StateAudio->Play(); OnUnlocked.Broadcast(this); }
-	if (Motion.Metrics.Latches != BeforeLatches) { CancelSelections(); StateAudio->Play(); OnLocked.Broadcast(this); }
+	if (Motion.Metrics.Latches != BeforeLatches) { CancelSelections(TEXT("latch")); StateAudio->Play(); OnLocked.Broadcast(this); }
 	if (Motion.AngleDeg != BeforeAngle) { OnAngleChanged.Broadcast(static_cast<float>(Motion.AngleDeg)); }
 	if (StateOverlay)
 	{
@@ -238,7 +323,7 @@ void AVBoRHingedDoor::ResetDoor()
 		bool bClosed = true;
 		bNeedsPalmOpen[H] = !ReadPalmClosed(H, bClosed) || bClosed;
 	}
-	CancelSelections();
+	CancelSelections(TEXT("reset"));
 	ApplyState(Before, Motion.Metrics.Unlocks, Motion.Metrics.Latches);
 }
 
@@ -268,6 +353,7 @@ FString AVBoRHingedDoor::GetMeasurementText(const FVBoRDoorMetrics* Baseline) co
 
 void AVBoRHingedDoor::EndPlay(const EEndPlayReason::Type Reason)
 {
+	EndAxisHold(TEXT("end play"), false);
 	OutsideGrab->GetInteractionPointerEventDelegate().RemoveDynamic(this, &AVBoRHingedDoor::HandleOutsidePointer);
 	InsideGrab->GetInteractionPointerEventDelegate().RemoveDynamic(this, &AVBoRHingedDoor::HandleInsidePointer);
 	DoorMesh->SetOverlayMaterial(nullptr);

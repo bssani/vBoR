@@ -16,6 +16,7 @@ class UMaterialInstanceDynamic;
 class UAudioComponent;
 struct FIsdkInteractionPointerEvent;
 class AVBoRHingedDoor;
+class AVBoRAxisPart;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVBoRDoorEvent, AVBoRHingedDoor*, Door);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVBoRDoorAngleEvent, float, AngleDeg);
@@ -52,12 +53,18 @@ class VBOR_API AVBoRHingedDoor : public AActor
 	GENERATED_BODY()
 public:
 	AVBoRHingedDoor();
+	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void PreInitializeComponents() override;
 	virtual void Tick(float DeltaSeconds) override;
 	UFUNCTION(BlueprintCallable, Category = "Door") void ResetDoor();
 	const FVBoRDoorMotion& GetMotion() const { return Motion; }
 	FString GetStateText() const;
 	FString GetMeasurementText(const FVBoRDoorMetrics* Baseline = nullptr) const;
+	void SetAxisHandle(int32 Handle, AVBoRAxisPart* Part);
+	bool BeginGrabFromAxisPart(AVBoRAxisPart* Part);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door") FTransform MeshRestFromRoot = FTransform(FQuat::Identity, FVector(55,0,52.5), FVector(1.1,0.1,1.05));
+	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Door") TObjectPtr<AVBoRAxisPart> OutsideAxisHandle;
+	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Door") TObjectPtr<AVBoRAxisPart> InsideAxisHandle;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Door") TObjectPtr<USceneComponent> HingePivot;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Door") TObjectPtr<UStaticMeshComponent> DoorMesh;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Door") TObjectPtr<UBoxComponent> OutsideHandle;
@@ -66,7 +73,6 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Door") TObjectPtr<UIsdkGrabbableComponent> InsideGrab;
 	UPROPERTY(VisibleAnywhere, Category = "Door") TObjectPtr<UVBoRDoorGrabTransformer> OutsideTransformer;
 	UPROPERTY(VisibleAnywhere, Category = "Door") TObjectPtr<UVBoRDoorGrabTransformer> InsideTransformer;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door", meta = (Units = "cm", ClampMin = "1")) FVector DoorSizeCm = FVector(110, 10, 105);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door", meta = (Units = "deg", ClampMin = "0", ClampMax = "180")) float MaxAngleDeg = 70;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door", meta = (Units = "deg/s", ClampMin = "0")) float MaxSpeedDegPerSecond = 180;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Door", meta = (Units = "deg", ClampMin = "0")) float LatchAngleDeg = 2;
@@ -85,7 +91,15 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
+	virtual bool ReadHand(int32 Hand, FVBoRDoorHand& Input);
+	virtual bool ReadPalmClosed(int32 Hand, bool& bClosed) const;
 private:
+	friend struct FP2bTestAccess;
+	UPROPERTY() TObjectPtr<AVBoRAxisPart> HoldingAxisPart;
+	int32 AxisHoldHand = INDEX_NONE, AxisHoldHandle = INDEX_NONE;
+	double AxisHoldStartSeconds = 0;
+	void EndAxisHold(const TCHAR* Reason, bool bLatch);
+	bool BeginAxisGrab(AVBoRAxisPart* Part, const FVBoRDoorHand& Input);
 	UPROPERTY() TObjectPtr<UVBoRDoorTransformer> DoorTransformer;
 	UPROPERTY() TObjectPtr<AVBoRHandRigPawn> HandPawn;
 	UPROPERTY() TObjectPtr<UIsdkGrabberComponent> HoldingGrabber;
@@ -93,14 +107,13 @@ private:
 	UPROPERTY() TObjectPtr<UAudioComponent> StateAudio;
 	TSet<TWeakObjectPtr<UIsdkGrabberComponent>> Hovering[2];
 	bool bNeedsPalmOpen[2] = {false, false};
+	bool bCancelPending = false;
 	FVBoRDoorMotion Motion;
 	FQuat ClosedHingeRotation = FQuat::Identity;
 	FTransform HingeFrame() const;
-	bool ReadHand(int32 Hand, FVBoRDoorHand& Input);
-	bool ReadPalmClosed(int32 Hand, bool& bClosed) const;
 	void SyncSettings();
 	void ApplyState(double BeforeAngle, int32 BeforeUnlocks, int32 BeforeLatches);
-	void CancelSelections();
+	void CancelSelections(const TCHAR* Reason);
 	UFUNCTION() void HandleOutsidePointer(const FIsdkInteractionPointerEvent& Event);
 	UFUNCTION() void HandleInsidePointer(const FIsdkInteractionPointerEvent& Event);
 	void HandlePointer(int32 Handle, const FIsdkInteractionPointerEvent& Event);
