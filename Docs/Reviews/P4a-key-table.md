@@ -44,7 +44,7 @@
 
 ## 항목
 
-### R1-1 안 쥔 키를 찌르면 이벤트는 없는데 눌림 표시·소리는 난다 — 열림
+### R1-1 안 쥔 키를 찌르면 이벤트는 없는데 눌림 표시·소리는 난다 — 반영함 (fix(p4a): address key table review findings)
 
 **문제**
 - `PressFilter`(`VBoRPokeButton.cpp:119`, `VBoRKeyFob.cpp:82`)는 `OnButtonPressed`만 막는다. 눌림 확인은 ISDK가 따로 낸다:
@@ -76,7 +76,7 @@
 - E7b(추적 손실로 선택이 끝남) 뒤 Tick → false. E8(되돌림) 뒤에도 false.
 - 기존 E2·E3·E5·E11·E13은 그대로 통과한다. 주입 이벤트는 활성 여부와 상관없이 들어간다. 그래도 잡은 뒤 키 Tick을 한 번 넣어 실제 순서에 맞춘다.
 
-### R1-2 시작 표시판 문구를 한국어에서 영어로 바꿈 — 명세 밖 — 열림
+### R1-2 시작 표시판 문구를 한국어에서 영어로 바꿈 — 명세 밖 — 반영함 (fix(p4a): address key table review findings)
 
 **문제**
 - `P3VehicleMock.cpp` BeginPlay의 표시판 글이 "시작 위치 / 근사 형상·자리값"에서 "Start / Approximate geometry"로 바뀌었다.
@@ -90,7 +90,7 @@
 **확인할 시험**
 - 없음(되돌리기만).
 
-### R1-3 바닥 판정이 키 원점(메시 피벗) 높이다 — 메시 피벗·키 자세에 따라 안 돌아옴 — 열림
+### R1-3 바닥 판정이 키 원점(메시 피벗) 높이다 — 메시 피벗·키 자세에 따라 안 돌아옴 — 반영함 (fix(p4a): address key table review findings)
 
 **문제**
 - `VBoRKeyFob.cpp:186`은 `GetActorLocation().Z`(루트 = 키 메시 피벗)를 테이블 원점 Z + 2 cm와 비교한다.
@@ -115,6 +115,18 @@
 - **테이블 자리:** 앞 테이블은 차 코 앞 100 cm, 운전석 쪽 90 cm에 있다. 뒤 테이블은 차 뒤 100 cm, 같은 쪽 90 cm에 있다. 뒤 테이블이 리프트게이트(P4b)·박스(P1b) 동선을 막는지 그 명세 때 본다(자리값).
 - **던지기:** 키는 작고 얇아서(1.5 cm) 세게 던지면 상판(3 cm)이나 바닥을 뚫고 지나갈 수 있다. 뚫고 떨어져도 높이 판정으로 돌아온다.
 - 명세 §7 순서대로 본다: 시작 위치 → 앞 키 손바닥·pinch → 다른 손으로 열림·잠금 → 쥔 손가락 덮기 → 놓기·던지기·되돌림 → 뒤 키 → 시야 밖에서 돌아온 직후 놓기.
+
+## Codex 반영 기록 (2026-10-15)
+
+- R1-1: 키 버튼 생성 직후 `Poke->Deactivate()`. 키 Tick에서 쥔 상태가 바뀔 때만 두 버튼을 Activate/Deactivate한다. `PressFilter`는 유지했다. 포인터 이벤트 안에서 다른 interactable의 상태를 바꾸지 않는다.
+- R1-2: 시작 표시판을 기존 `시작 위치 / 근사 형상·자리값`으로 복원했다. 위치·방향은 유지했다.
+- R1-3: 바닥 판정을 `KeyMesh->Bounds.GetBox().Min.Z`로 바꿨다. 바닥 여유 2 cm와 같은 Actor 복귀는 유지했다.
+- 시험: E4에 BeginPlay 비활성, Select 직후 비활성 → Tick 후 활성, Release 직후 활성 → Tick 후 비활성과 그 사이 이벤트 차단을 추가했다. E7b에 추적 손실 종료 후 Tick 비활성, E8에 복귀 후 비활성과 Y축 90°로 세운 키(원점 높이 3 cm, 아랫면 바닥)의 복귀를 추가했다. E2·E3·E5·E8·E11·E13의 잡기 뒤 키 Tick을 넣었다. E10 포함 기존 시험은 유지했다.
+- 최종 코드로 non-unity(`-DisableUnity -Module=vBoR`)·unity 각 1회 성공, 프로세스 0. vBoR 컴파일 경고·오류 0. 로컬 McpAutomationBridge/프로젝트의 StructUtils 폐기 예정 의존 안내는 각 로그 2줄로 별도다.
+- 같은 최종 코드의 `vBoR.*` 전체 1회: 155개 발견, Success 155, Fail 0(P4a 15/15 포함), `TEST COMPLETE. EXIT CODE: 0`, 프로세스 0.
+- 로그: `Saved/Logs/P4aR1FinalNonUnityBuild.log`, `P4aR1FinalUnityBuild.log`, `P4aR1FinalAutomation.log`. 기존 XR/샘플 CDO 로그와 임시 시험 월드 `World has no context` 경고는 시험 실패와 구분한다.
+- API 확인: `Plugins/MetaXRInteraction/Source/OculusInteraction/Public/Interaction/IsdkInteractableComponent.h:141,147`(Activate/Deactivate), 같은 플러그인 `Private/Interaction/IsdkInteractableComponent.cpp:153-201`(SDK enable/disable, IsActive && IsVisible). 엔진 `Engine/Source/Runtime/Engine/Classes/Components/SceneComponent.h:129`(Bounds), `Runtime/Core/Public/Math/BoxSphereBounds.h:226`(GetBox). 추정 API 없음.
+- 명세와 다른 구현 없음. 쥔 손의 시각·소리 제한은 리뷰 제안대로 이번에 넓히지 않았다. 질문 없음. 에디터·에셋 작업 없음. Quest 3/T-10은 `not-tested`, Claude 재리뷰 대기.
 
 ## 질문
 

@@ -74,7 +74,7 @@ void AP3VehicleMock::OnConstruction(const FTransform& Transform)
 void AP3VehicleMock::BeginPlay()
 {
 	Super::BeginPlay();
-	MockLabel->SetSlateWidget(SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 32)).ColorAndOpacity(FLinearColor::Yellow).Text(FText::FromString(TEXT("Start / Approximate geometry"))));
+	MockLabel->SetSlateWidget(SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 32)).ColorAndOpacity(FLinearColor::Yellow).Text(FText::FromString(TEXT("시작 위치 / 근사 형상·자리값"))));
 	FrontKeyTable = CreateKeyTable(FrontKeyTableCm, TEXT("Car.FrontKey.Unlock"), TEXT("Car.FrontKey.Lock"));
 	RearKeyTable = CreateKeyTable(RearKeyTableCm, TEXT("Car.RearKey.Unlock"), TEXT("Car.RearKey.Lock"));
 	Door = GetWorld()->SpawnActorDeferred<AVBoRHingedDoor>(AVBoRHingedDoor::StaticClass(), FTransform(FRotator(0,180,0).Quaternion(), GetActorTransform().TransformPosition(DoorHingeCm)), this);

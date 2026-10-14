@@ -146,6 +146,7 @@ bool FP4aButtons::RunTest(const FString&)
 	FP4aWorld W; AP3VehicleMock* Car = W.World->SpawnActor<AP3VehicleMock>(); UIsdkGrabberComponent* Left = P4aGrabber(W,0); UIsdkGrabberComponent* Right = P4aGrabber(W,1); W.Play();
 	AVBoRKeyFob* Key = Car->FrontKeyTable->Key; UP4aKeyObserver* O = P4aObserve(Key,Car);
 	if (!TestTrue(TEXT("Grab key"),P4aGrip(Key,Left))) { return false; }
+	Key->Tick(0.016f);
 	P4aPoke(Key->UnlockButton,Right); P4aPoke(Key->LockButton,Right);
 	TestEqual(TEXT("One unlock on key"),O->Unlocks,1); TestEqual(TEXT("One lock on key"),O->Locks,1);
 	TestEqual(TEXT("One unlock on car"),O->CarUnlocks,1); TestEqual(TEXT("One lock on car"),O->CarLocks,1);
@@ -161,6 +162,7 @@ bool FP4aHoldingPoke::RunTest(const FString&)
 {
 	FP4aWorld W; AVBoRKeyTable* Table = P4aTable(W); UIsdkGrabberComponent* Left = P4aGrabber(W,0); W.Play(); UP4aKeyObserver* O = P4aObserve(Table->Key);
 	if (!TestTrue(TEXT("Grab key"),P4aGrip(Table->Key,Left))) { return false; }
+	Table->Key->Tick(0.016f);
 	P4aPoke(Table->Key->UnlockButton,Left); P4aPoke(Table->Key->LockButton,Left);
 	TestEqual(TEXT("Holding hand cannot unlock"),O->Unlocks,0); TestEqual(TEXT("Holding hand cannot lock"),O->Locks,0);
 	TestEqual(TEXT("No ButtonPressed for scenario either"),O->ButtonPresses,0); Left->PalmRelease(); return true;
@@ -170,9 +172,26 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4aTablePoke, "vBoR.P4a.Key.E4UnheldKeyIgnored
 bool FP4aTablePoke::RunTest(const FString&)
 {
 	FP4aWorld W; AVBoRKeyTable* Table = P4aTable(W); UIsdkGrabberComponent* Right = P4aGrabber(W,1); W.Play(); UP4aKeyObserver* O = P4aObserve(Table->Key);
+	AVBoRKeyFob* Key = Table->Key;
+	TestFalse(TEXT("Unheld unlock poke inactive at BeginPlay"),Key->UnlockButton->Poke->IsActive());
+	TestFalse(TEXT("Unheld lock poke inactive at BeginPlay"),Key->LockButton->Poke->IsActive());
 	P4aPoke(Table->Key->UnlockButton,Right); P4aPoke(Table->Key->LockButton,Right);
 	TestEqual(TEXT("Unheld unlock ignored"),O->Unlocks,0); TestEqual(TEXT("Unheld lock ignored"),O->Locks,0);
-	TestEqual(TEXT("No unheld ButtonPressed"),O->ButtonPresses,0); return true;
+	TestEqual(TEXT("No unheld ButtonPressed"),O->ButtonPresses,0);
+	if (!TestTrue(TEXT("Grab key before deferred activation"),P4aGrip(Key,Right))) { return false; }
+	TestFalse(TEXT("Select callback leaves unlock poke inactive"),Key->UnlockButton->Poke->IsActive());
+	TestFalse(TEXT("Select callback leaves lock poke inactive"),Key->LockButton->Poke->IsActive());
+	Key->Tick(0.016f);
+	TestTrue(TEXT("Held unlock poke active after Tick"),Key->UnlockButton->Poke->IsActive());
+	TestTrue(TEXT("Held lock poke active after Tick"),Key->LockButton->Poke->IsActive());
+	Right->PalmRelease();
+	TestTrue(TEXT("Release callback defers unlock deactivation"),Key->UnlockButton->Poke->IsActive());
+	TestTrue(TEXT("Release callback defers lock deactivation"),Key->LockButton->Poke->IsActive());
+	P4aPoke(Key->UnlockButton,Right); P4aPoke(Key->LockButton,Right);
+	TestEqual(TEXT("Filter rejects events before deferred deactivation"),O->ButtonPresses,0);
+	Key->Tick(0.016f);
+	TestFalse(TEXT("Released unlock poke inactive after Tick"),Key->UnlockButton->Poke->IsActive());
+	TestFalse(TEXT("Released lock poke inactive after Tick"),Key->LockButton->Poke->IsActive()); return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4aThrowHigh, "vBoR.P4a.Key.E6HighThrowVelocity", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -223,6 +242,8 @@ bool FP4aLostRelease::RunTest(const FString&)
 	AP4aTrackedKey* Key = CastChecked<AP4aTrackedKey>(Table->Key); UP4aKeyObserver* O = P4aObserve(Key);
 	if (!TestTrue(TEXT("Grab key"),P4aGrip(Key,Left))) { return false; }
 	P4aThrowSamples(W,Key,Left); Key->bHigh[0] = false; FP4aLogs Logs;
+	TestTrue(TEXT("Held unlock poke active before tracking loss"),Key->UnlockButton->Poke->IsActive());
+	TestTrue(TEXT("Held lock poke active before tracking loss"),Key->LockButton->Poke->IsActive());
 	// 추적 손실로 끝난 선택도 같은 Unselect 경로. 마지막 Low frame 은 Tick 전에도 검사함 (P4a E7b)
 	Left->PalmRelease();
 	TestTrue(TEXT("Tracking-loss release simulates physics"),Key->KeyMesh->IsSimulatingPhysics());
@@ -230,6 +251,9 @@ bool FP4aLostRelease::RunTest(const FString&)
 	TestTrue(TEXT("Tracking-loss angular velocity zero"),Key->KeyMesh->GetPhysicsAngularVelocityInDegrees().IsNearlyZero());
 	TestEqual(TEXT("No held hand after SDK termination"),Key->GetHoldingHand(),INDEX_NONE);
 	TestEqual(TEXT("SDK selection empty"),Key->GrabComponent->GetNumGrabbers(),0);
+	Key->Tick(0.016f);
+	TestFalse(TEXT("Lost selection disables unlock poke on Tick"),Key->UnlockButton->Poke->IsActive());
+	TestFalse(TEXT("Lost selection disables lock poke on Tick"),Key->LockButton->Poke->IsActive());
 	P4aPoke(Key->UnlockButton,Right); TestEqual(TEXT("No button after lost selection"),O->Unlocks,0);
 	TestTrue(TEXT("Loss reason logged"),Logs.Contains(TEXT("tracking lost or Low"))); return true;
 }
@@ -250,7 +274,19 @@ bool FP4aReturn::RunTest(const FString&)
 		TestTrue(TEXT("Same button Actor retained"),Key->UnlockButton==OriginalButton);
 		TestTrue(TEXT("Return clears linear velocity"),Key->KeyMesh->GetPhysicsLinearVelocity().IsNearlyZero());
 		TestTrue(TEXT("Return clears angular velocity"),Key->KeyMesh->GetPhysicsAngularVelocityInDegrees().IsNearlyZero());
+		TestFalse(TEXT("Returned unlock poke inactive"),Key->UnlockButton->Poke->IsActive());
+		TestFalse(TEXT("Returned lock poke inactive"),Key->LockButton->Poke->IsActive());
+		// 끝으로 세운 키는 원점이 3 cm 높아도 아랫면이 바닥에 닿음 (P4a R1-3)
+		Key->SetActorRotation(FRotator(90,0,0),ETeleportType::TeleportPhysics);
+		Key->SetActorLocation(FVector(0,0,Tables[I]->GetActorLocation().Z+3),false,nullptr,ETeleportType::TeleportPhysics);
+		TestTrue(TEXT("Upright pivot above floor margin"),Key->GetActorLocation().Z > Tables[I]->GetActorLocation().Z+Key->FloorMarginCm);
+		TestTrue(TEXT("Upright mesh bottom touches floor"),FMath::IsNearlyEqual(Key->KeyMesh->Bounds.GetBox().Min.Z,Tables[I]->GetActorLocation().Z,0.001));
+		Key->Tick(0.016f);
+		TestTrue(TEXT("Upright floor contact returns same key home"),Tables[I]->Key==Key && Key->GetActorTransform().Equals(Home,0.001));
+		TestFalse(TEXT("Upright return keeps unlock poke inactive"),Key->UnlockButton->Poke->IsActive());
+		TestFalse(TEXT("Upright return keeps lock poke inactive"),Key->LockButton->Poke->IsActive());
 		if (!TestTrue(TEXT("Real SDK regrab returned key"),P4aGrip(Key,Left))) { return false; }
+		Key->Tick(0.016f);
 		P4aPoke(Key->UnlockButton,Right); TestEqual(TEXT("Previously bound event survives"),O->Unlocks,1); Left->PalmRelease();
 	}
 	return true;
@@ -283,7 +319,9 @@ bool FP4aTransfer::RunTest(const FString&)
 	FP4aWorld W; AVBoRKeyTable* Table = P4aTable(W); UIsdkGrabberComponent* Left = P4aGrabber(W,0); UIsdkGrabberComponent* Right = P4aGrabber(W,1); W.Play();
 	AVBoRKeyFob* Key = Table->Key; UP4aKeyObserver* O = P4aObserve(Key); const FVector Scale = Key->GetActorScale3D();
 	if (!TestTrue(TEXT("First hand grabs"),P4aGrip(Key,Left))) { return false; }
+	Key->Tick(0.016f);
 	if (!TestTrue(TEXT("Second hand takes real SDK grab"),P4aGrip(Key,Right))) { return false; }
+	Key->Tick(0.016f);
 	TestFalse(TEXT("Old SDK grabber released"),Left->IsGrabbing()); TestEqual(TEXT("New holding hand"),Key->GetHoldingHand(),1);
 	TestEqual(TEXT("Only one selected pose"),Key->GrabComponent->GetNumGrabbers(),1); TestTrue(TEXT("No transfer scaling"),Key->GetActorScale3D().Equals(Scale));
 	P4aPoke(Key->UnlockButton,Right); TestEqual(TEXT("New holding hand ignored"),O->Unlocks,0);
@@ -326,6 +364,7 @@ bool FP4aBothKeys::RunTest(const FString&)
 	for (AVBoRKeyFob* Key : {Car->FrontKeyTable->Key.Get(),Car->RearKeyTable->Key.Get()})
 	{
 		if (!TestTrue(TEXT("Grab front/rear key"),P4aGrip(Key,Left))) { return false; }
+		Key->Tick(0.016f);
 		P4aPoke(Key->UnlockButton,Right); P4aPoke(Key->LockButton,Right); Left->PalmRelease();
 	}
 	TestEqual(TEXT("Car receives each unlock"),O->CarUnlocks,2); TestEqual(TEXT("Car receives each lock"),O->CarLocks,2);

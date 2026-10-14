@@ -5,6 +5,7 @@
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
 #include "Interaction/Grabbable/IsdkGrabFreeTransformer.h"
+#include "Interaction/IsdkPokeInteractable.h"
 #include "Interaction/IsdkThrowable.h"
 #include "IsdkFunctionLibrary.h"
 #include "IsdkContentAssetPaths.h"
@@ -81,6 +82,7 @@ AVBoRPokeButton* AVBoRKeyFob::CreateButton(FVector OffsetCm, FLinearColor Color)
 	Button->PressDepthMm = 1;
 	Button->PressFilter.BindUObject(this, &AVBoRKeyFob::CanPress);
 	Button->FinishSpawning(ButtonWorld);
+	Button->Poke->Deactivate();
 	Button->AttachToComponent(KeyMesh, FAttachmentTransformRules::KeepWorldTransform);
 	UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, IsdkContentAssetPaths::Materials::GrabbableDefault);
 	if (Material)
@@ -182,8 +184,18 @@ void AVBoRKeyFob::SetHome(AVBoRKeyTable* Table)
 void AVBoRKeyFob::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	// 포인터 callback 밖에서 전환함. 안 쥔 키의 눌림 표시·소리도 막음 (P4a R1-1)
+	const bool bHeld = HoldingHand != INDEX_NONE;
+	for (AVBoRPokeButton* Button : {UnlockButton.Get(), LockButton.Get()})
+	{
+		if (Button && Button->Poke->IsActive() != bHeld)
+		{
+			if (bHeld) { Button->Poke->Activate(false); }
+			else { Button->Poke->Deactivate(); }
+		}
+	}
 	if (HoldingHand != INDEX_NONE) { RecordTrackingFrame(); return; }
-	if (HomeTable.IsValid() && GetActorLocation().Z <= HomeTable->GetActorLocation().Z + FloorMarginCm)
+	if (HomeTable.IsValid() && KeyMesh->Bounds.GetBox().Min.Z <= HomeTable->GetActorLocation().Z + FloorMarginCm)
 	{
 		ClearVelocity(); SetActorTransform(HomeTable->GetKeyHomeTransform(this), false, nullptr, ETeleportType::TeleportPhysics);
 		UE_LOG(LogKeyFob, Log, TEXT("%s return to %s"), *GetName(), *HomeTable->GetName());
