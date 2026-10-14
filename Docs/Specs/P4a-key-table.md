@@ -4,7 +4,7 @@
 |---|---|
 | 단계 | P4 — 01 키 집기·02 웰컴 라이트 확인의 입력 부분. 계획서 §2 U-10, §4 01·02, §5 "키·미니 테이블·웰컴 라이트". 시험 T-10 |
 | 결정 근거 | 2026-10-14 사용자: 웰컴 라이트는 접근 거리가 아니라 키 버튼으로 켬, 키 두 개(차 앞·뒤 테이블, 기능 같음), 버튼 둘(열림·잠금), 키만 자유 6DoF 쥐기·물리 낙하·던지기, 바닥에 닿으면 자기 테이블로, 차 앞에서 차를 바라보며 시작, **웰컴 라이트는 사용자가 따로 만든다 — 키는 이벤트만 낸다** |
-| 베이스 브랜치 | `main` @ 이 명세 커밋 |
+| 베이스 브랜치 | `main` @ P2d 머지(PR #11, `cd84c38`) 뒤 |
 | 작업 브랜치 | `codex/P4a-key-table` |
 | 리뷰 파일 | `Docs/Reviews/P4a-key-table.md` (첫 리뷰 때 생김) |
 | 상태 | 명세 — 구현 전 |
@@ -141,4 +141,4 @@
 | 단계 규칙 대상 하나 | `Interaction/VBoRScenarioRunner.cpp:177`(`ButtonPressed`), 태그는 하나만 일치(`VBoRScenarioAsset.h:19` 툴팁) | D8 |
 | 생성자 기본 단계 고정 | `Docs/Reviews/P3-guided-flow.md:62-63` | D8 |
 | 시작 표시·표시판 | `P3Probe/P3VehicleMock.cpp:66-67`, `P3VehicleMock.h:34`(`StartOutsideCm`) | D7 |
-| 이벤트 안 SDK 취소 금지 | P2b 리뷰 R1-3, `Interaction/VBoRHingedPanel.cpp:264` 주석(`main` 기준) | §3 |
+| 이벤트 안 SDK 취소 금지 | P2b 리뷰 R1-3, `Interaction/VBoRHingedPanel.cpp:297` 주석(P2d 머지 뒤 `main` 기준) | §3 |
