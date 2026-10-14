@@ -41,7 +41,16 @@ bool FVBoRDoorMotion::BeginGrab(int32 Hand, int32 Handle, const FVBoRDoorHand& I
 	for (int32 H = 0; H < 2; ++H) { bContactNear[H] = false; ContactFace[H] = INDEX_NONE; LastIgnored[H] = EVBoRDoorIgnore::Count; }
 	RebaseGrab(Input.Points[0]);
 	++Metrics.Grabs[Hand][Handle];
-	if (bUseLatch && bLocked) { bLocked = false; bLatchArmed = false; ++Metrics.Unlocks; Metrics.LastUnlockHandle = Handle; }
+	Unlock(Handle);
+	return true;
+}
+
+bool FVBoRDoorMotion::Unlock(int32 Handle)
+{
+	if (!bUseLatch || !bLocked) { return false; }
+	// 버튼도 같은 풀림 집계·재무장을 씀 (열었다 닫기 전까지 풀림 유지, P2d D3)
+	bLocked = false; bLatchArmed = false;
+	++Metrics.Unlocks; Metrics.LastUnlockHandle = Handle;
 	return true;
 }
 
@@ -103,6 +112,8 @@ bool FVBoRDoorMotion::FindPush(int32 Hand, const FVBoRDoorHand& Input, int32 Fac
 	const double PalmAngle = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Palm, FVector(0, -Sign, 0)), -1.0, 1.0)));
 	PalmAngleDeg[Hand] = PalmAngle;
 	if (bUseLatch && bLocked) { OutReason = EVBoRDoorIgnore::Locked; }
+	// 잠김 집계를 먼저 유지함. 풀려도 닫는 면만 허용 가능 (P2d R1 D7)
+	else if (Face == 1 && !bAllowPalmOpening) { OutReason = EVBoRDoorIgnore::OpeningDisabled; }
 	else if (!bCrossing) { OutReason = EVBoRDoorIgnore::Behind; }
 	else if (!bAwayFromAxis) { OutReason = EVBoRDoorIgnore::NearAxis; }
 	else if (Palm.IsNearlyZero() || PalmAngle > PalmLimitDeg) { OutReason = EVBoRDoorIgnore::PalmDirection; }

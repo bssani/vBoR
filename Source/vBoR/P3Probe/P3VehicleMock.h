@@ -40,8 +40,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<UVBoRVehicleAlignmentComponent> Alignment;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRHingedDoor> Door;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector OutsideHandlePivotCm = FVector(-65,-101.5,97);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector InsideHandlePivotCm = FVector(-50,-83.5,85);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector ConsoleLidPivotCm = FVector(-45,0,70);
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRAxisPart> OutsideAxisHandle;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRAxisPart> InsideAxisHandle;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRHingedPanel> ConsoleLid;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRPokeButton> ReachButton;
 protected:

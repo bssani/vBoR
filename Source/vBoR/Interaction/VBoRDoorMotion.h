@@ -10,7 +10,7 @@ struct FVBoRDoorHand
 	FVector PalmNormal = FVector::ZeroVector;
 };
 
-enum class EVBoRDoorIgnore : uint8 { Locked, PalmDirection, Behind, NearAxis, Outside, TrackingLow, Count };
+enum class EVBoRDoorIgnore : uint8 { Locked, PalmDirection, Behind, NearAxis, Outside, TrackingLow, OpeningDisabled, Count };
 
 struct FVBoRDoorMetrics
 {
@@ -32,12 +32,14 @@ struct FVBoRDoorMotion
 	double PalmLimitDeg = 60, MinAxisDistanceCm = 15, FrontToleranceCm = 0.5;
 	double AngleDeg = 0;
 	bool bUseLatch = true; // 기존 문은 잠금 켬, 공통 판은 끔 (P2c D2)
+	bool bAllowPalmOpening = true;
 	bool bLocked = true, bLatchArmed = false, bPaused = false;
 	int32 GrabHand = INDEX_NONE, GrabHandle = INDEX_NONE;
 	int32 PushHand = INDEX_NONE, PushFace = INDEX_NONE;
 	double PalmAngleDeg[2] = {-1, -1};
 	FVBoRDoorMetrics Metrics;
 	bool BeginGrab(int32 Hand, int32 Handle, const FVBoRDoorHand& Input);
+	bool Unlock(int32 Handle = INDEX_NONE);
 	bool ReleaseGrab(bool bTracked);
 	void Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSeconds);
 	void Reset(); // 누적은 유지함 (P2 E18)

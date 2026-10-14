@@ -83,13 +83,28 @@ void AP3VehicleMock::BeginPlay()
 	OutsideAxisHandle->FinishSpawning(GetActorTransform());
 	OutsideAxisHandle->AttachToComponent(Door->HingePivot, FAttachmentTransformRules::KeepWorldTransform);
 	Door->SetAxisHandle(0, OutsideAxisHandle);
+	// 차 +Y 가 실내 쪽. 레버 아래를 당기면 +X 축으로 젖혀짐 (근사 자리값, P2d D5)
+	InsideAxisHandle = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
+	InsideAxisHandle->AxisPivot->SetRelativeLocation(InsideHandlePivotCm);
+	InsideAxisHandle->MeshRestFromRoot = FTransform(FQuat::Identity, InsideHandlePivotCm - FVector(0,0,2), FVector(0.18,0.04,0.04));
+	InsideAxisHandle->Axis = EAxis::X;
+	InsideAxisHandle->FinishSpawning(GetActorTransform());
+	InsideAxisHandle->AttachToComponent(Door->HingePivot, FAttachmentTransformRules::KeepWorldTransform);
+	Door->SetAxisHandle(1, InsideAxisHandle);
 	// +Y 윗면·+Z 차 -Y 축. 양의 열림이 위로 향함 (가로 경첩, P2c D3)
 	ConsoleLid = GetWorld()->SpawnActorDeferred<AVBoRHingedPanel>(AVBoRHingedPanel::StaticClass(), GetActorTransform(), this);
 	ConsoleLid->HingePivot->SetRelativeTransform(FTransform(FQuat(FVector::XAxisVector, PI / 2), ConsoleLidPivotCm));
 	ConsoleLid->MeshRestFromRoot = FTransform(FQuat::Identity, ConsoleLidPivotCm + FVector(17.5,0,0), FVector(0.35,0.24,0.03));
-	ConsoleLid->OutsideHandle->SetRelativeLocation(FVector(35,5.5,0));
+	// 앞면 가운데를 잡음. 표시는 차 -X 로 0.75 cm 들어감 (근사 자리값, P2d R1 D8)
+	ConsoleLid->OutsideHandle->SetRelativeLocation(FVector(36,0,0));
+	ConsoleLid->OutsideHandle->SetBoxExtent(FVector(4,4,8));
+	ConsoleLid->OutsideHandleMesh->SetRelativeScale3D(FVector(0.02,0.03,0.14));
+	ConsoleLid->HandleVisualPressOffsetCm = FVector(-0.75,0,0);
 	ConsoleLid->InsideHandle->SetRelativeLocation(FVector(35,-5.5,0));
 	ConsoleLid->MaxAngleDeg = 100;
+	ConsoleLid->bUseLatch = true;
+	ConsoleLid->bAllowPalmOpening = false;
+	ConsoleLid->bUseInsideGrabArea = false;
 	ConsoleLid->FinishSpawning(GetActorTransform());
 	ConsoleLid->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	ReachButton = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), FTransform::Identity, this);
@@ -122,6 +137,7 @@ void AP3VehicleMock::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	if (Door) { Door->Destroy(); }
 	if (OutsideAxisHandle) { OutsideAxisHandle->Destroy(); }
+	if (InsideAxisHandle) { InsideAxisHandle->Destroy(); }
 	if (ConsoleLid) { ConsoleLid->Destroy(); }
 	if (ReachButton) { ReachButton->Destroy(); }
 	MockLabel->SetSlateWidget(nullptr);
