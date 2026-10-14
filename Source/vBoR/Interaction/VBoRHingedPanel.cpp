@@ -107,6 +107,7 @@ void AVBoRHingedPanel::SyncSettings()
 	Motion.MaxAngleDeg = MaxAngleDeg; Motion.MaxSpeedDegPerSecond = MaxSpeedDegPerSecond;
 	Motion.LatchAngleDeg = LatchAngleDeg; Motion.RearmAngleDeg = RearmAngleDeg;
 	Motion.PalmLimitDeg = PalmLimitDeg; Motion.MinAxisDistanceCm = MinAxisDistanceCm;
+	UpdateGrabAreas();
 }
 
 void AVBoRHingedPanel::OnConstruction(const FTransform& Transform)
@@ -119,12 +120,37 @@ void AVBoRHingedPanel::OnConstruction(const FTransform& Transform)
 void AVBoRHingedPanel::SetAxisHandle(int32 Handle, AVBoRAxisPart* Part)
 {
 	if (Handle == 0) { OutsideAxisHandle = Part; } else { InsideAxisHandle = Part; }
-	UBoxComponent* Box = Handle == 0 ? OutsideHandle.Get() : InsideHandle.Get();
-	UIsdkGrabbableComponent* Grab = Handle == 0 ? OutsideGrab.Get() : InsideGrab.Get();
-	Box->SetCollisionEnabled(Part ? ECollisionEnabled::NoCollision : ECollisionEnabled::QueryOnly);
-	Box->SetVisibility(!Part, true);
-	Grab->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, !Part);
+	UpdateGrabAreas();
 	if (Part) { Part->ConnectDoor(this, Handle); }
+}
+
+bool AVBoRHingedPanel::IsGrabAreaEnabled(int32 Handle) const
+{
+	return Handle == 0 ? bUseOutsideGrabArea && !OutsideAxisHandle : bUseInsideGrabArea && !InsideAxisHandle;
+}
+
+void AVBoRHingedPanel::UpdateGrabAreas()
+{
+	for (int32 I = 0; I < 2; ++I)
+	{
+		const bool bEnabled = IsGrabAreaEnabled(I);
+		UBoxComponent* Box = I == 0 ? OutsideHandle.Get() : InsideHandle.Get();
+		UIsdkGrabbableComponent* Grab = I == 0 ? OutsideGrab.Get() : InsideGrab.Get();
+		Box->SetCollisionEnabled(bEnabled ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
+		Box->SetGenerateOverlapEvents(bEnabled);
+		Box->SetVisibility(bEnabled, true);
+		Grab->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, bEnabled);
+	}
+}
+
+bool AVBoRHingedPanel::Unlock()
+{
+	SyncSettings();
+	const int32 Unlocks = Motion.Metrics.Unlocks;
+	if (!Motion.Unlock()) { return false; }
+	// SDK 상태는 건드리지 않음 (버튼 포인터 이벤트에서도 안전하게 호출, P2d D3)
+	ApplyState(Motion.AngleDeg, Unlocks, Motion.Metrics.Latches);
+	return true;
 }
 
 bool AVBoRHingedPanel::BeginGrabFromAxisPart(AVBoRAxisPart* Part)
@@ -159,7 +185,7 @@ void AVBoRHingedPanel::PreInitializeComponents()
 	{
 		UIsdkGrabbableComponent* Grab = I == 0 ? OutsideGrab.Get() : InsideGrab.Get();
 		UVBoRDoorGrabTransformer* Transformer = I == 0 ? OutsideTransformer.Get() : InsideTransformer.Get();
-		Grab->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, true);
+		Grab->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, IsGrabAreaEnabled(I));
 		Grab->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch, false);
 		Grab->SetGrabCollider(I == 0 ? OutsideHandle.Get() : InsideHandle.Get());
 		Transformer->ConfigureDoor();
@@ -179,6 +205,10 @@ void AVBoRHingedPanel::BeginPlay()
 	OutsideGrab->GetInteractionPointerEventDelegate().AddUniqueDynamic(this, &AVBoRHingedPanel::HandleOutsidePointer);
 	InsideGrab->GetInteractionPointerEventDelegate().AddUniqueDynamic(this, &AVBoRHingedPanel::HandleInsidePointer);
 	SetAxisHandle(0, OutsideAxisHandle); SetAxisHandle(1, InsideAxisHandle);
+	if (bUseLatch && !bUseOutsideGrabArea && !bUseInsideGrabArea && !OutsideAxisHandle && !InsideAxisHandle)
+	{
+		UE_LOG(LogAxisDoor, Warning, TEXT("%s: Latched panel has no opening handle or grab area. 버튼으로 Unlock을 부르면 무시."), *GetName());
+	}
 	ApplyState(Motion.AngleDeg, Motion.Metrics.Unlocks, Motion.Metrics.Latches);
 }
 
@@ -214,7 +244,7 @@ void AVBoRHingedPanel::HandleInsidePointer(const FIsdkInteractionPointerEvent& E
 
 void AVBoRHingedPanel::HandlePointer(int32 Handle, const FIsdkInteractionPointerEvent& Event)
 {
-	if ((Handle == 0 && OutsideAxisHandle) || (Handle == 1 && InsideAxisHandle)) { return; }
+	if (!IsGrabAreaEnabled(Handle)) { return; }
 	UIsdkGrabberComponent* Grabber = Cast<UIsdkGrabberComponent>(Event.Interactor);
 	EIsdkHandedness Handedness;
 	if (!Grabber || !UIsdkFunctionLibrary::GetHandednessFromInteractor(Grabber, Handedness)) { return; }

@@ -402,7 +402,7 @@ bool FP2bP3Test::RunTest(const FString& Parameters)
 	TestEqual(TEXT("E17 begins at 07"),Runner->GetStepIndex(),0);
 	TestNotNull(TEXT("P3 spawned outside axis handle"),Car->OutsideAxisHandle.Get()); TestNotNull(TEXT("P3 spawned stay lid"),Car->ConsoleLid.Get());
 	TestTrue(TEXT("Handle actor starts at car origin, follows door hinge"),Car->OutsideAxisHandle->GetActorLocation().Equals(Car->GetActorLocation(),0.001) && Car->OutsideAxisHandle->GetRootComponent()->GetAttachParent()==Car->Door->HingePivot);
-	TestTrue(TEXT("Console lid stays with 100 deg limit"),!Car->ConsoleLid->bUseLatch && Car->ConsoleLid->MaxAngleDeg==100);
+	TestTrue(TEXT("P2d console starts latched with 100 deg limit"),Car->ConsoleLid->bUseLatch && Car->ConsoleLid->GetMotion().bLocked && Car->ConsoleLid->MaxAngleDeg==100);
 	FP2bTestAccess::Begin(Car->OutsideAxisHandle,P2bPose(FVector(100,9,60))); FP2bTestAccess::Value(Car->OutsideAxisHandle,25);
 	TestTrue(TEXT("E17 threshold transfers same hand"),FP2bTestAccess::Transfer(Car->Door,Car->OutsideAxisHandle,P2bHand())); Runner->ProcessFlow(0.1);
 	TestEqual(TEXT("E17 unlock completes 07"),Runner->GetStepIndex(),1);

@@ -28,6 +28,8 @@
 #include "Rig/IsdkGrabInteractionRigComponent.h"
 #include "Rig/IsdkRayInteractionRigComponent.h"
 #include "Interaction/IsdkGrabberComponent.h"
+#include "../P2Probe/P2dTestFixture.h"
+#include "IsdkFunctionLibrary.h"
 
 struct FP3FlowTestAccess
 {
@@ -114,6 +116,52 @@ namespace
 		void FinishSwitch() { Car->Alignment->AdvanceSwitch(Car->Alignment->FadeSeconds); Car->Alignment->AdvanceSwitch(Car->Alignment->FadeSeconds); }
 		FVBoRDoorMotion& DoorMotion() { return const_cast<FVBoRDoorMotion&>(Car->Door->GetMotion()); }
 	};
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2dP3FlowTest, "vBoR.P2d.P3.E12InsideCloseOpenOutsideClose", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP2dP3FlowTest::RunTest(const FString&)
+{
+	FP3World E;
+	E.Steps({P3Step(TEXT("11"),EVBoRStepRule::DoorLatched,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None),
+		P3Step(TEXT("18"),EVBoRStepRule::DoorOpened,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None),
+		P3Step(TEXT("20"),EVBoRStepRule::DoorLatched,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None)});
+	AVBoRHingedDoor* Door = E.Car->Door; AVBoRAxisPart* Lever = E.Car->InsideAxisHandle;
+	FVBoRDoorMotion& Motion = E.DoorMotion();
+	Door->Unlock(); Motion.AngleDeg = 50; Motion.bLatchArmed = true;
+	FP2dTestAccess::Apply(Door,0,Motion.Metrics.Unlocks,0);
+	auto Hand = [](double Angle)
+	{
+		FVBoRDoorHand Input; Input.bTracked = true;
+		for (FVector& P : Input.Points) { P = FQuat(FVector::ZAxisVector,FMath::DegreesToRadians(Angle)).RotateVector(FVector(85,-9,50)); }
+		return Input;
+	};
+	auto PullInside = [&]()
+	{
+		FP2dTestAccess::PalmOpen(Door,Lever,0);
+		const FTransform Rest = Lever->AxisPivot->GetComponentTransform();
+		FP2dTestAccess::Begin(Lever,0,UIsdkFunctionLibrary::MakeGrabPoseStruct(11,Rest.TransformPosition(FVector(0,0,-2)),FQuat::Identity));
+		const FVector Pulled = FQuat(FVector::XAxisVector,FMath::DegreesToRadians(25.0)).RotateVector(FVector(0,0,-2));
+		FP2dTestAccess::Move(Lever,UIsdkFunctionLibrary::MakeGrabPoseStruct(11,Rest.TransformPosition(Pulled),FQuat::Identity));
+		return FP2dTestAccess::Transfer(Door,Lever,Hand(Motion.AngleDeg));
+	};
+	TestTrue(TEXT("11 starts inside lever hold"), PullInside());
+	FVBoRDoorHand Hands[2] = {Hand(0),{}}; FP2dTestAccess::Advance(Door,Hands,1); E.Runner->ProcessFlow(0);
+	TestEqual(TEXT("11 closes and advances to 18"), E.Runner->GetStepIndex(),1);
+	TestTrue(TEXT("11 relatches"), Motion.bLocked); Lever->Tick(1);
+	TestTrue(TEXT("18 pulls actual inside lever"), PullInside());
+	TestEqual(TEXT("18 unlock source is inside"), Motion.Metrics.LastUnlockHandle,1);
+	Hands[0] = Hand(50); FP2dTestAccess::Advance(Door,Hands,1); E.Runner->ProcessFlow(0);
+	TestEqual(TEXT("18 opens and advances to 20"), E.Runner->GetStepIndex(),2);
+	Motion.ReleaseGrab(true);
+	Hands[0] = {}; FP2dTestAccess::Advance(Door,Hands,0.1);
+	const FQuat R(FVector::ZAxisVector,FMath::DegreesToRadians(50.0));
+	Hands[0] = Hand(50); for (FVector& P : Hands[0].Points) { P = R.RotateVector(FVector(80,6,50)); }
+	Hands[0].PalmNormal = R.RotateVector(FVector(0,-1,0)); FP2dTestAccess::Advance(Door,Hands,0.1);
+	for (FVector& P : Hands[0].Points) { P = FVector(80,0,50); }
+	FP2dTestAccess::Advance(Door,Hands,1); E.Runner->ProcessFlow(0);
+	TestTrue(TEXT("20 outside push closes and relatches"), Motion.bLocked && Motion.AngleDeg == 0);
+	TestTrue(TEXT("20 ends flow"), E.Runner->IsFinished());
+	TestEqual(TEXT("No skipped stages"), E.Runner->SkipCount,0); return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3DuplicateTest, "vBoR.P3Flow.E1E2DuplicateAndStale", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

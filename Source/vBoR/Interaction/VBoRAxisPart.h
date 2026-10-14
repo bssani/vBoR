@@ -108,6 +108,7 @@ private:
 	friend class AVBoRHingedPanel;
 	friend struct FP2bTestAccess;
 	friend struct FP2cTestAccess;
+	friend struct FP2dTestAccess;
 	UPROPERTY() TObjectPtr<UVBoRAxisTransformer> Transformer;
 	UPROPERTY() TObjectPtr<UIsdkGrabberComponent> HoldingGrabber;
 	UPROPERTY() TObjectPtr<AVBoRHingedPanel> LinkedDoor;

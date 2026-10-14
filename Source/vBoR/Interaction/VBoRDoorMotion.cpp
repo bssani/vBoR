@@ -41,7 +41,16 @@ bool FVBoRDoorMotion::BeginGrab(int32 Hand, int32 Handle, const FVBoRDoorHand& I
 	for (int32 H = 0; H < 2; ++H) { bContactNear[H] = false; ContactFace[H] = INDEX_NONE; LastIgnored[H] = EVBoRDoorIgnore::Count; }
 	RebaseGrab(Input.Points[0]);
 	++Metrics.Grabs[Hand][Handle];
-	if (bUseLatch && bLocked) { bLocked = false; bLatchArmed = false; ++Metrics.Unlocks; Metrics.LastUnlockHandle = Handle; }
+	Unlock(Handle);
+	return true;
+}
+
+bool FVBoRDoorMotion::Unlock(int32 Handle)
+{
+	if (!bUseLatch || !bLocked) { return false; }
+	// 버튼도 같은 풀림 집계·재무장을 씀 (열었다 닫기 전까지 풀림 유지, P2d D3)
+	bLocked = false; bLatchArmed = false;
+	++Metrics.Unlocks; Metrics.LastUnlockHandle = Handle;
 	return true;
 }
 

@@ -38,6 +38,7 @@ struct FVBoRDoorMotion
 	double PalmAngleDeg[2] = {-1, -1};
 	FVBoRDoorMetrics Metrics;
 	bool BeginGrab(int32 Hand, int32 Handle, const FVBoRDoorHand& Input);
+	bool Unlock(int32 Handle = INDEX_NONE);
 	bool ReleaseGrab(bool bTracked);
 	void Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSeconds);
 	void Reset(); // 누적은 유지함 (P2 E18)

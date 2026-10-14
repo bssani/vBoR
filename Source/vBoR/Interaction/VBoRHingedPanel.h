@@ -57,13 +57,16 @@ public:
 	virtual void PreInitializeComponents() override;
 	virtual void Tick(float DeltaSeconds) override;
 	UFUNCTION(BlueprintCallable, Category = "Hinged panel") void ResetDoor();
+	UFUNCTION(BlueprintCallable, Category = "Hinged panel|Latch") bool Unlock();
 	const FVBoRDoorMotion& GetMotion() const { return Motion; }
 	FString GetStateText() const;
 	FString GetMeasurementText(const FVBoRDoorMetrics* Baseline = nullptr) const;
 	void SetAxisHandle(int32 Handle, AVBoRAxisPart* Part);
 	bool BeginGrabFromAxisPart(AVBoRAxisPart* Part);
 	// +Z 경첩 축·+X 판 끝·+Y 닫는 면. 문의 저장 이름 유지함 (P2c D1·D3)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel|Latch", meta = (DisplayName = "Use lock and latch")) bool bUseLatch = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel|Latch", meta = (DisplayName = "닫히면 잠김 — 손잡이·버튼으로만 열기", ToolTip = "닫힌 판은 밀어도 움직이지 않음. 잡는 자리·연결한 손잡이 또는 버튼의 Unlock으로 풀고, 열었다 닫으면 다시 잠김.")) bool bUseLatch = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel|Grab areas", meta = (DisplayName = "바깥쪽 잡는 자리 사용")) bool bUseOutsideGrabArea = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel|Grab areas", meta = (DisplayName = "안쪽 잡는 자리 사용")) bool bUseInsideGrabArea = true;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel") FTransform MeshRestFromRoot = FTransform(FQuat::Identity, FVector(55,0,52.5), FVector(1.1,0.1,1.05));
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Hinged panel") TObjectPtr<AVBoRAxisPart> OutsideAxisHandle;
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Hinged panel") TObjectPtr<AVBoRAxisPart> InsideAxisHandle;
@@ -101,6 +104,7 @@ protected:
 private:
 	friend struct FP2bTestAccess;
 	friend struct FP2cTestAccess;
+	friend struct FP2dTestAccess;
 	UPROPERTY() TObjectPtr<AVBoRAxisPart> HoldingAxisPart;
 	int32 AxisHoldHand = INDEX_NONE, AxisHoldHandle = INDEX_NONE;
 	double AxisHoldStartSeconds = 0;
@@ -122,4 +126,6 @@ private:
 	UFUNCTION() void HandleOutsidePointer(const FIsdkInteractionPointerEvent& Event);
 	UFUNCTION() void HandleInsidePointer(const FIsdkInteractionPointerEvent& Event);
 	void HandlePointer(int32 Handle, const FIsdkInteractionPointerEvent& Event);
+	bool IsGrabAreaEnabled(int32 Handle) const;
+	void UpdateGrabAreas();
 };
