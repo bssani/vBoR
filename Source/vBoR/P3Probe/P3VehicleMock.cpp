@@ -6,6 +6,7 @@
 #include "../Interaction/VBoRHingedDoor.h"
 #include "../Interaction/VBoRAxisPart.h"
 #include "../Interaction/VBoRPokeButton.h"
+#include "../Interaction/VBoRKeyTable.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/WidgetComponent.h"
@@ -20,6 +21,7 @@
 
 AP3VehicleMock::AP3VehicleMock()
 {
+	KeyTableClass = AVBoRKeyTable::StaticClass();
 	DashboardCenterCm = FVector(50,0,85); DashboardSizeCm = FVector(25,175,12);
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("FixedVehicleOrigin")));
 	DriverEye = CreateDefaultSubobject<UVBoREyePointComponent>(TEXT("DriverEye")); DriverEye->SetupAttachment(RootComponent);
@@ -63,15 +65,18 @@ void AP3VehicleMock::OnConstruction(const FTransform& Transform)
 	Plate(10,DriverEyeCm+FVector(-28,0,-40),FVector(8,46,60));
 	Plate(11,DashboardCenterCm,DashboardSizeCm);
 	Plate(12,DriverEyeCm+FVector(55,0,-28),FVector(5,30,30));
-	StartMarker->SetRelativeLocation(FVector(DriverEyeCm.X,-Y-StartOutsideCm,0.5)); StartMarker->SetRelativeScale3D(FVector(0.6,0.6,0.005));
-	MockLabel->SetRelativeLocation(FVector(DriverEyeCm.X,-Y-StartOutsideCm+40,60)); MockLabel->SetRelativeRotation(FRotator(0,-90,0)); MockLabel->SetRelativeScale3D(FVector(0.08));
+	// 차 앞 +X 에서 -X 를 바라봄. 시작 머리 기록은 그대로 둠 (U-10, P4a D7)
+	StartMarker->SetRelativeLocation(FVector(X+StartOutsideCm,0,0.5)); StartMarker->SetRelativeRotation(FRotator(0,180,0)); StartMarker->SetRelativeScale3D(FVector(0.6,0.6,0.005));
+	MockLabel->SetRelativeLocation(FVector(X+StartOutsideCm-40,0,60)); MockLabel->SetRelativeRotation(FRotator::ZeroRotator); MockLabel->SetRelativeScale3D(FVector(0.08));
 	PlaceReachButton();
 }
 
 void AP3VehicleMock::BeginPlay()
 {
 	Super::BeginPlay();
-	MockLabel->SetSlateWidget(SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 32)).ColorAndOpacity(FLinearColor::Yellow).Text(FText::FromString(TEXT("시작 위치 / 근사 형상·자리값"))));
+	MockLabel->SetSlateWidget(SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 32)).ColorAndOpacity(FLinearColor::Yellow).Text(FText::FromString(TEXT("Start / Approximate geometry"))));
+	FrontKeyTable = CreateKeyTable(FrontKeyTableCm, TEXT("Car.FrontKey.Unlock"), TEXT("Car.FrontKey.Lock"));
+	RearKeyTable = CreateKeyTable(RearKeyTableCm, TEXT("Car.RearKey.Unlock"), TEXT("Car.RearKey.Lock"));
 	Door = GetWorld()->SpawnActorDeferred<AVBoRHingedDoor>(AVBoRHingedDoor::StaticClass(), FTransform(FRotator(0,180,0).Quaternion(), GetActorTransform().TransformPosition(DoorHingeCm)), this);
 	const FTransform DoorWorld(FRotator(0,GetActorRotation().Yaw+180,0), GetActorTransform().TransformPosition(DoorHingeCm));
 	Door->Tags.Add(TEXT("Car.DriverDoor")); Door->FinishSpawning(DoorWorld); Door->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
@@ -121,6 +126,24 @@ void AP3VehicleMock::BeginPlay()
 	}
 }
 
+AVBoRKeyTable* AP3VehicleMock::CreateKeyTable(FVector PositionCm, const TCHAR* UnlockTag, const TCHAR* LockTag)
+{
+	if (!KeyTableClass) { return nullptr; }
+	const FTransform TableWorld = FTransform(PositionCm) * GetActorTransform();
+	AVBoRKeyTable* Table = GetWorld()->SpawnActorDeferred<AVBoRKeyTable>(KeyTableClass, TableWorld, this);
+	Table->FinishSpawning(TableWorld); Table->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+	if (Table->Key)
+	{
+		Table->Key->UnlockButton->Tags.Add(UnlockTag); Table->Key->LockButton->Tags.Add(LockTag);
+		Table->Key->OnUnlockPressed.AddDynamic(this, &AP3VehicleMock::KeyUnlockPressed);
+		Table->Key->OnLockPressed.AddDynamic(this, &AP3VehicleMock::KeyLockPressed);
+	}
+	return Table;
+}
+
+void AP3VehicleMock::KeyUnlockPressed(AVBoRKeyFob* Key) { OnKeyUnlockPressed.Broadcast(Key); }
+void AP3VehicleMock::KeyLockPressed(AVBoRKeyFob* Key) { OnKeyLockPressed.Broadcast(Key); }
+
 void AP3VehicleMock::PlaceReachButton()
 {
 	if (!ReachButton || !ReachButton->ButtonMesh->GetStaticMesh()) { return; }
@@ -140,6 +163,8 @@ void AP3VehicleMock::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (InsideAxisHandle) { InsideAxisHandle->Destroy(); }
 	if (ConsoleLid) { ConsoleLid->Destroy(); }
 	if (ReachButton) { ReachButton->Destroy(); }
+	if (FrontKeyTable) { FrontKeyTable->Destroy(); }
+	if (RearKeyTable) { RearKeyTable->Destroy(); }
 	MockLabel->SetSlateWidget(nullptr);
 	Super::EndPlay(EndPlayReason);
 }

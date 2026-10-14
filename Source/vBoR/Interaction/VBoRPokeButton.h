@@ -16,6 +16,7 @@ class UAudioComponent;
 class UMaterialInstanceDynamic;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVBoRPokeButtonEvent, const FIsdkInteractionPointerEvent&, Event);
+DECLARE_DELEGATE_RetVal_OneParam(bool, FVBoRPokePressFilter, const FIsdkInteractionPointerEvent&);
 
 UCLASS(Blueprintable)
 class VBOR_API AVBoRPokeButton : public AActor
@@ -26,6 +27,8 @@ public:
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void PreInitializeComponents() override;
 	FVector GetRestFrontWorld() const;
+	// 키의 쥔 손·테이블 위 눌림을 진행기에도 보내지 않음. 미연결 버튼은 기존 동작 (P4a D3·D8)
+	FVBoRPokePressFilter PressFilter;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Poke Button")
 	TObjectPtr<UStaticMeshComponent> ButtonMesh;
