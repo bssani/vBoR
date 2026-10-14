@@ -11,6 +11,31 @@
 
 ---
 
+## 2026-10-14 — U-10 키·박스: 확인한 것
+
+사용자 결정(계획서 U-10): 05는 박스, 01·02는 키 버튼, 키만 자유 6DoF·던지기 예외. 명세 `P4a-key-table`·`P1b-box-load`의 근거다.
+
+### ISDK의 잡기·물리·던지기 (1.205.0)
+
+경로는 `Plugins/MetaXRInteraction/Source/OculusInteraction/` 기준.
+
+- **잡으면 물리를 끄고, 놓으면 되돌린다.** 변환 대상을 `UPrimitiveComponent`로 보고, 잡을 때 물리·중력을 끈 뒤 던지기 추적을 시작한다(`Private/Interaction/Grabbable/IsdkGrabTransformerComponent.cpp:280-296`). 선택이 비면 물리를 되돌리고, `bIsThrowable`이면 `UIsdkThrowable`의 속도·각속도를 넣는다(`:445-466`). 그래서 키는 루트 메시가 물리를 시뮬레이션하면 따로 만들 것이 없다.
+- `bIsThrowable`의 기본값은 **true**다(`Public/Interaction/Grabbable/IsdkGrabTransformerComponent.h:266`). 우리 짐·손잡이·문은 모두 false로 둔다(`VBoRCarryObject.cpp:29` 등).
+- 속도 표본은 최근 `SampleSize = 8`개 위치다(`Public/Interaction/IsdkThrowable.h:61`). 속도 범위는 ±1000이다(`:152-153`). 추적 신뢰도는 보지 않으므로 복구 순간의 손 이동이 표본에 들어갈 수 있다. 명세 P4a D5에서 Low 프레임이 표본 구간에 있으면 속도 0으로 한다.
+- 자유 변환기 `UIsdkGrabFreeTransformer`(`Grabbable/IsdkGrabFreeTransformer.h:145`)에는 이동·회전·크기 제약이 있다(`:116`·`:120`·`:128`). 키는 크기를 막는다(양손 스케일 금지).
+- 두 손 처리 `EIsdkMultiGrabBehavior`: `SingleGrabFirstRetained`, `SingleGrabTransferToSecond`, `MultiGrab`(`Public/StructTypesNonGenerated.h:279-284`).
+- 2026-09 §4 "안 쓸 것"의 `IsdkGrabFreeTransformer`·`IsdkThrowable`은 **키에 한해** 쓴다(U-10). 다른 부품에는 여전히 쓰지 않는다.
+
+### 우리 코드에서 확인한 것
+
+- **P1 골프백은 물리가 아니다.** 놓으면 일정 속도로 수직 낙하하다가 스윕이 막히면 멈춘다(`VBoRCarryObject.cpp:429-433`, 물리 꺼짐 `:61-62`). 충돌은 질의만이고 `WorldStatic`·`WorldDynamic`을 막는다(`:63-67`). 그래서 박스끼리는 밀지 않고 막힌다 — 사용자가 이 동작을 골랐다(물리로 밀기는 쌓인 박스가 흔들리거나 밀려나고 P1 막힘 구조를 다시 짜야 해서 채택 안 함).
+- 두 손 방향은 두 손을 잇는 선의 Yaw 변화량과 가운데 점만 쓴다(`VBoRCarryMotion.h:161-174`). 긴 축을 가정하지 않으므로 박스를 양옆에서 잡아도 맞다.
+- 안착 보조는 목표 자세 하나로 끌어당긴다(`VBoRCarryObject.cpp:368-370`, `VBoRLoadTarget.h:18`). 여러 박스를 채우는 것과 맞지 않아 박스에서는 끈다.
+- `AVBoRPokeButton`은 앞면을 Actor 로컬로 저장한다(`VBoRPokeButton.cpp:55`, `:100-102`). 그래서 키에 붙여 움직여도 우리 코드는 맞다. **ISDK poke가 움직이는 면에서 잘 되는지는 미확인** — P4a 첫 VR에서 본다.
+- 단계 규칙 `ButtonPressed`는 태그가 하나만 일치해야 한다(`VBoRScenarioRunner.cpp:177`, `VBoRScenarioAsset.h:19`). 키가 둘이라 근사 차가 버튼마다 다른 태그를 단다.
+
+---
+
 ## 2026-10-13 — 사용자 확인: 평가 방·차량 메시 피벗·손잡이·안내 위치
 
 - **회사 평가 방은 차 둘레를 걸을 수 있다**(사용자). 바깥 단계(01–07, 03–06 리프트게이트·적재 포함)는 걸어서 한다.
