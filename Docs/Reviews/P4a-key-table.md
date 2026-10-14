@@ -18,6 +18,19 @@
 | 회차 | 날짜 | 리뷰 대상 | 리뷰어 | 결과 |
 |---|---|---|---|---|
 | 1 | 2026-10-15 | `275d212` 키·미니 테이블·근사 차 연결 | Claude | **열림 3건(R1-1~R1-3).** 구조와 SDK 경로는 명세대로다. 빌드·시험 재현: non-unity·unity 성공, vBoR 경고·오류 0(컴파일은 Codex 빌드로 최신. Codex 로그에서 새 파일 컴파일·경고 0 확인), `vBoR.*` **155/155**, EXIT CODE 0. Codex가 하지 않은 최종 트리 전체 실행을 이번에 대신 했다. **Codex 토큰 7.80M(캐시 97%), 약 63분, 하위 에이전트 0, exec 48** |
+| 2 | 2026-10-15 | `74d5917` 안 쥔 키 Poke 끄기·표시판 문구 복원·bounds 아랫면 바닥 판정 | Claude | **열린 항목 없음 — 통과.** R1-1~R1-3 반영 확인. 빌드·시험 재현: non-unity·unity 성공, vBoR 경고·오류 0(Codex 로그에서 바뀐 3개 파일 컴파일·경고 0 확인), `vBoR.*` **155/155**, EXIT CODE 0. **Codex 토큰 2.64M(캐시 95%), 약 5분, 하위 에이전트 0, exec 24, 빌드·전체 시험 각 1번(최종 트리)** |
+
+### 2회차에 확인한 것
+
+- **R1-1:**
+  - 버튼을 만든 직후 `Poke->Deactivate()`를 부른다. 그 뒤 키 `Tick`에서 `HoldingHand`를 보고 켜고 끈다. 포인터 이벤트 안에서는 바꾸지 않는다.
+  - **끈 채 시작해도 다시 켜지는지 ISDK 코드로 확인했다.** 시험은 poke 이벤트를 직접 주입해 ISDK 내부를 거치지 않으므로, 이 부분은 시험이 보지 못한다.
+    - 인스턴스가 이미 있으면 `Activate`/`Deactivate`가 `UpdateInteractableEnabled`로 enable/disable한다(`Plugins/MetaXRInteraction/Source/OculusInteraction/Private/Interaction/IsdkInteractableComponent.cpp:153-188`).
+    - 아직 없으면 처음 만들 때 `ShouldApiInstanceBeEnabled()`를 보고 꺼서 시작한다(`Private/Interaction/IsdkPokeInteractable.cpp:107-111`). 켠 뒤에 만들어지면 켜진 채로 생긴다.
+  - E4가 BeginPlay·Select 직후·Tick 뒤·Release 직후·Tick 뒤를 두 버튼 모두 본다. 전환 전 한 프레임은 `PressFilter`가 막는 것도 본다. E7b·E8 뒤에도 꺼진다.
+- **R1-2:** 표시판 문구가 "시작 위치 / 근사 형상·자리값"으로 돌아왔다.
+- **R1-3:** 바닥 판정이 `KeyMesh->Bounds.GetBox().Min.Z`다. E8이 끝으로 세운 키(원점은 바닥 + 3 cm, 아랫면은 바닥)도 같은 Actor로 돌아오는지 본다. E10(높은 곳은 그대로)도 통과한다.
+- **범위:** 리뷰 항목 밖으로 바뀐 것이 없다. 쥔 손의 눌림 표시는 리뷰대로 이번에 막지 않았다(VR §7-4).
 
 ### 1회차에 확인한 것
 
@@ -44,7 +57,7 @@
 
 ## 항목
 
-### R1-1 안 쥔 키를 찌르면 이벤트는 없는데 눌림 표시·소리는 난다 — 반영함 (fix(p4a): address key table review findings)
+### R1-1 안 쥔 키를 찌르면 이벤트는 없는데 눌림 표시·소리는 난다 — 반영함 (`74d5917`)
 
 **문제**
 - `PressFilter`(`VBoRPokeButton.cpp:119`, `VBoRKeyFob.cpp:82`)는 `OnButtonPressed`만 막는다. 눌림 확인은 ISDK가 따로 낸다:
@@ -76,7 +89,7 @@
 - E7b(추적 손실로 선택이 끝남) 뒤 Tick → false. E8(되돌림) 뒤에도 false.
 - 기존 E2·E3·E5·E11·E13은 그대로 통과한다. 주입 이벤트는 활성 여부와 상관없이 들어간다. 그래도 잡은 뒤 키 Tick을 한 번 넣어 실제 순서에 맞춘다.
 
-### R1-2 시작 표시판 문구를 한국어에서 영어로 바꿈 — 명세 밖 — 반영함 (fix(p4a): address key table review findings)
+### R1-2 시작 표시판 문구를 한국어에서 영어로 바꿈 — 명세 밖 — 반영함 (`74d5917`)
 
 **문제**
 - `P3VehicleMock.cpp` BeginPlay의 표시판 글이 "시작 위치 / 근사 형상·자리값"에서 "Start / Approximate geometry"로 바뀌었다.
@@ -90,7 +103,7 @@
 **확인할 시험**
 - 없음(되돌리기만).
 
-### R1-3 바닥 판정이 키 원점(메시 피벗) 높이다 — 메시 피벗·키 자세에 따라 안 돌아옴 — 반영함 (fix(p4a): address key table review findings)
+### R1-3 바닥 판정이 키 원점(메시 피벗) 높이다 — 메시 피벗·키 자세에 따라 안 돌아옴 — 반영함 (`74d5917`)
 
 **문제**
 - `VBoRKeyFob.cpp:186`은 `GetActorLocation().Z`(루트 = 키 메시 피벗)를 테이블 원점 Z + 2 cm와 비교한다.
