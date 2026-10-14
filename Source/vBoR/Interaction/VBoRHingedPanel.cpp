@@ -66,10 +66,10 @@ AVBoRHingedPanel::AVBoRHingedPanel()
 	}
 	OutsideHandle->SetRelativeLocation(FVector(110, 9, 52.5));
 	InsideHandle->SetRelativeLocation(FVector(110, -9, 52.5));
-	UStaticMeshComponent* OutsideVisual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("OutsideHandleMesh"));
-	UStaticMeshComponent* InsideVisual = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("InsideHandleMesh"));
-	OutsideVisual->SetupAttachment(OutsideHandle); InsideVisual->SetupAttachment(InsideHandle);
-	for (UStaticMeshComponent* Visual : {OutsideVisual, InsideVisual})
+	OutsideHandleMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("OutsideHandleMesh"));
+	InsideHandleMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("InsideHandleMesh"));
+	OutsideHandleMesh->SetupAttachment(OutsideHandle); InsideHandleMesh->SetupAttachment(InsideHandle);
+	for (UStaticMeshComponent* Visual : {OutsideHandleMesh.Get(), InsideHandleMesh.Get()})
 	{
 		Visual->SetStaticMesh(Cube.Object);
 		Visual->SetRelativeScale3D(FVector(0.18, 0.04, 0.04));
@@ -107,6 +107,7 @@ void AVBoRHingedPanel::SyncSettings()
 	Motion.MaxAngleDeg = MaxAngleDeg; Motion.MaxSpeedDegPerSecond = MaxSpeedDegPerSecond;
 	Motion.LatchAngleDeg = LatchAngleDeg; Motion.RearmAngleDeg = RearmAngleDeg;
 	Motion.PalmLimitDeg = PalmLimitDeg; Motion.MinAxisDistanceCm = MinAxisDistanceCm;
+	Motion.bAllowPalmOpening = bAllowPalmOpening;
 	UpdateGrabAreas();
 }
 
@@ -180,6 +181,8 @@ bool AVBoRHingedPanel::BeginAxisGrab(AVBoRAxisPart* Part, const FVBoRDoorHand& I
 void AVBoRHingedPanel::PreInitializeComponents()
 {
 	SyncSettings();
+	HandleVisualRestCm[0] = OutsideHandleMesh->GetRelativeLocation();
+	HandleVisualRestCm[1] = InsideHandleMesh->GetRelativeLocation();
 	ClosedHingeRotation = HingePivot->GetRelativeRotation().Quaternion();
 	for (int32 I = 0; I < 2; ++I)
 	{
@@ -269,7 +272,7 @@ void AVBoRHingedPanel::HandlePointer(int32 Handle, const FIsdkInteractionPointer
 		HoldingGrabber == Grabber && Motion.GrabHand == Hand && Motion.GrabHandle == Handle)
 	{
 		FVBoRDoorHand Input;
-		if (Motion.ReleaseGrab(ReadHand(Hand, Input))) { HoldingGrabber = nullptr; }
+		if (Motion.ReleaseGrab(ReadHand(Hand, Input))) { HoldingGrabber = nullptr; UpdateHandleVisuals(); }
 	}
 }
 
@@ -294,6 +297,18 @@ void AVBoRHingedPanel::CancelSelections(const TCHAR* Reason)
 	// Reset 도 이벤트에서 올 수 있어 SDK 취소는 Tick 에 예약함 (P2b R1-3)
 	bCancelPending = true;
 	Hovering[0].Reset(); Hovering[1].Reset();
+	UpdateHandleVisuals();
+}
+
+void AVBoRHingedPanel::UpdateHandleVisuals()
+{
+	for (int32 I = 0; I < 2; ++I)
+	{
+		UStaticMeshComponent* Visual = I == 0 ? OutsideHandleMesh.Get() : InsideHandleMesh.Get();
+		const bool bPressed = Motion.GrabHand != INDEX_NONE && Motion.GrabHandle == I && !HoldingAxisPart && IsGrabAreaEnabled(I);
+		// 표시만 쉬는 자리 기준으로 옮김 (상자 이동·누적 오프셋으로 SDK 선택 흔들림 방지, P2d R1 D8)
+		Visual->SetRelativeLocation(HandleVisualRestCm[I] + (bPressed ? HandleVisualPressOffsetCm : FVector::ZeroVector));
+	}
 }
 
 void AVBoRHingedPanel::Tick(float DeltaSeconds)
@@ -338,6 +353,7 @@ void AVBoRHingedPanel::Tick(float DeltaSeconds)
 void AVBoRHingedPanel::ApplyState(double BeforeAngle, int32 BeforeUnlocks, int32 BeforeLatches)
 {
 	HingePivot->SetRelativeRotation(ClosedHingeRotation * FQuat(FVector::UpVector, FMath::DegreesToRadians(Motion.AngleDeg)));
+	UpdateHandleVisuals();
 	if (Motion.Metrics.Unlocks != BeforeUnlocks) { StateAudio->Play(); NotifyUnlocked(); }
 	if (Motion.Metrics.Latches != BeforeLatches) { CancelSelections(TEXT("latch")); StateAudio->Play(); NotifyLocked(); }
 	if (Motion.AngleDeg != BeforeAngle) { OnAngleChanged.Broadcast(static_cast<float>(Motion.AngleDeg)); }
@@ -377,13 +393,13 @@ FString AVBoRHingedPanel::GetMeasurementText(const FVBoRDoorMetrics* Baseline) c
 {
 	const FVBoRDoorMetrics M = Baseline ? Motion.Metrics.Since(*Baseline) : Motion.Metrics;
 	return FString::Printf(TEXT("Unlock=%d latch=%d last unlock=%s\nPush L outside/inside=%d/%d R=%d/%d | moved %.2f deg\n"
-		"Ignored contacts: locked=%d palm direction=%d behind=%d near axis=%d outside=%d tracking Low=%d\n"
+		"Ignored contacts: locked=%d palm direction=%d behind=%d near axis=%d outside=%d tracking Low=%d opening disabled=%d\n"
 		"Handle attempts/grabs: L outside=%d/%d inside=%d/%d R outside=%d/%d inside=%d/%d | held %.3f s\n"
 		"Rate capped frames=%d | grab pauses=%d %.3f s | recovery unapplied=%.2f cm | ignored SDK release=%d | push tracking losses=%d\n"
 		"Palm-to-face angle L=%.1f R=%.1f deg (-1: no candidate) | palm axis -Z inferred; not-tested"),
 		M.Unlocks, M.Latches, M.LastUnlockHandle == 0 ? TEXT("outside") : M.LastUnlockHandle == 1 ? TEXT("inside") : TEXT("none"),
 		M.PushStarts[0][0], M.PushStarts[0][1], M.PushStarts[1][0], M.PushStarts[1][1], M.PushedDeg,
-		M.Ignored[0], M.Ignored[1], M.Ignored[2], M.Ignored[3], M.Ignored[4], M.Ignored[5],
+		M.Ignored[0], M.Ignored[1], M.Ignored[2], M.Ignored[3], M.Ignored[4], M.Ignored[5], M.Ignored[6],
 		M.Attempts[0][0], M.Grabs[0][0], M.Attempts[0][1], M.Grabs[0][1], M.Attempts[1][0], M.Grabs[1][0], M.Attempts[1][1], M.Grabs[1][1],
 		M.HeldSeconds, M.RateLimitedFrames, M.Pauses, M.PausedSeconds, M.RecoveryDistanceCm, M.IgnoredReleases, M.PushTrackingLosses, Motion.PalmAngleDeg[0], Motion.PalmAngleDeg[1]);
 }

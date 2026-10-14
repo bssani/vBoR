@@ -271,16 +271,16 @@ bool FP2cP3Lid::RunTest(const FString& Parameters)
 	if (!TestNotNull(TEXT("P3 creates hinged panel lid"), Lid)) { return false; }
 	TestTrue(TEXT("Lid actor remains car origin"), Lid->GetActorTransform().Equals(Car->GetActorTransform(), 0.001));
 	TestTrue(TEXT("P2d lid starts latched"), Lid->GetMotion().bLocked);
-	TestNotNull(TEXT("P2d console has opening tab"), Car->ConsoleTab.Get());
+	TestNull(TEXT("P2d console uses front grab instead of axis handle"), Lid->OutsideAxisHandle.Get());
 	TestTrue(TEXT("Lid keeps original mesh size"), Lid->DoorMesh->GetComponentScale().Equals(FVector(0.35, 0.24, 0.03)));
 	TestTrue(TEXT("Local Y is top face"), FP2cTestAccess::Frame(Lid).TransformVectorNoScale(FVector::YAxisVector).Equals(FVector::UpVector, 0.001));
 	FVBoRDoorHand Hands[2] = {OnFace(0, -2, 30, FVector(0, 1, 0)), {}};
 	FVBoRDoorMotion& Motion = FP2cTestAccess::Motion(Lid); Motion.Advance(Hands, 0.1); Hands[0] = OnFace(0, 2, 30, FVector(0, 1, 0)); Motion.Advance(Hands, 1); FP2cTestAccess::Apply(Lid);
 	TestEqual(TEXT("P2d closed console rejects bottom push"), Motion.AngleDeg, 0.0);
-	TestTrue(TEXT("P2d explicit Unlock opens push path"), Lid->Unlock());
+	TestTrue(TEXT("P2d explicit Unlock succeeds"), Lid->Unlock());
 	Hands[0] = OnFace(0, -2, 30, FVector(0, 1, 0)); Motion.Advance(Hands, 0.1);
 	Hands[0] = OnFace(0, 2, 30, FVector(0, 1, 0)); Motion.Advance(Hands, 1); FP2cTestAccess::Apply(Lid, 0, Motion.Metrics.Unlocks);
-	TestTrue(TEXT("Actual P3 bounds accept bottom push"), Motion.AngleDeg > 0);
+	TestEqual(TEXT("Actual P3 unlocked lid rejects bottom push"), Motion.AngleDeg, 0.0);
 	TestTrue(TEXT("Actual P3 lid accepts edge grab"), FP2cTestAccess::Grab(Lid, 0, 0, OnFace(Motion.AngleDeg, 0, 35)));
 	Hands[0] = OnFace(120, 0, 35); Motion.Advance(Hands, 1); FP2cTestAccess::Apply(Lid);
 	TestTrue(TEXT("Actual P3 lid clamp 100 deg"), FMath::IsNearlyEqual(Motion.AngleDeg, 100.0));

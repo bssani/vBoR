@@ -67,6 +67,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel|Latch", meta = (DisplayName = "닫히면 잠김 — 손잡이·버튼으로만 열기", ToolTip = "닫힌 판은 밀어도 움직이지 않음. 잡는 자리·연결한 손잡이 또는 버튼의 Unlock으로 풀고, 열었다 닫으면 다시 잠김.")) bool bUseLatch = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel|Grab areas", meta = (DisplayName = "바깥쪽 잡는 자리 사용")) bool bUseOutsideGrabArea = true;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel|Grab areas", meta = (DisplayName = "안쪽 잡는 자리 사용")) bool bUseInsideGrabArea = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel", meta = (DisplayName = "손바닥으로 열기 허용", ToolTip = "끄면 풀린 판도 닫는 방향의 손바닥 밀기만 받음. 잡아서 여닫기는 그대로.")) bool bAllowPalmOpening = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel|Grab areas", meta = (DisplayName = "잡는 동안 손잡이 표시 들어감", Units = "cm", ToolTip = "잡는 자리 로컬 좌표의 이동 거리·방향 (cm). 표시 메시만 움직이고 잡는 상자는 그대로. 0이면 표시 이동 없음.")) FVector HandleVisualPressOffsetCm = FVector::ZeroVector;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel") FTransform MeshRestFromRoot = FTransform(FQuat::Identity, FVector(55,0,52.5), FVector(1.1,0.1,1.05));
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Hinged panel") TObjectPtr<AVBoRAxisPart> OutsideAxisHandle;
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Hinged panel") TObjectPtr<AVBoRAxisPart> InsideAxisHandle;
@@ -74,6 +76,8 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hinged panel") TObjectPtr<UStaticMeshComponent> DoorMesh;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hinged panel", meta = (DisplayName = "Outside face grab area")) TObjectPtr<UBoxComponent> OutsideHandle;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hinged panel", meta = (DisplayName = "Inside face grab area")) TObjectPtr<UBoxComponent> InsideHandle;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hinged panel") TObjectPtr<UStaticMeshComponent> OutsideHandleMesh;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hinged panel") TObjectPtr<UStaticMeshComponent> InsideHandleMesh;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hinged panel") TObjectPtr<UIsdkGrabbableComponent> OutsideGrab;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hinged panel") TObjectPtr<UIsdkGrabbableComponent> InsideGrab;
 	UPROPERTY(VisibleAnywhere, Category = "Hinged panel") TObjectPtr<UVBoRDoorGrabTransformer> OutsideTransformer;
@@ -128,4 +132,6 @@ private:
 	void HandlePointer(int32 Handle, const FIsdkInteractionPointerEvent& Event);
 	bool IsGrabAreaEnabled(int32 Handle) const;
 	void UpdateGrabAreas();
+	FVector HandleVisualRestCm[2] = {};
+	void UpdateHandleVisuals();
 };

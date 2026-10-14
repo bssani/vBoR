@@ -95,22 +95,18 @@ void AP3VehicleMock::BeginPlay()
 	ConsoleLid = GetWorld()->SpawnActorDeferred<AVBoRHingedPanel>(AVBoRHingedPanel::StaticClass(), GetActorTransform(), this);
 	ConsoleLid->HingePivot->SetRelativeTransform(FTransform(FQuat(FVector::XAxisVector, PI / 2), ConsoleLidPivotCm));
 	ConsoleLid->MeshRestFromRoot = FTransform(FQuat::Identity, ConsoleLidPivotCm + FVector(17.5,0,0), FVector(0.35,0.24,0.03));
-	ConsoleLid->OutsideHandle->SetRelativeLocation(FVector(35,5.5,0));
+	// 앞면 가운데를 잡음. 표시는 차 -X 로 0.75 cm 들어감 (근사 자리값, P2d R1 D8)
+	ConsoleLid->OutsideHandle->SetRelativeLocation(FVector(36,0,0));
+	ConsoleLid->OutsideHandle->SetBoxExtent(FVector(4,4,8));
+	ConsoleLid->OutsideHandleMesh->SetRelativeScale3D(FVector(0.02,0.03,0.14));
+	ConsoleLid->HandleVisualPressOffsetCm = FVector(-0.75,0,0);
 	ConsoleLid->InsideHandle->SetRelativeLocation(FVector(35,-5.5,0));
 	ConsoleLid->MaxAngleDeg = 100;
 	ConsoleLid->bUseLatch = true;
+	ConsoleLid->bAllowPalmOpening = false;
 	ConsoleLid->bUseInsideGrabArea = false;
-	// 아래쪽으로 잡아 잠금을 우회하지 않게 함. 앞 탭은 차 +Z 로 당김 (P2d D1·D2)
-	ConsoleTab = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
-	const FVector TabPivot = ConsoleLidPivotCm + ConsoleTabOffsetCm;
-	ConsoleTab->AxisPivot->SetRelativeLocation(TabPivot);
-	ConsoleTab->MeshRestFromRoot = FTransform(FQuat::Identity, TabPivot + FVector(2,0,0), FVector(0.04,0.14,0.03));
-	ConsoleTab->Axis = EAxis::Y; ConsoleTab->bReverse = true;
-	ConsoleLid->OutsideAxisHandle = ConsoleTab;
 	ConsoleLid->FinishSpawning(GetActorTransform());
 	ConsoleLid->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
-	ConsoleTab->FinishSpawning(GetActorTransform());
-	ConsoleTab->AttachToComponent(ConsoleLid->HingePivot, FAttachmentTransformRules::KeepWorldTransform);
 	ReachButton = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), FTransform::Identity, this);
 	ReachButton->Tags.Add(TEXT("Car.ReachButton")); ReachButton->HitAreaScale = 1;
 	ReachButton->ButtonMesh->SetRelativeScale3D(FVector(0.04,0.04,0.01));
@@ -142,7 +138,6 @@ void AP3VehicleMock::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (Door) { Door->Destroy(); }
 	if (OutsideAxisHandle) { OutsideAxisHandle->Destroy(); }
 	if (InsideAxisHandle) { InsideAxisHandle->Destroy(); }
-	if (ConsoleTab) { ConsoleTab->Destroy(); }
 	if (ConsoleLid) { ConsoleLid->Destroy(); }
 	if (ReachButton) { ReachButton->Destroy(); }
 	MockLabel->SetSlateWidget(nullptr);

@@ -112,6 +112,8 @@ bool FVBoRDoorMotion::FindPush(int32 Hand, const FVBoRDoorHand& Input, int32 Fac
 	const double PalmAngle = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Palm, FVector(0, -Sign, 0)), -1.0, 1.0)));
 	PalmAngleDeg[Hand] = PalmAngle;
 	if (bUseLatch && bLocked) { OutReason = EVBoRDoorIgnore::Locked; }
+	// 잠김 집계를 먼저 유지함. 풀려도 닫는 면만 허용 가능 (P2d R1 D7)
+	else if (Face == 1 && !bAllowPalmOpening) { OutReason = EVBoRDoorIgnore::OpeningDisabled; }
 	else if (!bCrossing) { OutReason = EVBoRDoorIgnore::Behind; }
 	else if (!bAwayFromAxis) { OutReason = EVBoRDoorIgnore::NearAxis; }
 	else if (Palm.IsNearlyZero() || PalmAngle > PalmLimitDeg) { OutReason = EVBoRDoorIgnore::PalmDirection; }

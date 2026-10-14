@@ -43,7 +43,7 @@
 
 ## 항목
 
-### R1-1 실제 근사 차 콘솔 구성이 시험에 묶여 있지 않음 — R1-2에 합침
+### R1-1 실제 근사 차 콘솔 구성이 시험에 묶여 있지 않음 — R1-2에 합침, 반영함 (fix(p2d): grab console front and limit palm push)
 
 **문제**
 - 이 명세의 핵심은 사용자가 VR에서 지적한 "닫힌 콘솔이 밀리고 아래로 잡힘"을 근사 차에서 막는 것이다. 그런데 실제 `Car->ConsoleLid` 구성을 확인하는 단언이 없다.
@@ -69,7 +69,7 @@
 
 > R1-1 처리: 콘솔 구성이 R1-2로 바뀌므로 단언 대상도 바뀐다. 명세 E16(실제 근사 차 콘솔 구성)으로 옮겼다. 아래 "참고"의 콘솔 탭 손 위치 문제는 탭이 없어지므로 해당 없다.
 
-### R1-2 콘솔을 사용자 U-11대로 — 손잡이 자리 잡기, 손바닥은 열렸을 때 닫는 방향만 — 열림
+### R1-2 콘솔을 사용자 U-11대로 — 손잡이 자리 잡기, 손바닥은 열렸을 때 닫는 방향만 — 반영함 (fix(p2d): grab console front and limit palm push)
 
 **문제**
 - 사용자가 상호작용 기록 문서(`Docs/Interaction-Reference.html` INT-005) 뒤에 콘솔 동작을 정했다(계획서 U-11). 1회차의 당기는 탭(`P3VehicleMock.cpp:104-113`, `ConsoleTab`)과 다르다.
@@ -108,3 +108,66 @@
 ## 질문
 
 (없음)
+
+## Codex R1-2 반영 보고 (2026-10-15)
+
+① 바뀐 파일
+- Source/vBoR/Interaction/VBoRDoorMotion.h·.cpp: 손바닥 열기 옵션과 OpeningDisabled 무시 사유.
+- Source/vBoR/Interaction/VBoRHingedPanel.h·.cpp: 옵션 노출, 잡는 쪽 표시 메시의 로컬 눌림·복귀. 기존 component 저장 이름 유지.
+- Source/vBoR/P3Probe/P3VehicleMock.h·.cpp: ConsoleTab·ConsoleTabOffsetCm·탭 생성/정리 제거, 콘솔 앞면 잡기와 닫기 전용 손바닥 설정.
+- Source/vBoR/P2Probe/P2dLatchedPanelTests.cpp: E3·E4 개정, E13–E16 추가, E10의 탭 단언 제거.
+- Source/vBoR/P2Probe/P2cHingedPanelTests.cpp: 실제 콘솔의 아래 밀기 무시로 E13 갱신.
+- Docs/Reviews/P2d-latched-panel.md: R1-2 반영 상태와 이 보고.
+- HANDOFF.md: Codex 결과 (git 무시 파일).
+
+② 명세 §6 완료 조건
+1. §2의 개정 범위 구현. 기존 Unlock·열 수단 없음 경고·쪽별 잡기 끄기·안쪽 레버 유지.
+2. E1–E16 16/16 Success. 전체 vBoR 1회: 발견 140·완료 140·Success 140·Fail 0, TEST COMPLETE. EXIT CODE: 0, 프로세스 0.
+   기존 그룹: P2Door 11/11·P2b 13/13·P2c 13/13·P3Flow 18/18.
+   실제 Car->ConsoleLid 옵션·충돌·overlap·표시·Palm 입력·앞면 자리·탭 없음·안쪽 선택 무시를 E16에서 확인.
+   E3 같은 손 열기·눌림/상자 고정, E4 열려도 아래 밀기 차단/윗면 닫기/재잠금,
+   E13 기본 양면 밀기, E14 손 폄·걸쇠·초기화·SDK Unselect 복귀/자식의 쉬는 자리 보존,
+   E15 열린 판 재잡기·위아래 이동/재잠금 확인. E5 버튼 이벤트의 SDK 취소 0 유지.
+3. non-unity(-DisableUnity -Module=vBoR)·unity 각 1회 Result: Succeeded·프로세스 0, vBoR 컴파일 경고·오류 0.
+4. 보고 ①–⑤를 커밋 본문·리뷰 파일·HANDOFF.md에 기록.
+5. Quest 3 Link/VR Preview·Blueprint 확인·정식 T-03·T-06·T-08·T-09는 not-tested.
+
+③ 명세와 다르게 한 것과 구현 재량
+- 명세와 다른 제품 동작 없음. D7·D8 및 R1-2 제안 방식으로 구현.
+- 무시 사유는 새 OpeningDisabled로 구분. 기존 집계 인덱스는 유지하고 끝에 추가.
+  잠김을 먼저 검사해 잠긴 콘솔의 위/아래 접촉은 기존 Locked로 셈.
+- D8 거리·방향은 HandleVisualPressOffsetCm 벡터(cm, 잡는 상자 로컬 좌표)로 노출, 기본 0.
+  PreInitializeComponents에서 표시 메시의 쉬는 위치를 보존해 잡는 동안만 오프셋 적용.
+  충돌 상자는 옮기지 않고, SDK 취소는 기존 Tick 경로 유지.
+- 콘솔 앞면 자리: 경첩 로컬 (36,0,0) cm, 잡는 상자 반크기 (4,4,8) cm,
+  표시 메시 2×3×14 cm, 안쪽(-X)으로 0.75 cm 눌림. 모두 근사 자리값.
+- 시작/종료 시 에디터 닫힘. 하위 에이전트·자체 리뷰 루프·MCP·레벨/에셋 저장 없음.
+  Content/Config/Plugins·P3 단계 데이터/규칙 제품 코드 수정 없음. push·PR·머지 없음.
+
+④ API 헤더 확인 (추정 없이 로컬 헤더 대조 및 실제 컴파일)
+- 엔진 기준 C:/Program Files/Epic Games/UE_5.7/Engine/Source/:
+  Runtime/Engine/Classes/Components/SceneComponent.h:429,1426 — SetRelativeLocation/GetRelativeLocation.
+  같은 파일 :468,912 — SetRelativeScale3D, 자식 visibility 전파.
+  Runtime/Engine/Classes/Components/BoxComponent.h:39 — SetBoxExtent.
+  Runtime/Engine/Classes/GameFramework/Actor.h:3558 — GetAttachedActors의 재귀 옵션(E16 탭 Actor 없음).
+  Runtime/Core/Public/Misc/AutomationTest.h:2516 — TestNull.
+  Runtime/Core/Public/Math/Vector.h:609 — IsZero.
+- Plugins/MetaXRInteraction/Source/OculusInteraction/Public/Interaction/IsdkGrabbableComponent.h:117,138,146 — collider, Palm 허용 조회·설정.
+- 같은 모듈 Public/Interaction/Grabbable/IsdkGrabTransformerComponent.h:110 — 기존 ForceCancel 유지(Tick에서만).
+- 새 MetaXR/ISDK API·의존 추가 없음. 손 추적·피벗/bounds·1축 변환 경로 유지.
+
+⑤ 로컬에서 확인할 것 / 검증 기록
+- 빌드: Saved/Logs/P2dR1NonUnityBuild.log(21.76 s), P2dR1UnityBuild.log(75.14 s).
+  두 로그의 McpAutomationBridge/프로젝트 StructUtils 폐기 예정 안내 각 2줄은 별도 환경 안내.
+- 시험: Saved/Logs/P2dR1AllAutomation.log, P2dR1AllAutomationConsole.log.
+  샘플·McpAutomationBridge·UnrealAgent 끔. 샘플 InfoCard CDO·XR 확장·MetaXR 빈 엔진 버전
+  등의 기존 환경 잡음은 Agent-Workflow §2.5 기준으로 분리. 전체 실행·수정 빌드 반복 없음.
+- 에디터: Details의 손바닥으로 열기 허용/잡는 동안 손잡이 표시 들어감 옵션과 자식 메시 적용 확인.
+  기존 L_P3_Flow에서 콘솔 앞면 자리·눌림 표시·복귀, 안쪽 레버 위치를 확인.
+- Quest 3: 명세 §7의 닫힌 상태 위/아래 밀기 차단→앞면 잡기/표시 들어감→
+  같은 손으로 열고 닫기→손 폄 복귀→열린 판 아래 밀기 무시→윗면으로 닫아 재잠금.
+  안쪽 문 18 열기·11 닫기, 선바이저형 양면 밀기, 추적 손실/복구도 확인.
+  관련 정식 T-03·T-06·T-08·T-09 및 이번 VR 재시험은 not-tested.
+- 브랜치 codex/P2d-latched-panel, 작업 시작 HEAD 37fe9ac(1a918dd의 main 문서 머지 포함).
+  R1-2 반영, R1-1은 E16으로 함께 반영. 질문 없음. Claude 다음 리뷰 대기.
+
