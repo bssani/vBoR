@@ -71,9 +71,9 @@ bool FP1BenchWorldTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("Trunk remains attached at opening"), Bench->Trunk->GetAttachParentActor() == Bench);
 		TestTrue(TEXT("Bag/target remain attached to bench"), Bench->Bag->GetAttachParentActor() == Bench && Bench->Target->GetAttachParentActor() == Bench);
 		TestTrue(TEXT("Bag lies on 75 cm stand 100 cm behind opening"),
-			Bench->GetActorTransform().InverseTransformPosition(Bench->Bag->GetActorLocation()).Equals(FVector(-100, 0, 89), 0.01));
-		TestTrue(TEXT("Goal is crosswise on 75 cm trunk floor"),
-			Bench->GetActorTransform().InverseTransformPosition(Bench->Target->GetActorLocation()).Equals(FVector(45, 0, 89), 0.01));
+			Bench->GetActorTransform().InverseTransformPosition(Bench->Bag->GetActorLocation()).Equals(FVector(-100, 0, 90.01), 0.01));
+		TestTrue(TEXT("Goal is upright on 75 cm trunk floor"),
+			Bench->GetActorTransform().InverseTransformPosition(Bench->Target->GetActorLocation()).Equals(FVector(45, 0, 90), 0.01));
 		TestTrue(TEXT("Loading region spans trunk interior depth/width/height"),
 			Bench->Target->LoadingRegion->GetUnscaledBoxExtent().Equals(FVector(45, 65, 35), 0.01));
 		TestTrue(TEXT("Loading region center follows trunk, not bag goal height"),
@@ -81,30 +81,30 @@ bool FP1BenchWorldTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("Loading region axes follow trunk despite crosswise goal rotation"),
 			Bench->Target->LoadingRegion->GetComponentQuat().Equals(Bench->Trunk->GetActorQuat(), 0.001));
 		TestTrue(TEXT("Guide stays bag size while loading region is larger"),
-			Bench->Target->Guide->GetRelativeScale3D().Equals(FVector(0.28, 0.28, 1.2), 0.001));
+			Bench->Target->Guide->GetRelativeScale3D().Equals(FVector(0.45, 0.35, 0.30), 0.001));
 		TestTrue(TEXT("Loading region cannot block the bag"),
 			Bench->Target->LoadingRegion->GetCollisionEnabled() == ECollisionEnabled::NoCollision);
-		TestTrue(TEXT("P1 bag explicitly uses engine Cylinder rather than carry parent Cube"),
-			Bench->Bag->Mesh->GetStaticMesh() && Bench->Bag->Mesh->GetStaticMesh()->GetPathName().Contains(TEXT("/Engine/BasicShapes/Cylinder")));
+		TestTrue(TEXT("P1 box uses engine Cube"),
+			Bench->Bag->Mesh->GetStaticMesh() && Bench->Bag->Mesh->GetStaticMesh()->GetPathName().Contains(TEXT("/Engine/BasicShapes/Cube")));
 		if (const UStaticMesh* Cylinder = Bench->Bag->Mesh->GetStaticMesh())
 		{
 			const FVector BodyCm = Cylinder->GetBoundingBox().GetSize() * Bench->Bag->GetActorScale3D().GetAbs();
-			TestTrue(TEXT("Actor-root mesh stays 28 x 28 x 120 cm after FinishSpawning"), BodyCm.Equals(FVector(28, 28, 120), 0.02));
+			TestTrue(TEXT("Actor-root mesh stays 45 x 35 x 30 cm after FinishSpawning"), BodyCm.Equals(FVector(45, 35, 30), 0.02));
 		}
 		TestTrue(*FString::Printf(TEXT("Bag long axis %s follows bench right %s at head yaw"),
-			*Bench->Bag->GetActorUpVector().ToString(), *Bench->GetActorRightVector().ToString()),
-			Bench->Bag->GetActorUpVector().Equals(Bench->GetActorRightVector(), 0.001));
+			*Bench->Bag->GetActorRightVector().ToString(), *Bench->GetActorRightVector().ToString()),
+			Bench->Bag->GetActorRightVector().Equals(Bench->GetActorRightVector(), 0.001));
 		TestTrue(*FString::Printf(TEXT("Goal long axis %s follows bench right %s at head yaw"),
-			*Bench->Target->GetActorUpVector().ToString(), *Bench->GetActorRightVector().ToString()),
-			Bench->Target->GetActorUpVector().Equals(Bench->GetActorRightVector(), 0.001));
-		TestTrue(TEXT("Target guide retains full 120 cm bag length"), Bench->Target->GoalSizeCm.Equals(FVector(28, 28, 120)));
-		TestTrue(TEXT("120 cm crosswise bag clears default 130 cm trunk width"), Bench->Target->IsStaticFit(Bench->Bag));
+			*Bench->Target->GetActorRightVector().ToString(), *Bench->GetActorRightVector().ToString()),
+			Bench->Target->GetActorRightVector().Equals(Bench->GetActorRightVector(), 0.001));
+		TestTrue(TEXT("Target guide uses box dimensions"), Bench->Target->GoalSizeCm.Equals(FVector(45, 35, 30)));
+		TestTrue(TEXT("35 cm box clears default 130 cm trunk width"), Bench->Target->IsStaticFit(Bench->Bag));
 		TestTrue(TEXT("Panel states clear static goal pose fit"), Bench->Panel->Text.ToString().Contains(TEXT("Static target pose: clear")));
 		TestTrue(TEXT("Panel labels current containment as loading region"), Bench->Panel->Text.ToString().Contains(TEXT("loading region: not inside / overlap")));
 		const FVector OriginalBagScale = Bench->Bag->GetActorScale3D();
-		Bench->Trunk->InsideWidthCm = 100;
+		Bench->Trunk->InsideWidthCm = 30;
 		Bench->Trunk->OnConstruction(Bench->Trunk->GetActorTransform());
-		TestFalse(TEXT("120 cm bag fails static fit when editable trunk width is 100 cm"), Bench->Target->IsStaticFit(Bench->Bag));
+		TestFalse(TEXT("35 cm box fails static fit when editable trunk width is 30 cm"), Bench->Target->IsStaticFit(Bench->Bag));
 		Bench->Tick(0);
 		TestTrue(TEXT("Narrow trunk panel reports failed fit"), Bench->Panel->Text.ToString().Contains(TEXT("overlap / does not fit")));
 		TestTrue(TEXT("Failed fit leaves bag geometry unchanged"), Bench->Bag->GetActorScale3D().Equals(OriginalBagScale, 0.0001));
@@ -113,10 +113,10 @@ bool FP1BenchWorldTest::RunTest(const FString& Parameters)
 		// 시작·초기 tick 은 통과로 세지 않고, 몸체 앞 경계가 +X 로 들어갈 때만 셈 (P1 §2 경로)
 		Bench->Tick(0);
 		TestEqual(TEXT("Initial bag pose has no crossing"), Bench->GetEntranceCrossings(), 0);
-		Bench->Bag->SetActorLocation(Bench->GetActorTransform().TransformPosition(FVector(-20, 0, 89)), false, nullptr, ETeleportType::TeleportPhysics);
+		Bench->Bag->SetActorLocation(Bench->GetActorTransform().TransformPosition(FVector(-30, 0, 90)), false, nullptr, ETeleportType::TeleportPhysics);
 		Bench->Tick(0);
 		TestEqual(TEXT("Bag entirely behind opening has no crossing"), Bench->GetEntranceCrossings(), 0);
-		Bench->Bag->SetActorLocation(Bench->GetActorTransform().TransformPosition(FVector(-13, 0, 89)), false, nullptr, ETeleportType::TeleportPhysics);
+		Bench->Bag->SetActorLocation(Bench->GetActorTransform().TransformPosition(FVector(-20, 0, 90)), false, nullptr, ETeleportType::TeleportPhysics);
 		Bench->Tick(0);
 		TestEqual(TEXT("Leading bag boundary crosses opening once"), Bench->GetEntranceCrossings(), 1);
 		Bench->Tick(0);
@@ -129,14 +129,14 @@ bool FP1BenchWorldTest::RunTest(const FString& Parameters)
 	if (Bench->Bag)
 	{
 		TestTrue(TEXT("Bag returns to new world-fixed starting pose"),
-			Bench->GetActorTransform().InverseTransformPosition(Bench->Bag->GetActorLocation()).Equals(FVector(-100, 0, 89), 0.01));
-		TestTrue(TEXT("R reset preserves full Cylinder scale"), Bench->Bag->GetActorScale3D().Equals(BagScaleBefore, 0.0001));
+			Bench->GetActorTransform().InverseTransformPosition(Bench->Bag->GetActorLocation()).Equals(FVector(-100, 0, 90.01), 0.01));
+		TestTrue(TEXT("R reset preserves box scale"), Bench->Bag->GetActorScale3D().Equals(BagScaleBefore, 0.0001));
 		TestTrue(*FString::Printf(TEXT("Reset bag long axis %s follows bench right %s"),
-			*Bench->Bag->GetActorUpVector().ToString(), *Bench->GetActorRightVector().ToString()),
-			Bench->Bag->GetActorUpVector().Equals(Bench->GetActorRightVector(), 0.001));
+			*Bench->Bag->GetActorRightVector().ToString(), *Bench->GetActorRightVector().ToString()),
+			Bench->Bag->GetActorRightVector().Equals(Bench->GetActorRightVector(), 0.001));
 		TestTrue(*FString::Printf(TEXT("Reset goal long axis %s follows bench right %s"),
-			*Bench->Target->GetActorUpVector().ToString(), *Bench->GetActorRightVector().ToString()),
-			Bench->Target->GetActorUpVector().Equals(Bench->GetActorRightVector(), 0.001));
+			*Bench->Target->GetActorRightVector().ToString(), *Bench->GetActorRightVector().ToString()),
+			Bench->Target->GetActorRightVector().Equals(Bench->GetActorRightVector(), 0.001));
 	}
 	TestEqual(TEXT("Reset does not fabricate entrance crossings"), Bench->GetEntranceCrossings(), 0);
 	TestEqual(TEXT("Reset does not fabricate blocked crossings"), Bench->GetBlockedAtCrossings(), 0);
@@ -197,7 +197,7 @@ bool FP1BagRepeatTest::RunTest(const FString& Parameters)
 			TestTrue(TEXT("Bag repeat keeps bench transform"), Bench->GetActorTransform().Equals(BenchBefore));
 			TestTrue(TEXT("Bag repeat keeps trunk transform"), Bench->Trunk->GetActorTransform().Equals(TrunkBefore));
 			TestTrue(TEXT("Bag repeat restores stand start pose"),
-				Bench->GetActorTransform().InverseTransformPosition(Bench->Bag->GetActorLocation()).Equals(FVector(-100, 0, 89), 0.01));
+				Bench->GetActorTransform().InverseTransformPosition(Bench->Bag->GetActorLocation()).Equals(FVector(-100, 0, 90.01), 0.01));
 			TestTrue(TEXT("Bag repeat displays trial two"), Bench->Panel->Text.ToString().Contains(TEXT("Trial: 2")));
 			TestEqual(TEXT("B ends synthetic owning hand session"), Bench->Bag->GetCarrySession().Hand, INDEX_NONE);
 			TestEqual(TEXT("B preserves grabbed total"), Bench->GetTotals().Grabbed, 2);
@@ -216,6 +216,8 @@ bool FP1BagRepeatTest::RunTest(const FString& Parameters)
 			TestEqual(TEXT("R clears blocked total"), Bench->GetTotals().BlockedCount, 0);
 			TestEqual(TEXT("R clears pause duration"), Bench->GetTotals().PausedSeconds, 0.0);
 			const FTransform TrunkPose = Bench->Trunk->GetActorTransform();
+			Bench->Bag->Mesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")));
+			Bench->Bag->SetActorScale3D(FVector(0.28, 0.28, 1.2));
 			const FQuat AxialRotation = TrunkPose.GetRotation() * FRotator(0, 0, 90).Quaternion() *
 				FQuat(FVector::UpVector, FMath::DegreesToRadians(15.0));
 			Bench->Bag->bBlocked = true;
@@ -252,6 +254,8 @@ bool FP1BenchHullCrossingTest::RunTest(const FString& Parameters)
 		if (!TestNotNull(TEXT("Hull crossing bag exists"), Bench->Bag.Get()) ||
 			!TestNotNull(TEXT("Hull crossing trunk exists"), Bench->Trunk.Get())) { break; }
 		const FTransform TrunkPose = Bench->Trunk->GetActorTransform();
+		Bench->Bag->Mesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")));
+		Bench->Bag->SetActorScale3D(FVector(0.28, 0.28, 1.2));
 		const FQuat Rotation = TrunkPose.GetRotation() * FRotator(0, 0, 90).Quaternion() *
 			FQuat(FVector::UpVector, FMath::DegreesToRadians(15.0));
 		auto PlaceBag = [&](double X)
@@ -270,6 +274,8 @@ bool FP1BenchHullCrossingTest::RunTest(const FString& Parameters)
 		Bench->Tick(0);
 		TestEqual(TEXT("Stationary entered hull does not repeat crossing"), Bench->GetEntranceCrossings(), 1);
 		Bench->ResetBagForNextTrial();
+		Bench->Bag->Mesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")));
+		Bench->Bag->SetActorScale3D(FVector(0.28, 0.28, 1.2));
 		TestEqual(TEXT("B clears hull crossing count"), Bench->GetEntranceCrossings(), 0);
 		PlaceBag(-10);
 		TestEqual(TEXT("B clears prior armed crossing state"), Bench->GetEntranceCrossings(), 0);
@@ -278,6 +284,8 @@ bool FP1BenchHullCrossingTest::RunTest(const FString& Parameters)
 	if (Bench->Bag && Bench->Trunk)
 	{
 		const FTransform TrunkPose = Bench->Trunk->GetActorTransform();
+		Bench->Bag->Mesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")));
+		Bench->Bag->SetActorTransform(FTransform(TrunkPose.GetRotation() * FRotator(0, 0, 90).Quaternion(), TrunkPose.TransformPosition(FVector(-20, 0, 105)), FVector(0.28, 0.28, 1.2)));
 		UStaticMesh* Cylinder = Bench->Bag->Mesh->GetStaticMesh();
 		Bench->Bag->SetActorLocation(TrunkPose.TransformPosition(FVector(-20, 0, 105)), false, nullptr, ETeleportType::TeleportPhysics);
 		Bench->Tick(0);

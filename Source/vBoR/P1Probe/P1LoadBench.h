@@ -31,6 +31,13 @@ struct FP1TrialTotals
 	void Add(const FVBoRCarryMetrics& Metrics);
 };
 
+struct FP1BoxCrossing
+{
+	bool bPreviousBodyBeforeOpening = false;
+	bool bCrossingRecorded = false;
+	bool bBlockedAtCrossingRecorded = false;
+};
+
 UCLASS()
 class VBOR_API AP1LoadBench : public AActor
 {
@@ -43,14 +50,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Bench") void ResetBagForNextTrial();
 	int32 GetTrialNumber() const { return TrialNumber; }
 	FP1TrialTotals GetTotals() const;
+	int32 GetRestingBoxCount() const;
 
 	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) float OpeningForwardCm = 130.0f;
 	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) float StandBehindOpeningCm = 100.0f;
 	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) float StandTopHeightCm = 75.0f;
 	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) FVector StandSizeCm = FVector(60, 130, 5);
-	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) float BagLengthCm = 120.0f;
-	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) float BagDiameterCm = 28.0f;
-	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) FVector GoalOffsetCm = FVector(45, 0, 14);
+	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm", ClampMin = "1")) FVector BoxSizeCm = FVector(45, 35, 30);
+	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) FVector GoalOffsetCm = FVector(45, 0, 15);
 	UPROPERTY(EditAnywhere, Category = "Bench") FKey RepositionKey = EKeys::R;
 	UPROPERTY(EditAnywhere, Category = "Bench") FKey BagResetKey = EKeys::B;
 	UPROPERTY(EditAnywhere, Category = "Bench") TSubclassOf<AP1TrunkMock> TrunkClass;
@@ -61,6 +68,7 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "Bench") TObjectPtr<UTextRenderComponent> Panel;
 	UPROPERTY(VisibleAnywhere, Category = "Bench") TObjectPtr<AP1TrunkMock> Trunk;
 	UPROPERTY(VisibleAnywhere, Category = "Bench") TObjectPtr<AVBoRCarryObject> Bag;
+	UPROPERTY(VisibleAnywhere, Category = "Bench") TArray<TObjectPtr<AVBoRCarryObject>> Boxes;
 	UPROPERTY(VisibleAnywhere, Category = "Bench") TObjectPtr<AVBoRLoadTarget> Target;
 	bool HasPlaced() const { return bPlaced; }
 	int32 GetEntranceCrossings() const { return EntranceCrossings; }
@@ -72,9 +80,8 @@ protected:
 private:
 	UPROPERTY() TObjectPtr<AVBoRHandRigPawn> HandPawn;
 	bool bPlaced = false;
-	bool bPreviousBodyBeforeOpening = false;
-	bool bCrossingRecorded = false;
-	bool bBlockedAtCrossingRecorded = false;
+	bool bSourceLifted = false;
+	TMap<TWeakObjectPtr<AVBoRCarryObject>, FP1BoxCrossing> Crossings;
 	int32 EntranceCrossings = 0;
 	int32 BlockedAtCrossings = 0;
 	int32 TrialNumber = 1;
@@ -85,6 +92,9 @@ private:
 	TArray<FString> RecentEvents;
 	bool TryPlaceFromHead();
 	void SpawnParts();
+	void SpawnBox();
+	void ClearBoxes(bool bPreserveMetrics);
+	void ReplenishStand();
 	FTransform BagStartPose() const;
 	FTransform GoalPose() const;
 	void UpdateCrossing();
@@ -95,4 +105,5 @@ private:
 	UFUNCTION() void HandleGrabbed(AVBoRCarryObject* Object);
 	UFUNCTION() void HandleCarryReleased(AVBoRCarryObject* Object);
 	UFUNCTION() void HandleSeated(AVBoRCarryObject* Object);
+	UFUNCTION() void HandleBoxDestroyed(AActor* Object);
 };
