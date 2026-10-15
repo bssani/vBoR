@@ -205,6 +205,7 @@ void AVBoRAxisPart::BeginPlay()
 	{
 		// RestPivot 확정 뒤 시작 각도를 놓음 (construction 누적 방지, P5b D7)
 		DetentIndex = DetentAnglesDeg.IsValidIndex(DetentStartIndex) ? DetentStartIndex : INDEX_NONE;
+		bNudgeArmed = true;
 		Value = DetentIndex != INDEX_NONE && FMath::IsFinite(DetentAnglesDeg[DetentIndex]) ? DetentAnglesDeg[DetentIndex] : 0;
 		AxisPivot->SetRelativeTransform(ValueTransform() * RestPivot);
 	}
@@ -222,6 +223,8 @@ FString AVBoRAxisPart::DetentProblem() const
 	if (DetentAnglesDeg.Num() < 2) { return TEXT("at least two angles required"); }
 	if (!DetentAnglesDeg.IsValidIndex(DetentStartIndex)) { return TEXT("start index outside angle list"); }
 	if (!FMath::IsFinite(DetentUpThresholdDeg) || !FMath::IsFinite(DetentDownThresholdDeg) || DetentUpThresholdDeg <= 0 || DetentDownThresholdDeg <= 0) { return TEXT("thresholds must be finite and > 0 deg"); }
+	if (!FMath::IsFinite(DetentNudgeDeg) || DetentNudgeDeg < 0 || (DetentNudgeDeg > 0 && (DetentNudgeDeg >= DetentUpThresholdDeg || DetentNudgeDeg >= DetentDownThresholdDeg)))
+	{ return TEXT("nudge must be 0 (off) or finite > 0 and below both thresholds in deg"); }
 	for (int32 I = 0; I < DetentAnglesDeg.Num(); ++I)
 	{
 		if (!FMath::IsFinite(DetentAnglesDeg[I]) || FMath::Abs(DetentAnglesDeg[I]) > 170) { return TEXT("angles must be finite within +/-170 deg"); }
@@ -237,6 +240,18 @@ FString AVBoRAxisPart::DetentProblem() const
 void AVBoRAxisPart::EvaluateDetent()
 {
 	if (!bDetentValid || HoldingHand == INDEX_NONE || bPaused || !DetentAnglesDeg.IsValidIndex(DetentIndex)) { return; }
+	const double NudgeOffset = Value - DetentAnglesDeg[DetentStartIndex];
+	// 먼저 차선 변경을 대기시킴 (한 Move 에 끝까지 밀어도 알림 순서 유지, P5c D4·D5)
+	const double NudgeTolerance = FMath::Min(1.e-4, static_cast<double>(DetentNudgeDeg) / 4);
+	if (DetentNudgeDeg > 0 && DetentIndex == DetentStartIndex)
+	{
+		if (FMath::Abs(NudgeOffset) <= DetentNudgeDeg / 2 + NudgeTolerance) { bNudgeArmed = true; }
+		if (bNudgeArmed && FMath::Abs(NudgeOffset) >= DetentNudgeDeg - NudgeTolerance)
+		{
+			bNudgeArmed = false;
+			PendingDetents.Add({true, NudgeOffset > 0 ? 1 : -1});
+		}
+	}
 	auto Reached = [this](int32 Direction)
 	{
 		if (!DetentAnglesDeg.IsValidIndex(DetentIndex + Direction)) { return false; }
@@ -253,7 +268,9 @@ void AVBoRAxisPart::EvaluateDetent()
 	while (Direction && Reached(Direction))
 	{
 		DetentIndex += Direction;
-		PendingDetents.Add(DetentIndex);
+		// 가운데를 지나친 끄기 동작은 차선 변경으로 보지 않음 (P5c D3·E7)
+		if (DetentNudgeDeg > 0 && DetentIndex == DetentStartIndex) { bNudgeArmed = FMath::Abs(NudgeOffset) <= DetentNudgeDeg / 2 + NudgeTolerance; }
+		PendingDetents.Add({false, DetentIndex});
 		UE_LOG(LogAxisPart, Log, TEXT("%s detent=%d angle=%.3f deg | not-tested"), *GetName(), DetentIndex, DetentAnglesDeg[DetentIndex]);
 	}
 }
@@ -317,6 +334,7 @@ void AVBoRAxisPart::ReleasePart(bool bCancelSDK)
 	if (HoldingHand == INDEX_NONE) { return; }
 	HoldingHand = INDEX_NONE; HoldingGrabber = nullptr;
 	bPaused = bRebase = bDoorHold = false;
+	bNudgeArmed = true;
 	// SDK 이벤트 중에도 들어옴. 취소는 Tick 에서만 실행함 (grabber 재진입 방지, P2b R1-3)
 	bCancelPending |= bCancelSDK;
 	OnPartReleased.Broadcast();
@@ -339,10 +357,12 @@ void AVBoRAxisPart::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	if (!FMath::IsFinite(DeltaSeconds) || DeltaSeconds <= 0) { return; }
 	// 확정은 Move 에서 유지하고 알림만 미룸 (SDK 선택 배열 재진입 방지, P5b R1-1)
-	const TArray<int32> Notifications = MoveTemp(PendingDetents);
-	for (const int32 Index : Notifications)
+	const TArray<FDetentNotification> Notifications = MoveTemp(PendingDetents);
+	for (const FDetentNotification& Notification : Notifications)
 	{
-		StateAudio->Play(); OnDetentChanged.Broadcast(Index);
+		StateAudio->Play();
+		if (Notification.bNudge) { OnDetentNudge.Broadcast(Notification.Value); }
+		else { OnDetentChanged.Broadcast(Notification.Value); }
 		if (IsActorBeingDestroyed()) { return; }
 	}
 	if (bCancelPending || bDoorHold || (HoldingHand == INDEX_NONE && GrabComponent->GetNumGrabbers()))
@@ -433,8 +453,8 @@ FString AVBoRAxisPart::GetDebugText() const
 {
 	if (Release == EVBoRAxisRelease::Detent)
 	{
-		return FString::Printf(TEXT("Approximate geometry | detent=%d angle=%.3f deg confirmed=%.3f deg | pauses=%d %.3f s | rebase discarded=%.3f deg | not-tested"),
-			DetentIndex, Value, DetentAnglesDeg.IsValidIndex(DetentIndex) ? DetentAnglesDeg[DetentIndex] : 0.f, Pauses, PausedSeconds, RecoveryDiscard);
+		return FString::Printf(TEXT("Approximate geometry | detent=%d angle=%.3f deg confirmed=%.3f deg | nudge=%.3f deg armed=%d | pauses=%d %.3f s | rebase discarded=%.3f deg | not-tested"),
+			DetentIndex, Value, DetentAnglesDeg.IsValidIndex(DetentIndex) ? DetentAnglesDeg[DetentIndex] : 0.f, DetentNudgeDeg, bNudgeArmed, Pauses, PausedSeconds, RecoveryDiscard);
 	}
 	return FString::Printf(TEXT("Approximate geometry | ratio=%.3f | attempts=%d grabs=%d open/close=%d/%d max=%.3f | pauses=%d %.3f s | rebase discarded=%.3f %s | not-tested"),
 		GetOpenRatio(), Attempts, Grabs, Opens, Closes, MaximumRatio, Pauses, PausedSeconds, RecoveryDiscard, Movement == EVBoRAxisMovement::Rotate ? TEXT("deg") : TEXT("cm"));

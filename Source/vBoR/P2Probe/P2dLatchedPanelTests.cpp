@@ -366,7 +366,7 @@ bool FP2dActualConsole::RunTest(const FString&)
 	TestTrue(TEXT("Press direction is inward along front normal"),Panel->HandleVisualPressOffsetCm.X < 0 && FMath::IsNearlyZero(Panel->HandleVisualPressOffsetCm.Y) && FMath::IsNearlyZero(Panel->HandleVisualPressOffsetCm.Z));
 	TestTrue(TEXT("Visible handle follows front box"),Panel->OutsideHandleMesh->GetAttachParent() == Panel->OutsideHandle);
 	TArray<AActor*> Attached; Car->GetAttachedActors(Attached,true,true);
-	int32 AxisParts = 0; for (AActor* Actor : Attached) { if (Actor->IsA(AVBoRAxisPart::StaticClass()) && Actor != Car->GloveboxHandle && Actor != Car->GearLever) { ++AxisParts; } }
+	int32 AxisParts = 0; for (AActor* Actor : Attached) { if (Actor->IsA(AVBoRAxisPart::StaticClass()) && Actor != Car->GloveboxHandle && Actor != Car->GearLever && Actor != Car->TurnSignalLever) { ++AxisParts; } }
 	TestEqual(TEXT("Only door levers remain attached, no console tab"),AxisParts,2);
 	P2dSelect(Panel->InsideGrab,Grab);
 	TestTrue(TEXT("Actual inside injected select keeps lock"),Panel->GetMotion().bLocked);

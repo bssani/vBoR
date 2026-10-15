@@ -23,6 +23,7 @@ UENUM(BlueprintType)
 enum class EVBoRAxisRelease : uint8 { Return, Stay, Detent };
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FVBoRAxisEvent);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVBoRDetentEvent, int32, Index);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVBoRDetentNudgeEvent, int32, Direction);
 
 UCLASS()
 class VBOR_API UVBoRAxisGrabComponent : public UIsdkGrabTransformerComponent
@@ -84,6 +85,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Detent") int32 DetentStartIndex = 1;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Detent", meta=(Units="deg")) float DetentUpThresholdDeg = 15;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Detent", meta=(Units="deg")) float DetentDownThresholdDeg = 15;
+	// 0 이면 끔. 시작 걸림에서만 차선 변경을 냄 (기어 동작 유지, P5c D2·D3, deg)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Detent", meta=(Units="deg")) float DetentNudgeDeg = 0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part") TEnumAsByte<EAxis::Type> Axis = EAxis::X;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part") bool bReverse = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part", meta=(Units="deg", ClampMin="0", ClampMax="170")) float MaxAngleDeg = 30;
@@ -102,6 +105,7 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="Axis part") FVBoRAxisEvent OnPartClosed;
 	UPROPERTY(BlueprintAssignable, Category="Axis part") FVBoRAxisEvent OnPartReleased;
 	UPROPERTY(BlueprintAssignable, Category="Axis part|Detent") FVBoRDetentEvent OnDetentChanged;
+	UPROPERTY(BlueprintAssignable, Category="Axis part|Detent") FVBoRDetentNudgeEvent OnDetentNudge;
 	UFUNCTION(BlueprintPure, Category="Axis part|Detent") int32 GetDetentIndex() const { return DetentIndex; }
 	UFUNCTION(BlueprintPure, Category="Axis part") float GetOpenRatio() const;
 	UFUNCTION(BlueprintPure, Category="Axis part") FString GetDebugText() const;
@@ -119,6 +123,7 @@ private:
 	friend struct FP2cTestAccess;
 	friend struct FP2dTestAccess;
 	friend struct FP5bTestAccess;
+	friend struct FP5cTestAccess;
 	UPROPERTY() TObjectPtr<UVBoRAxisTransformer> Transformer;
 	UPROPERTY() TObjectPtr<UIsdkGrabberComponent> HoldingGrabber;
 	UPROPERTY() TObjectPtr<AVBoRHingedPanel> LinkedDoor;
@@ -134,7 +139,9 @@ private:
 	double Value = 0, MaximumRatio = 0, PausedSeconds = 0, RecoveryDiscard = 0;
 	int32 Attempts = 0, Grabs = 0, Opens = 0, Closes = 0, Pauses = 0;
 	int32 DetentIndex = INDEX_NONE;
-	TArray<int32> PendingDetents;
+	struct FDetentNotification { bool bNudge; int32 Value; };
+	TArray<FDetentNotification> PendingDetents;
+	bool bNudgeArmed = true;
 	bool bDetentValid = true;
 	FString DetentProblem() const;
 	void EvaluateDetent();
