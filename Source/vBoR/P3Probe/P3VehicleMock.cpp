@@ -7,6 +7,7 @@
 #include "../Interaction/VBoRAxisPart.h"
 #include "../Interaction/VBoRPokeButton.h"
 #include "../Interaction/VBoRKeyTable.h"
+#include "../Interaction/VBoRSteeringWheel.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/WidgetComponent.h"
@@ -153,6 +154,18 @@ void AP3VehicleMock::BeginPlay()
 	TurnSignalLever->DetentUpThresholdDeg = TurnSignalUpThresholdDeg; TurnSignalLever->DetentDownThresholdDeg = TurnSignalDownThresholdDeg;
 	TurnSignalLever->DetentNudgeDeg = TurnSignalNudgeDeg;
 	TurnSignalLever->FinishSpawning(GetActorTransform()); TurnSignalLever->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+	// 판은 에디터·기존 시험 기준으로 남김 (차 원점 피벗, 근사 cm·deg, P5d D8)
+	SteeringWheel = GetWorld()->SpawnActorDeferred<AVBoRSteeringWheel>(AVBoRSteeringWheel::StaticClass(),GetActorTransform(),this);
+	if (SteeringWheel)
+	{
+		SteeringWheel->AxisPivot->SetRelativeTransform(FTransform(SteeringAxisRotation,SteeringHubCm));
+		SteeringWheel->MeshRestFromRoot = FTransform(SteeringAxisRotation.Quaternion()*FRotator(90,0,0).Quaternion(),SteeringHubCm,FVector(SteeringDiameterCm,SteeringDiameterCm,SteeringThicknessCm)/100);
+		SteeringWheel->MarkerRestFromPivot.SetLocation(FVector(-SteeringThicknessCm/2-0.1,0,SteeringDiameterCm/2-1.5));
+		SteeringWheel->LimitAngleDeg = SteeringLimitDeg;
+		SteeringWheel->MinGrabRadiusCm = SteeringMinGrabRadiusCm; SteeringWheel->MaxGrabRadiusCm = SteeringMaxGrabRadiusCm;
+		SteeringWheel->FinishSpawning(GetActorTransform()); SteeringWheel->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform);
+		Plates[12]->SetHiddenInGame(true);
+	}
 	ReachButton = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), FTransform::Identity, this);
 	ReachButton->Tags.Add(TEXT("Car.ReachButton")); ReachButton->HitAreaScale = 1;
 	ReachButton->ButtonMesh->SetRelativeScale3D(FVector(0.04,0.04,0.01));
@@ -208,6 +221,7 @@ void AP3VehicleMock::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (GearButton) { GearButton->Destroy(); }
 	if (GearLever) { GearLever->Destroy(); }
 	if (TurnSignalLever) { TurnSignalLever->Destroy(); }
+	if (SteeringWheel) { SteeringWheel->Destroy(); }
 	if (ReachButton) { ReachButton->Destroy(); }
 	if (FrontKeyTable) { FrontKeyTable->Destroy(); }
 	if (RearKeyTable) { RearKeyTable->Destroy(); }

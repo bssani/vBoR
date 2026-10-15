@@ -89,6 +89,7 @@ UnrealEditor-Cmd.exe "C:\Git\vBoR\vBoR.uproject" -ExecCmds="Automation RunTests 
 - 에디터 실행 인자에서는 쉼표로 잇는다(`-DisablePlugins=A,B`, `Engine/Source/Runtime/Projects/Private/PluginManager.cpp:1470, 1578`). 로컬 도구 플러그인을 끄는 이유: headless 시험 중에 MCP 서버(:3000)나 에이전트 백엔드가 뜨지 않게 하고, 도구가 없는 PC와 같은 조건으로 시험하기 위해서다.
 
 - 결과: `Saved/Logs/<이름>.log`에서 `Found N automation tests`, 각 `Result={Success}`, `TEST COMPLETE. EXIT CODE: 0`.
+- `-log=`에는 파일 이름만 준다(`Saved/Logs/` 아래에 생긴다). 다른 경로에 남기려면 `-abslog=<절대경로>`를 쓴다(`Engine/Source/Runtime/Core/Private/GenericPlatform/GenericPlatformOutputDevices.cpp:86`). `-log=`에 경로를 넣으면 그 이름으로 로그가 생기지 않는다(2026-10-15, P5b·P5c에서 두 번 겪음).
 - **합성 시험 통과는 기기 시험 통과가 아니다.** 시험 상태는 Quest 3로 확인하기 전까지 `not-tested`.
 
 ### 2.5 맵·에셋 로드 확인
