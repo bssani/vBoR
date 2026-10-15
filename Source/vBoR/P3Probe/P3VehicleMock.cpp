@@ -12,6 +12,7 @@
 #include "Components/WidgetComponent.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "Math/RotationMatrix.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Text/STextBlock.h"
@@ -112,6 +113,23 @@ void AP3VehicleMock::BeginPlay()
 	ConsoleLid->bUseInsideGrabArea = false;
 	ConsoleLid->FinishSpawning(GetActorTransform());
 	ConsoleLid->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+	// +X 차 +Z·+Y 차 -X·+Z 차 -Y. 아래 경첩에서 앉은 쪽으로 내려옴 (근사 cm, P5a D2·D6)
+	Glovebox = GetWorld()->SpawnActorDeferred<AVBoRHingedPanel>(AVBoRHingedPanel::StaticClass(), GetActorTransform(), this);
+	Glovebox->HingePivot->SetRelativeTransform(FTransform(FRotationMatrix::MakeFromXZ(FVector::ZAxisVector, -FVector::YAxisVector).ToQuat(), GloveboxHingeCm));
+	Glovebox->MeshRestFromRoot = FTransform(FQuat::Identity, GloveboxHingeCm + FVector(0,0,GloveboxSizeCm.Z/2), GloveboxSizeCm/100);
+	Glovebox->bUseLatch = true; Glovebox->bAllowPalmOpening = false; Glovebox->bUseInsideGrabArea = false;
+	Glovebox->MaxAngleDeg = GloveboxMaxAngleDeg; Glovebox->MinAxisDistanceCm = GloveboxMinAxisDistanceCm;
+	// 윗변 +Y 축. 아랫변을 -X·위로 당김 (손잡이만 복귀, 근사 cm, P5a D3·D4)
+	GloveboxHandle = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
+	GloveboxHandle->AxisPivot->SetRelativeLocation(GloveboxHandlePivotCm);
+	GloveboxHandle->MeshRestFromRoot = FTransform(FQuat::Identity, GloveboxHandlePivotCm - FVector(0,0,GloveboxHandleSizeCm.Z/2), GloveboxHandleSizeCm/100);
+	GloveboxHandle->Axis = EAxis::Y; GloveboxHandle->MaxAngleDeg = GloveboxHandleMaxAngleDeg;
+	GloveboxHandle->Movement = EVBoRAxisMovement::Rotate; GloveboxHandle->Release = EVBoRAxisRelease::Return;
+	GloveboxHandle->FinishSpawning(GetActorTransform());
+	Glovebox->OutsideAxisHandle = GloveboxHandle;
+	Glovebox->FinishSpawning(GetActorTransform());
+	Glovebox->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+	GloveboxHandle->AttachToComponent(Glovebox->HingePivot, FAttachmentTransformRules::KeepWorldTransform);
 	ReachButton = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), FTransform::Identity, this);
 	ReachButton->Tags.Add(TEXT("Car.ReachButton")); ReachButton->HitAreaScale = 1;
 	ReachButton->ButtonMesh->SetRelativeScale3D(FVector(0.04,0.04,0.01));
@@ -162,6 +180,8 @@ void AP3VehicleMock::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (OutsideAxisHandle) { OutsideAxisHandle->Destroy(); }
 	if (InsideAxisHandle) { InsideAxisHandle->Destroy(); }
 	if (ConsoleLid) { ConsoleLid->Destroy(); }
+	if (GloveboxHandle) { GloveboxHandle->Destroy(); }
+	if (Glovebox) { Glovebox->Destroy(); }
 	if (ReachButton) { ReachButton->Destroy(); }
 	if (FrontKeyTable) { FrontKeyTable->Destroy(); }
 	if (RearKeyTable) { RearKeyTable->Destroy(); }
