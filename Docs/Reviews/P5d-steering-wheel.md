@@ -18,6 +18,7 @@
 | 회차 | 날짜 | 리뷰 대상 | 리뷰어 | 결과 |
 |---|---|---|---|---|
 | 1 | 2026-10-15 | `2b97cc1` 새 부모 `AVBoRSteeringWheel`, 근사 차 휠 | Claude | **열림 1건(R1-1, 작음).** 빌드·시험 재현: non-unity·unity 성공(다시 컴파일한 파일 0). Codex 첫 non-unity 로그에서 16개 파일을 컴파일했고, 진단은 모두 새 시험 파일(`auto*` 추론, 다음 빌드에서 고침), 나머지는 경고 0. `vBoR.*` **230/230**(P5d 18/18), EXIT CODE 0. **Codex 토큰 3.43M(캐시 95%), 약 10분, 하위 에이전트 0, exec 27** |
+| 2 | 2026-10-16 | `97e20d8` R1-1 설정 검사를 `PreInitializeComponents`로 | Claude | **열린 항목 없음 — 통과.** 빌드: non-unity·unity 성공(헤더 변경 없음, Codex 로그에서 바뀐 .cpp 2개 경고 0). `vBoR.*` **232/232**(P5d 20/20), EXIT CODE 0. **Codex 토큰 3.42M(캐시 97%), 약 7분, 하위 에이전트 0, exec 31** — 작은 수정치고 큰 것은 새 시험의 경고 세기 방식이 첫 전체 시험에서 실패해 빌드·전체 시험을 다시 돌렸기 때문(UE는 기대한 경고를 Verbose로 낮춤, 엔진 `Core/Private/Misc/AutomationTest.cpp:313-315`) |
 
 ### 1회차에 확인한 것
 
@@ -31,9 +32,17 @@
 - **D8:** 허브 (35, −37, 87), 원판 36 × 3 cm, 12시 표시는 운전자 쪽 면. 핸들 판은 휠이 생겼을 때만 `HiddenInGame`이고, 에디터에서는 보인다(E16). 옮기고 돌린 차에서 대시보드·두 레버(세 걸림 × 세 걸림)와 겹치지 않는다. `EndPlay`에서 정리한다(E17).
 - **범위:** 방향지시 자동 해제·복원력·림 버튼·키보드는 없다. P3 단계 데이터·레벨·에셋은 그대로다. 기존 시험 단언은 바뀌지 않았다. 주석은 사용자 말투다.
 
+### 2회차에 확인한 것
+
+- **R1-1:** 검사·경고·잡는 상자 충돌 설정이 `PreInitializeComponents`로 옮겨졌다(`VBoRSteeringWheel.cpp:80-85`). `OnConstruction`은 메시·12시 표시·잡는 상자 배치만 한다. 잡는 상자 충돌 기본값은 생성자의 `QueryOnly`라서, 에디터 화면은 그대로다.
+- 시험 2개:
+  - `vBoR.P5d.R1RuntimeSettingsWithoutConstruction`: construction 없이 반지름 범위를 뒤집고 `PreInitializeComponents`만 부른다. 경고 1번(UE 기대 메시지 기본 1번), Palm 거부, 충돌 꺼짐, 선택 뒤 잡은 손 0을 본다.
+  - `vBoR.P5d.R1ConstructionDoesNotWarn`: 잘못된 설정으로 `OnConstruction`을 두 번 불러도 경고가 0번이다.
+- 다른 코드는 바뀌지 않았다.
+
 ## 항목
 
-### R1-1 설정 검사가 `OnConstruction`에만 있어 레벨에 놓은 휠에는 실행 때 적용되지 않음 — 반영함 (fix(p5d): validate wheel settings at runtime)
+### R1-1 설정 검사가 `OnConstruction`에만 있어 레벨에 놓은 휠에는 실행 때 적용되지 않음 — 반영함 (`97e20d8`)
 
 **문제**
 - `bGrabValid`(잡기 허용 여부)는 `OnConstruction`에서만 계산한다(`VBoRSteeringWheel.cpp:69-71`). 그런데 이 변수는 저장되지 않는 일반 변수(기본 true, `VBoRSteeringWheel.h:95`)다. `PreInitializeComponents`의 Palm 허용(`:84`)과 `BeginHold`(`:125`)는 이 저장된 값을 그대로 쓴다.
