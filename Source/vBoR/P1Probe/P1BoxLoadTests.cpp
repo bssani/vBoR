@@ -41,7 +41,6 @@ bool FP1BoxSizeTest::RunTest(const FString& Parameters)
 		FBoxLoadWorld Fixture;
 		AP1LoadBench* Bench = Fixture.Bench;
 		Bench->BoxSizeCm = Size;
-		Bench->GoalOffsetCm.Z = Size.Z * 0.5;
 		Bench->PlaceFromHead(FTransform(FVector(0, 0, 257)));
 		AVBoRCarryObject* Box = Bench->Bag;
 		TestTrue(TEXT("E1 mesh dimensions use edited cm size"),
@@ -51,8 +50,25 @@ bool FP1BoxSizeTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("E1 target guide dimensions follow bench size"), Bench->Target->GoalSizeCm.Equals(Size));
 		TestTrue(TEXT("E1 start bottom rests on stand for each size"), FMath::IsNearlyEqual(
 			Box->GetCollisionBoundsInPose(Box->GetActorTransform(), Bench->GetActorTransform()).Min.Z, 75.01, 0.02));
+		FTransform Goal = Bench->Target->GetGoalPose();
+		Goal.SetScale3D(Box->GetActorScale3D());
+		TestTrue(TEXT("R1-1 target bottom follows trunk floor for each size"), FMath::IsNearlyEqual(
+			Box->GetCollisionBoundsInPose(Goal, Bench->Trunk->GetActorTransform()).Min.Z, Bench->Trunk->FloorHeightCm, 0.02));
+		TestEqual(TEXT("R1-1 static fit accepts 40 cm height and rejects 80 cm height"), Bench->Target->IsStaticFit(Box), Size.Z <= 70);
 		Box->SetActorLocation(Bench->GetActorTransform().TransformPosition(FVector(45, 0, 115)));
 		TestEqual(TEXT("E1 loading containment uses resized collision"), Bench->Target->IsObjectInside(Box), Size.Z <= 70);
+		if (Size.Z == 40)
+		{
+			Goal.AddToTranslation(FVector(0, 0, 5));
+			Box->ResetToPose(Goal);
+			Box->bUsePlacementAssist = true;
+			Box->BeginCarry(0, nullptr, Box->GetActorTransform());
+			Box->ReleaseCarry();
+			TestTrue(TEXT("R1-1 E12 40 cm box starts opted-in assistance near target"), Box->bAssisting);
+			Box->AssistStartedAt = Fixture.World->GetTimeSeconds() - Box->AssistDurationSeconds;
+			Box->Tick(0.1);
+			TestTrue(TEXT("R1-1 E12 40 cm box completes assisted seating"), Box->GetMetrics().Outcome == EVBoRCarryOutcome::Assisted);
+		}
 		Box->BoxSizeCm = FVector(10, 12, 14);
 		Box->OnConstruction(Box->GetActorTransform());
 		TestTrue(TEXT("E1 carry property updates mesh and collision without bench recreation"),

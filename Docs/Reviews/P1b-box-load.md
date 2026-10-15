@@ -41,7 +41,7 @@
 
 ## 항목
 
-### R1-1 목표 높이가 박스 높이를 따르지 않음 — 높이를 바꾸면 "does not fit"·보조 불가 — 열림
+### R1-1 목표 높이가 박스 높이를 따르지 않음 — 높이를 바꾸면 "does not fit"·보조 불가 — 반영함 (fix(p1b): align target height with box size)
 
 **문제**
 - 목표 자세의 높이는 `트렁크 바닥 + GoalOffsetCm.Z`이고, 기본값 15 cm는 30 cm 박스의 절반이다(`P1LoadBench.cpp:170-174`, `P1LoadBench.h:60`).
@@ -63,6 +63,13 @@
   - 트렁크(안쪽 높이 70 cm)에 들어가는 20 × 30 × 40 cm는 `IsStaticFit`이 true다.
   - 높이 80 cm는 false다.
 - 높이 40 cm 박스에서 보조를 켜고 목표 근처에서 놓으면 보조가 시작된다(E12를 30 cm 밖에서 한 번).
+
+**Codex 반영 (2026-10-15)**
+- `GoalPose()` 높이를 `트렁크 바닥 + BoxSizeCm.Z / 2 + GoalOffsetCm.Z`로 변경. `GoalOffsetCm.Z` 기본값은 0 cm이며 박스 아랫면의 바닥 여유라는 주석을 추가함. X·Y 유지.
+- `SizeMeshCollisionAndFit`의 높이 수동 보정을 제거함. 두 크기마다 목표 자세의 충돌 아랫면과 트렁크 바닥 높이 일치, 40 cm 높이의 정적 적합/80 cm 높이의 부적합을 확인하도록 보강함. 40 cm 박스는 목표 위 5 cm에서 opt-in 보조 시작과 안착 완료까지 확인함.
+- `Content/P1/L_P1_GolfBag.umap` 바이트의 ASCII·UTF-16 검색에서 `GoalOffsetCm` 이름 없음. 저장된 해당 프로퍼티 override 흔적 없음. 레벨 열기·저장·에디터/MCP 작업 없음. 실제 GUI 로드는 `not-tested`.
+- 새 ISDK·MetaXR API 없음. 엔진 `FTransform::TransformPosition`·`AddToTranslation`은 `Engine/Source/Runtime/Core/Public/Math/TransformVectorized.h:565`, `:899` 및 `TransformNonVectorized.h:535`, `:830`에서 확인함.
+- 최종 코드 검증: non-unity(`-DisableUnity -Module=vBoR`) 17.33 s·unity 79.52 s 각 1회 성공, 프로세스 0, compiler/linker 경고·오류 0. `vBoR.*` 전체 시험 1회 159/159 Success, Fail 0, TEST COMPLETE EXIT CODE 0/프로세스 0. `vBoR.P1Box` 4/4 포함. 로그: `Saved/Logs/P1bR1NonUnityBuild.log`, `P1bR1UnityBuild.log`, `P1bR1Automation.log`. 로컬 도구 StructUtils 의존 폐기 안내와 headless 시작의 샘플 CDO/OpenXR/Slate 로그는 시험 assertion 실패와 구분함. Quest 3/T-02/T-09·Blueprint Details/GUI 맵 로드는 `not-tested`.
 
 ## 참고 (항목 아님 — VR·다음 명세에서 볼 것)
 

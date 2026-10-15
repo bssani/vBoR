@@ -57,7 +57,8 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) float StandTopHeightCm = 75.0f;
 	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) FVector StandSizeCm = FVector(60, 130, 5);
 	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm", ClampMin = "1")) FVector BoxSizeCm = FVector(45, 35, 30);
-	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) FVector GoalOffsetCm = FVector(45, 0, 15);
+	// Z 는 박스 아랫면에서 트렁크 바닥까지 여유 cm (P1b R1-1)
+	UPROPERTY(EditAnywhere, Category = "Bench", meta = (Units = "cm")) FVector GoalOffsetCm = FVector(45, 0, 0);
 	UPROPERTY(EditAnywhere, Category = "Bench") FKey RepositionKey = EKeys::R;
 	UPROPERTY(EditAnywhere, Category = "Bench") FKey BagResetKey = EKeys::B;
 	UPROPERTY(EditAnywhere, Category = "Bench") TSubclassOf<AP1TrunkMock> TrunkClass;

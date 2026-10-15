@@ -170,8 +170,9 @@ FTransform AP1LoadBench::BagStartPose() const
 FTransform AP1LoadBench::GoalPose() const
 {
 	const float FloorZ = Trunk ? Trunk->FloorHeightCm : 75.0f;
+	// 박스 높이가 달라도 아랫면을 바닥에 맞춤 (P1b R1-1, GoalOffsetCm.Z 는 여유 cm)
 	return FTransform(GetActorQuat(), GetActorTransform().TransformPosition(
-		FVector(GoalOffsetCm.X, GoalOffsetCm.Y, FloorZ + GoalOffsetCm.Z)));
+		FVector(GoalOffsetCm.X, GoalOffsetCm.Y, FloorZ + BoxSizeCm.Z * 0.5f + GoalOffsetCm.Z)));
 }
 
 void AP1LoadBench::PlaceFromHead(const FTransform& Head)
