@@ -47,6 +47,15 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRAxisPart> OutsideAxisHandle;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRAxisPart> InsideAxisHandle;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRHingedPanel> ConsoleLid;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 글러브박스", meta=(Units="cm")) FVector GloveboxHingeCm = FVector(38,37,50);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 글러브박스", meta=(Units="cm", ClampMin="1")) FVector GloveboxSizeCm = FVector(3,40,28);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 글러브박스", meta=(Units="cm")) FVector GloveboxHandlePivotCm = FVector(37,25,76);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 글러브박스", meta=(Units="cm", ClampMin="0.1")) FVector GloveboxHandleSizeCm = FVector(1.5,10,3);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 글러브박스", meta=(Units="deg", ClampMin="1", ClampMax="170")) float GloveboxMaxAngleDeg = 80;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 글러브박스", meta=(Units="deg", ClampMin="1", ClampMax="170")) float GloveboxHandleMaxAngleDeg = 25;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 글러브박스", meta=(Units="cm", ClampMin="0")) float GloveboxMinAxisDistanceCm = 8;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRHingedPanel> Glovebox;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRAxisPart> GloveboxHandle;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRPokeButton> ReachButton;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector FrontKeyTableCm = FVector(330,-90,0);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector RearKeyTableCm = FVector(-330,-90,0);

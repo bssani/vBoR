@@ -210,7 +210,8 @@ void AVBoRHingedPanel::BeginPlay()
 	SetAxisHandle(0, OutsideAxisHandle); SetAxisHandle(1, InsideAxisHandle);
 	if (bUseLatch && !bUseOutsideGrabArea && !bUseInsideGrabArea && !OutsideAxisHandle && !InsideAxisHandle)
 	{
-		UE_LOG(LogAxisDoor, Warning, TEXT("%s: Latched panel has no opening handle or grab area. 버튼으로 Unlock을 부르면 무시."), *GetName());
+		UE_LOG(LogAxisDoor, Warning, TEXT("%s: Latched panel has no opening handle or grab area. %s"), *GetName(),
+			bAllowPalmOpening ? TEXT("버튼으로 Unlock을 부르면 무시.") : TEXT("버튼 Unlock 뒤에도 열 수 없음 (손바닥 열기 꺼짐)."));
 	}
 	ApplyState(Motion.AngleDeg, Motion.Metrics.Unlocks, Motion.Metrics.Latches);
 }
