@@ -253,7 +253,7 @@ void AVBoRAxisPart::EvaluateDetent()
 	while (Direction && Reached(Direction))
 	{
 		DetentIndex += Direction;
-		StateAudio->Play(); OnDetentChanged.Broadcast(DetentIndex);
+		PendingDetents.Add(DetentIndex);
 		UE_LOG(LogAxisPart, Log, TEXT("%s detent=%d angle=%.3f deg | not-tested"), *GetName(), DetentIndex, DetentAnglesDeg[DetentIndex]);
 	}
 }
@@ -338,6 +338,13 @@ void AVBoRAxisPart::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	if (!FMath::IsFinite(DeltaSeconds) || DeltaSeconds <= 0) { return; }
+	// 확정은 Move 에서 유지하고 알림만 미룸 (SDK 선택 배열 재진입 방지, P5b R1-1)
+	const TArray<int32> Notifications = MoveTemp(PendingDetents);
+	for (const int32 Index : Notifications)
+	{
+		StateAudio->Play(); OnDetentChanged.Broadcast(Index);
+		if (IsActorBeingDestroyed()) { return; }
+	}
 	if (bCancelPending || bDoorHold || (HoldingHand == INDEX_NONE && GrabComponent->GetNumGrabbers()))
 	{
 		bCancelPending = false;

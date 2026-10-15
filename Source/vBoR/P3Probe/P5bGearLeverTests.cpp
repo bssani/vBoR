@@ -137,6 +137,7 @@ bool FP5bBoundary::RunTest(const FString&)
 	UP5bAudioObserver* Audio = FP5bTestAccess::Audio(Part);
 	P5bBegin(Part); P5bMove(Part,15);
 	TestEqual(TEXT("Exact threshold selects upper"),Part->GetDetentIndex(),2);
+	Part->Tick(0.01f);
 	TestTrue(TEXT("One event with upper index"),Events->Indices == TArray<int32>{2});
 	TestEqual(TEXT("One click request"),Audio->Plays,1);
 	FP5bTestAccess::Release(Part); Part->ReturnDegPerSecond = 10; Part->Tick(0.2f);
@@ -153,6 +154,7 @@ bool FP5bContinuous::RunTest(const FString&)
 	P5bMove(Part,-15); TestEqual(TEXT("Center to lower at -15"),Part->GetDetentIndex(),0);
 	P5bMove(Part,-20); P5bMove(Part,-5); TestEqual(TEXT("Lower to center at -5"),Part->GetDetentIndex(),1);
 	P5bMove(Part,15); TestEqual(TEXT("Center to upper at +15"),Part->GetDetentIndex(),2);
+	Part->Tick(0.01f);
 	TestTrue(TEXT("Ordered transitions while holding"),Events->Indices == TArray<int32>({1,0,1,2})); return true;
 }
 
@@ -161,9 +163,35 @@ bool FP5bJump::RunTest(const FString&)
 {
 	FP5bWorld W; AP2bTrackedPart* Part = W.Part(2); UP5bEventObserver* Events = P5bObserve(Part); W.Play(); P5bBegin(Part);
 	UP5bAudioObserver* Audio = FP5bTestAccess::Audio(Part); P5bMove(Part,-20);
-	TestTrue(TEXT("Single update emits center then lower"),Events->Indices == TArray<int32>({1,0}));
+	TestEqual(TEXT("Single update confirms lower before Tick"),Part->GetDetentIndex(),0);
+	TestEqual(TEXT("Move emits no event before Tick"),Events->Indices.Num(),0);
+	TestEqual(TEXT("Move emits no click before Tick"),Audio->Plays,0);
+	Part->Tick(0.01f);
+	TestTrue(TEXT("Tick emits center then lower"),Events->Indices == TArray<int32>({1,0}));
 	TestEqual(TEXT("Two click requests"),Audio->Plays,2);
-	P5bMove(Part,20); TestTrue(TEXT("Reverse update emits center then upper"),Events->Indices == TArray<int32>({1,0,1,2})); return true;
+	P5bMove(Part,20); Part->Tick(0.01f);
+	TestTrue(TEXT("Reverse update emits center then upper"),Events->Indices == TArray<int32>({1,0,1,2}));
+	Part->Tick(0.01f);
+	TestEqual(TEXT("Drained notifications do not repeat"),Events->Indices.Num(),4);
+	TestEqual(TEXT("Four clicks across both directions"),Audio->Plays,4); return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5bSameFrameRelease, "vBoR.P5b.R1SameFrameThresholdAndRelease", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5bSameFrameRelease::RunTest(const FString&)
+{
+	FP5bWorld W; AP2bTrackedPart* Part = W.Part(); UP5bEventObserver* Events = P5bObserve(Part); W.Play();
+	UP5bAudioObserver* Audio = FP5bTestAccess::Audio(Part);
+	P5bBegin(Part); P5bMove(Part,15); FP5bTestAccess::Release(Part);
+	TestEqual(TEXT("Same frame release retains confirmed upper"),Part->GetDetentIndex(),2);
+	TestEqual(TEXT("Release does not flush pending transition"),Events->Indices.Num(),0);
+	TestEqual(TEXT("Release does not flush pending click"),Audio->Plays,0);
+	Part->Tick(1);
+	TestEqual(TEXT("Release returns to upper endpoint"),FP5bTestAccess::Value(Part),20.0);
+	TestTrue(TEXT("Tick delivers upper once after release"),Events->Indices == TArray<int32>{2});
+	TestEqual(TEXT("One click after release"),Audio->Plays,1);
+	Part->Tick(1);
+	TestEqual(TEXT("No duplicate transition on later Tick"),Events->Indices.Num(),1);
+	TestEqual(TEXT("No duplicate click on later Tick"),Audio->Plays,1); return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5bHysteresis, "vBoR.P5b.E6LastConfirmedAndHysteresis", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -174,14 +202,16 @@ bool FP5bHysteresis::RunTest(const FString&)
 	{
 		AP2bTrackedPart* Part = W.Part(); UP5bEventObserver* Events = P5bObserve(Part); P5bBegin(Part); P5bMove(Part,15); P5bMove(Part,12);
 		TestEqual(TEXT("Small reversal retains upper"),Part->GetDetentIndex(),2);
+		Part->Tick(0.01f);
 		TestEqual(TEXT("No oscillation"),Events->Indices.Num(),1);
 		if (bRelease) { FP5bTestAccess::Release(Part); Part->Tick(1); TestEqual(TEXT("Returns to last confirmed upper"),FP5bTestAccess::Value(Part),20.0); }
-		else { P5bMove(Part,4); TestTrue(TEXT("Crossing reverse threshold selects center once"),Events->Indices == TArray<int32>({2,1})); }
+		else { P5bMove(Part,4); Part->Tick(0.01f); TestTrue(TEXT("Crossing reverse threshold selects center once"),Events->Indices == TArray<int32>({2,1})); }
 	}
 	AP2bTrackedPart* Tight = W.World->SpawnActorDeferred<AP2bTrackedPart>(AP2bTrackedPart::StaticClass(),FTransform::Identity);
 	Tight->Release = EVBoRAxisRelease::Detent; Tight->DetentUpThresholdDeg = Tight->DetentDownThresholdDeg = 10.00001f;
 	Tight->FinishSpawning(FTransform::Identity); UP5bEventObserver* TightEvents = P5bObserve(Tight); P5bBegin(Tight);
 	P5bMove(Tight,10.00005); P5bMove(Tight,10.00005);
+	Tight->Tick(0.01f);
 	TestTrue(TEXT("Numerical boundary allowance preserves a narrow valid hysteresis band"),TightEvents->Indices == TArray<int32>{2});
 	return true;
 }
@@ -189,27 +219,31 @@ bool FP5bHysteresis::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5bAsymmetric, "vBoR.P5b.E7IndependentThresholds", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP5bAsymmetric::RunTest(const FString&)
 {
-	FP5bWorld W; AP2bTrackedPart* Part = W.Part(); Part->DetentUpThresholdDeg = 10; Part->DetentDownThresholdDeg = 18; W.Play(); P5bBegin(Part);
+	FP5bWorld W; AP2bTrackedPart* Part = W.Part(); UP5bEventObserver* Events = P5bObserve(Part); Part->DetentUpThresholdDeg = 10; Part->DetentDownThresholdDeg = 18; W.Play(); P5bBegin(Part);
 	P5bMove(Part,9); TestEqual(TEXT("Below up threshold"),Part->GetDetentIndex(),1);
 	P5bMove(Part,10); TestEqual(TEXT("Up threshold is 10"),Part->GetDetentIndex(),2);
 	P5bMove(Part,3); TestEqual(TEXT("Above reverse threshold"),Part->GetDetentIndex(),2);
 	P5bMove(Part,2); TestEqual(TEXT("Down threshold from upper is 2"),Part->GetDetentIndex(),1);
-	P5bMove(Part,-18); TestEqual(TEXT("Down threshold from center is -18"),Part->GetDetentIndex(),0); return true;
+	P5bMove(Part,-18); TestEqual(TEXT("Down threshold from center is -18"),Part->GetDetentIndex(),0);
+	Part->Tick(0.01f);
+	TestTrue(TEXT("Independent thresholds retain notification order"),Events->Indices == TArray<int32>({2,1,0})); return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5bRanges, "vBoR.P5b.E8RotatedSDKRangesBothSigns", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP5bRanges::RunTest(const FString&)
 {
+	for (bool Asymmetric : {false,true})
 	for (bool Reverse : {false,true})
 	{
 		FP5bWorld W;
 		AP2bTrackedPart* Part = W.Part(); Part->bReverse = Reverse;
+		if (Asymmetric) { Part->DetentAnglesDeg = {-15,0,25}; Part->DetentUpThresholdDeg = Part->DetentDownThresholdDeg = 14; }
 		Part->AxisPivot->SetRelativeTransform(FTransform(FRotator(15,55,20),FVector(100,23,160))); Part->OnConstruction(Part->GetActorTransform());
 		W.Play();
 		Part->MaxAngleDeg = 1; P5bBegin(Part);
 		for (double Angle : {50.0,-50.0})
 		{
-			const double Expected = Angle > 0 ? 20 : -20;
+			const double Expected = Angle > 0 ? Part->DetentAnglesDeg.Last() : Part->DetentAnglesDeg[0];
 			const FQuat ExpectedRotation(FVector::XAxisVector,FMath::DegreesToRadians(Expected * (Reverse ? -1 : 1)));
 			TestTrue(TEXT("SDK itself clamps signed endpoints before acceptance"),FP5bTestAccess::SDK(Part,P5bPose(Part,Angle)).GetRotation().Equals(ExpectedRotation,0.001));
 			P5bMove(Part,Angle);
@@ -244,19 +278,22 @@ bool FP5bRegrab::RunTest(const FString&)
 	TestTrue(TEXT("Regrab starts at current return pose"),Before.Equals(Part->AxisPivot->GetComponentTransform(),0.001));
 	TestEqual(TEXT("Return and regrab emit no transition"),Events->Indices.Num(),1);
 	P5bMove(Part,7); TestEqual(TEXT("Regrab movement follows hand"),Part->GetDetentIndex(),2);
-	P5bMove(Part,4); TestEqual(TEXT("Later crossing changes center"),Part->GetDetentIndex(),1); return true;
+	P5bMove(Part,4); TestEqual(TEXT("Later crossing changes center"),Part->GetDetentIndex(),1);
+	Part->Tick(0.01f);
+	TestTrue(TEXT("Regrab crossing emits center after Tick"),Events->Indices == TArray<int32>({2,1})); return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5bEvents, "vBoR.P5b.E11NoOpenCloseEventsOrColor", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP5bEvents::RunTest(const FString&)
 {
 	FP5bWorld W; AP2bTrackedPart* Part = W.Part(); UP5bEventObserver* Events = P5bObserve(Part); W.Play();
-	P5bBegin(Part); P5bMove(Part,20);
+	P5bBegin(Part); P5bMove(Part,20); Part->Tick(0.01f);
 	TestTrue(TEXT("Held upper uses grab color"),FP5bTestAccess::Color(Part).Equals(Part->GrabColor));
 	FP5bTestAccess::Release(Part); Part->Tick(1);
 	TestTrue(TEXT("Released upper is transparent"),FP5bTestAccess::Color(Part).Equals(FLinearColor::Transparent));
 	TestEqual(TEXT("No opened event"),Events->Opens,0); TestEqual(TEXT("No closed event"),Events->Closes,0);
 	TestEqual(TEXT("Release event preserved"),Events->Releases,1);
+	TestTrue(TEXT("Only upper detent notification"),Events->Indices == TArray<int32>{2});
 	FP5bTestAccess::Hover(Part,NewObject<UIsdkGrabberComponent>(Part));
 	TestTrue(TEXT("Upper hover uses hover color"),FP5bTestAccess::Color(Part).Equals(Part->HoverColor)); return true;
 }

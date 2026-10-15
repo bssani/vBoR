@@ -35,7 +35,7 @@
 
 ## 항목
 
-### R1-1 걸림 이벤트가 ISDK 포인터 `Move` 처리 안에서 나감 — 열림
+### R1-1 걸림 이벤트가 ISDK 포인터 `Move` 처리 안에서 나감 — 반영함 (fix: defer gear detent notifications to Tick)
 
 **문제**
 - `OnDetentChanged.Broadcast`와 `StateAudio->Play`(`VBoRAxisPart.cpp:256`)는 `EvaluateDetent`에서 부른다. `EvaluateDetent`는 `AcceptTransform`(`:275`) 안에서 불리고, `AcceptTransform`은 변환기 `UpdateTracked`(`:124`)에서 불린다.
@@ -61,7 +61,12 @@
 - 같은 frame 놓기를 새로 넣는다. `Move`로 +15°(기준) → 곧바로 `Release` → `Tick`. 상단으로 가고(20°까지 이동), 이벤트는 `{2}` 1번이다.
 - 기존 E3·E4·E6·E7·E10·E11의 이벤트 단언은 `Tick` 뒤로 옮기고 값은 그대로 둔다.
 
-### R1-2 E8 SDK 범위 시험이 대칭 걸림이라 `bReverse` 부호를 못 잡음 — 열림 (시험만)
+**반영 내용 (Codex, 2026-10-15)**
+- `EvaluateDetent`는 index 확정·로그·대기 index 추가만 한다. `Tick`에서 대기 배열을 옮겨 순서대로 소리·이벤트를 내고, 이벤트가 Actor를 지우면 그 Tick을 끝낸다. 콜백 중 새 전환은 다음 Tick으로 남긴다.
+- E5: Tick 전 하단 확정·이벤트/소리 0, Tick 뒤 `{1,0}`·소리 2번, 다음 Tick 중복 없음. 같은 frame 기준 도달 → 놓기 시험을 추가해 상단 복귀·`{2}`·소리 1번을 확인한다.
+- E3·E4·E6·E7·E10·E11은 Tick 뒤 알림을 확인한다. 검증 결과는 아래에 기록한다.
+
+### R1-2 E8 SDK 범위 시험이 대칭 걸림이라 `bReverse` 부호를 못 잡음 — 반영함 (fix: defer gear detent notifications to Tick) (시험만)
 
 **문제**
 - `FP5bRanges`(`P5bGearLeverTests.cpp:200`)는 기본 걸림 −20/0/+20°로 `bReverse` 끔·켬을 본다.
@@ -77,6 +82,19 @@
 
 **확인할 시험**
 - 위 비대칭 경우를 `bReverse` 끔·켬, 축을 돌려 둔 부품으로 넣는다.
+
+**반영 내용 (Codex, 2026-10-15)**
+- 기존 대칭 경우를 유지하고 −15/0/+25°·기준 14/14°를 추가했다. 두 경우 모두 회전해 둔 축과 `bReverse` 끔·켬에서 ±50° 입력의 SDK 원시 쿼터니언·확정 값·world 자세를 확인한다.
+- 범위 계산 제품 코드는 바꾸지 않았다.
+
+## Codex 반영 검증 (2026-10-15)
+
+- R1-1·R1-2 반영 완료, 질문 없음. Claude 리뷰 2회차 대기.
+- 최종 C++ 트리에서 non-unity(`-DisableUnity -Module=vBoR`)·unity 각각 1회: `Result: Succeeded`, 프로세스 exit 0, 컴파일 경고·오류 0.
+- 전체 시험 1회: `vBoR` 198개 발견·198개 완료·198 Success, Fail 0, P5b 16/16. `TEST COMPLETE. EXIT CODE: 0`, 프로세스 exit 0, AutomationController/Test Error 0.
+- 로그: `Saved/Logs/P5b-R1-nonunity-build.log`, `P5b-R1-unity-build.log`, `P5b-R1-full-tests.log`(git 무시).
+- `StructUtils` 폐기 안내·샘플 CDO·OpenXR·임시 world context 로그는 기존 환경 잡음으로 분리함. Invalid detent 경고는 E12가 의도한 14종이며 각 이유·횟수 단언 통과.
+- Quest 3 Link/VR Preview·T-08·Blueprint/Details는 `not-tested`. 하위 에이전트·자체 리뷰·에디터 MCP·push·PR·머지 없음.
 
 ## 참고 (항목 아님 — VR에서 볼 것)
 

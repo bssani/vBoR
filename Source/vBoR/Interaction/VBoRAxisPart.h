@@ -134,6 +134,7 @@ private:
 	double Value = 0, MaximumRatio = 0, PausedSeconds = 0, RecoveryDiscard = 0;
 	int32 Attempts = 0, Grabs = 0, Opens = 0, Closes = 0, Pauses = 0;
 	int32 DetentIndex = INDEX_NONE;
+	TArray<int32> PendingDetents;
 	bool bDetentValid = true;
 	FString DetentProblem() const;
 	void EvaluateDetent();
