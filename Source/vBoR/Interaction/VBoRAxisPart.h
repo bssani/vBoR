@@ -20,8 +20,9 @@ struct FIsdkInteractionPointerEvent;
 UENUM(BlueprintType)
 enum class EVBoRAxisMovement : uint8 { Rotate, Translate };
 UENUM(BlueprintType)
-enum class EVBoRAxisRelease : uint8 { Return, Stay };
+enum class EVBoRAxisRelease : uint8 { Return, Stay, Detent };
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FVBoRAxisEvent);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVBoRDetentEvent, int32, Index);
 
 UCLASS()
 class VBOR_API UVBoRAxisGrabComponent : public UIsdkGrabTransformerComponent
@@ -52,6 +53,7 @@ public:
 	FTransform UpdateTracked(const TArray<FIsdkGrabPose>& Poses, const FIsdkTargetTransform& Target, bool bTracked);
 private:
 	friend class AVBoRAxisPart;
+	friend struct FP5bTestAccess;
 	UPROPERTY() TObjectPtr<UIsdkOneGrabRotateTransformer> Rotate;
 	UPROPERTY() TObjectPtr<UIsdkOneGrabTranslateTransformer> Translate;
 	bool bActive = false;
@@ -77,6 +79,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part") FTransform MeshRestFromRoot;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part") EVBoRAxisMovement Movement = EVBoRAxisMovement::Rotate;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part") EVBoRAxisRelease Release = EVBoRAxisRelease::Return;
+	// 쉬는 자세 0 기준, 값이 커지는 쪽이 위임 (P5b D2, deg)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Detent", meta=(ToolTip="Angles from rest in deg, strictly increasing")) TArray<float> DetentAnglesDeg = {-20,0,20};
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Detent") int32 DetentStartIndex = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Detent", meta=(Units="deg")) float DetentUpThresholdDeg = 15;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Detent", meta=(Units="deg")) float DetentDownThresholdDeg = 15;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part") TEnumAsByte<EAxis::Type> Axis = EAxis::X;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part") bool bReverse = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part", meta=(Units="deg", ClampMin="0", ClampMax="170")) float MaxAngleDeg = 30;
@@ -94,6 +101,8 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="Axis part") FVBoRAxisEvent OnPartOpened;
 	UPROPERTY(BlueprintAssignable, Category="Axis part") FVBoRAxisEvent OnPartClosed;
 	UPROPERTY(BlueprintAssignable, Category="Axis part") FVBoRAxisEvent OnPartReleased;
+	UPROPERTY(BlueprintAssignable, Category="Axis part|Detent") FVBoRDetentEvent OnDetentChanged;
+	UFUNCTION(BlueprintPure, Category="Axis part|Detent") int32 GetDetentIndex() const { return DetentIndex; }
 	UFUNCTION(BlueprintPure, Category="Axis part") float GetOpenRatio() const;
 	UFUNCTION(BlueprintPure, Category="Axis part") FString GetDebugText() const;
 	void ConnectDoor(AVBoRHingedPanel* Door, int32 Handle);
@@ -109,6 +118,7 @@ private:
 	friend struct FP2bTestAccess;
 	friend struct FP2cTestAccess;
 	friend struct FP2dTestAccess;
+	friend struct FP5bTestAccess;
 	UPROPERTY() TObjectPtr<UVBoRAxisTransformer> Transformer;
 	UPROPERTY() TObjectPtr<UIsdkGrabberComponent> HoldingGrabber;
 	UPROPERTY() TObjectPtr<AVBoRHingedPanel> LinkedDoor;
@@ -123,6 +133,11 @@ private:
 	bool bOpenArmed = true, bClosedArmed = false;
 	double Value = 0, MaximumRatio = 0, PausedSeconds = 0, RecoveryDiscard = 0;
 	int32 Attempts = 0, Grabs = 0, Opens = 0, Closes = 0, Pauses = 0;
+	int32 DetentIndex = INDEX_NONE;
+	TArray<int32> PendingDetents;
+	bool bDetentValid = true;
+	FString DetentProblem() const;
+	void EvaluateDetent();
 	double Limit() const;
 	FVector LocalAxis() const;
 	FTransform ValueTransform() const;

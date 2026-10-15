@@ -56,7 +56,13 @@ void UVBoRAxisTransformer::UpdateConstraints(const FIsdkTargetTransform& Target)
 	AVBoRAxisPart* Part = GetTypedOuter<AVBoRAxisPart>();
 	if (!Rotate) { Rotate = NewObject<UIsdkOneGrabRotateTransformer>(this); Translate = NewObject<UIsdkOneGrabTranslateTransformer>(this); }
 	const float SignedLimit = static_cast<float>(Part->Limit() * (Part->bReverse ? -1 : 1));
-	const FIsdkAxisConstraints Range(true, FMath::Min(0.f, SignedLimit), FMath::Max(0.f, SignedLimit));
+	FIsdkAxisConstraints Range(true, FMath::Min(0.f, SignedLimit), FMath::Max(0.f, SignedLimit));
+	if (Part->Release == EVBoRAxisRelease::Detent)
+	{
+		const float A = Part->bDetentValid ? Part->DetentAnglesDeg[0] * (Part->bReverse ? -1 : 1) : 0;
+		const float B = Part->bDetentValid ? Part->DetentAnglesDeg.Last() * (Part->bReverse ? -1 : 1) : 0;
+		Range = FIsdkAxisConstraints(true, FMath::Min(A,B), FMath::Max(A,B));
+	}
 	Rotate->Constraint.RotationAxis = Part->Axis;
 	Rotate->Constraint.bUseAngleFromAxisConstraint = false;
 	// SDK twist clamp 는 quaternion 각도의 반대 부호임 (IsdkTransformerUtils.h:295-297, deg)
@@ -174,8 +180,17 @@ void AVBoRAxisPart::OnConstruction(const FTransform& Transform)
 void AVBoRAxisPart::PreInitializeComponents()
 {
 	RestPivot = AxisPivot->GetRelativeTransform();
+	if (Release == EVBoRAxisRelease::Detent)
+	{
+		const FString Problem = DetentProblem(); bDetentValid = Problem.IsEmpty();
+		if (!bDetentValid)
+		{
+			UE_LOG(LogAxisPart, Warning, TEXT("%s: Invalid detent: %s; grabbing disabled"), *GetName(), *Problem);
+			GrabBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		}
+	}
 	Grabbable->SetGrabCollider(GrabBox);
-	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, PartMesh->GetStaticMesh() != nullptr);
+	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, PartMesh->GetStaticMesh() != nullptr && bDetentValid);
 	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch, false);
 	GrabComponent->Configure();
 	GrabComponent->SetTransformTarget(AxisPivot);
@@ -186,6 +201,13 @@ void AVBoRAxisPart::PreInitializeComponents()
 void AVBoRAxisPart::BeginPlay()
 {
 	Super::BeginPlay();
+	if (Release == EVBoRAxisRelease::Detent)
+	{
+		// RestPivot 확정 뒤 시작 각도를 놓음 (construction 누적 방지, P5b D7)
+		DetentIndex = DetentAnglesDeg.IsValidIndex(DetentStartIndex) ? DetentStartIndex : INDEX_NONE;
+		Value = DetentIndex != INDEX_NONE && FMath::IsFinite(DetentAnglesDeg[DetentIndex]) ? DetentAnglesDeg[DetentIndex] : 0;
+		AxisPivot->SetRelativeTransform(ValueTransform() * RestPivot);
+	}
 	UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, IsdkContentAssetPaths::Materials::GrabbableDefault);
 	StateOverlay = Material ? UMaterialInstanceDynamic::Create(Material, this) : nullptr;
 	Grabbable->GetInteractionPointerEventDelegate().AddUniqueDynamic(this, &AVBoRAxisPart::HandlePointer);
@@ -193,6 +215,48 @@ void AVBoRAxisPart::BeginPlay()
 }
 
 double AVBoRAxisPart::Limit() const { return Movement == EVBoRAxisMovement::Rotate ? FMath::Clamp(MaxAngleDeg, 0.f, 170.f) : FMath::Max(0.f, MaxTravelCm); }
+
+FString AVBoRAxisPart::DetentProblem() const
+{
+	if (Movement != EVBoRAxisMovement::Rotate) { return TEXT("Movement must be Rotate"); }
+	if (DetentAnglesDeg.Num() < 2) { return TEXT("at least two angles required"); }
+	if (!DetentAnglesDeg.IsValidIndex(DetentStartIndex)) { return TEXT("start index outside angle list"); }
+	if (!FMath::IsFinite(DetentUpThresholdDeg) || !FMath::IsFinite(DetentDownThresholdDeg) || DetentUpThresholdDeg <= 0 || DetentDownThresholdDeg <= 0) { return TEXT("thresholds must be finite and > 0 deg"); }
+	for (int32 I = 0; I < DetentAnglesDeg.Num(); ++I)
+	{
+		if (!FMath::IsFinite(DetentAnglesDeg[I]) || FMath::Abs(DetentAnglesDeg[I]) > 170) { return TEXT("angles must be finite within +/-170 deg"); }
+		if (!I) { continue; }
+		const float Gap = DetentAnglesDeg[I] - DetentAnglesDeg[I-1];
+		if (Gap <= 0) { return TEXT("angles must be strictly increasing"); }
+		if (DetentUpThresholdDeg > Gap || DetentDownThresholdDeg > Gap) { return TEXT("threshold exceeds adjacent gap"); }
+		if (DetentUpThresholdDeg + DetentDownThresholdDeg <= Gap) { return TEXT("threshold sum must exceed adjacent gap"); }
+	}
+	return FString();
+}
+
+void AVBoRAxisPart::EvaluateDetent()
+{
+	if (!bDetentValid || HoldingHand == INDEX_NONE || bPaused || !DetentAnglesDeg.IsValidIndex(DetentIndex)) { return; }
+	auto Reached = [this](int32 Direction)
+	{
+		if (!DetentAnglesDeg.IsValidIndex(DetentIndex + Direction)) { return false; }
+		const double Gap = FMath::Abs(static_cast<double>(DetentAnglesDeg[DetentIndex + Direction]) - DetentAnglesDeg[DetentIndex]);
+		// FVector3f 각도 경계 오차만 받음. 왕복 방지 여유의 1/4 이내로 제한함 (P5b D5·E4, deg)
+		const double Tolerance = FMath::Min(1.e-4, (static_cast<double>(DetentUpThresholdDeg) + DetentDownThresholdDeg - Gap) / 4);
+		const double Threshold = static_cast<double>(DetentAnglesDeg[DetentIndex]) + (Direction > 0 ? DetentUpThresholdDeg : -DetentDownThresholdDeg);
+		return Direction > 0 ? Value >= Threshold - Tolerance : Value <= Threshold + Tolerance;
+	};
+	// 같은 입력에서 인접 위치를 순서대로 확정함 (한 frame 에 두 기준을 넘을 수 있음, P5b D3)
+	int32 Direction = 0;
+	if (Reached(1)) { Direction = 1; }
+	else if (Reached(-1)) { Direction = -1; }
+	while (Direction && Reached(Direction))
+	{
+		DetentIndex += Direction;
+		PendingDetents.Add(DetentIndex);
+		UE_LOG(LogAxisPart, Log, TEXT("%s detent=%d angle=%.3f deg | not-tested"), *GetName(), DetentIndex, DetentAnglesDeg[DetentIndex]);
+	}
+}
 FVector AVBoRAxisPart::LocalAxis() const { return Axis == EAxis::Y ? FVector::YAxisVector : Axis == EAxis::Z ? FVector::ZAxisVector : FVector::XAxisVector; }
 FTransform AVBoRAxisPart::ValueTransform() const
 {
@@ -204,9 +268,19 @@ void AVBoRAxisPart::AcceptTransform(const FTransform& Transform)
 	if (Transform.ContainsNaN()) { return; }
 	const double Raw = Movement == EVBoRAxisMovement::Translate ? FVector::DotProduct(Transform.GetLocation(), LocalAxis()) :
 		FMath::RadiansToDegrees(2 * FMath::Atan2(FVector::DotProduct(FVector(Transform.GetRotation().X, Transform.GetRotation().Y, Transform.GetRotation().Z), LocalAxis()), Transform.GetRotation().W));
-	Value = FMath::Clamp(Raw * (bReverse ? -1 : 1), 0.0, Limit());
+	if (Release == EVBoRAxisRelease::Detent)
+	{
+		if (!bDetentValid) { return; }
+		Value = FMath::Clamp(Raw * (bReverse ? -1 : 1), static_cast<double>(DetentAnglesDeg[0]), static_cast<double>(DetentAnglesDeg.Last()));
+		EvaluateDetent();
+	}
+	else { Value = FMath::Clamp(Raw * (bReverse ? -1 : 1), 0.0, Limit()); }
 }
-float AVBoRAxisPart::GetOpenRatio() const { return Limit() > SMALL_NUMBER ? static_cast<float>(Value / Limit()) : 0.f; }
+float AVBoRAxisPart::GetOpenRatio() const
+{
+	if (Release == EVBoRAxisRelease::Detent) { return 0.f; }
+	return Limit() > SMALL_NUMBER ? static_cast<float>(Value / Limit()) : 0.f;
+}
 bool AVBoRAxisPart::IsHandTracked() const
 {
 	if (HoldingHand == INDEX_NONE) { return false; }
@@ -224,7 +298,7 @@ void AVBoRAxisPart::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 	else if (Event.Type == EIsdkPointerEventType::Unhover) { Hovering.Remove(Grabber); }
 	else if (Event.Type == EIsdkPointerEventType::Select)
 	{
-		if (HoldingHand != INDEX_NONE || bNeedsPalmOpen[Hand] || !PartMesh->GetStaticMesh()) { return; }
+		if (HoldingHand != INDEX_NONE || bNeedsPalmOpen[Hand] || !PartMesh->GetStaticMesh() || !bDetentValid) { return; }
 		HoldingHand = Hand; HoldingGrabber = Grabber;
 		if (!IsHandTracked()) { HoldingHand = INDEX_NONE; HoldingGrabber = nullptr; bCancelPending = true; return; }
 		++Grabs;
@@ -264,6 +338,13 @@ void AVBoRAxisPart::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	if (!FMath::IsFinite(DeltaSeconds) || DeltaSeconds <= 0) { return; }
+	// 확정은 Move 에서 유지하고 알림만 미룸 (SDK 선택 배열 재진입 방지, P5b R1-1)
+	const TArray<int32> Notifications = MoveTemp(PendingDetents);
+	for (const int32 Index : Notifications)
+	{
+		StateAudio->Play(); OnDetentChanged.Broadcast(Index);
+		if (IsActorBeingDestroyed()) { return; }
+	}
 	if (bCancelPending || bDoorHold || (HoldingHand == INDEX_NONE && GrabComponent->GetNumGrabbers()))
 	{
 		bCancelPending = false;
@@ -309,6 +390,13 @@ void AVBoRAxisPart::Tick(float DeltaSeconds)
 		Value = FMath::Max(0.0, Value - FMath::Max(0.0, Speed) * DeltaSeconds);
 		AxisPivot->SetRelativeTransform(ValueTransform() * RestPivot);
 	}
+	if (HoldingHand == INDEX_NONE && Release == EVBoRAxisRelease::Detent && bDetentValid && DetentAnglesDeg.IsValidIndex(DetentIndex))
+	{
+		const double Target = DetentAnglesDeg[DetentIndex];
+		const double Step = FMath::Max(0.f, ReturnDegPerSecond) * DeltaSeconds;
+		Value += FMath::Clamp(Target - Value, -Step, Step);
+		AxisPivot->SetRelativeTransform(ValueTransform() * RestPivot);
+	}
 	EvaluateState();
 	// Move delegate 안에서 ForceCancel 을 부르지 않음 (SDK 선택 배열 재진입 방지, P2b D5)
 	// 풀린 문도 손잡이를 먼저 젖힘 (같은 손 넘김은 문턱에서만, P2c D4)
@@ -321,6 +409,15 @@ void AVBoRAxisPart::Tick(float DeltaSeconds)
 void AVBoRAxisPart::EvaluateState()
 {
 	if (bPaused) { return; }
+	if (Release == EVBoRAxisRelease::Detent)
+	{
+		if (StateOverlay)
+		{
+			StateOverlay->SetVectorParameterValue(TEXT("ColorParam"), HoldingHand != INDEX_NONE ? GrabColor : Hovering.IsEmpty() ? FLinearColor::Transparent : HoverColor);
+			PartMesh->SetOverlayMaterial(StateOverlay);
+		}
+		return;
+	}
 	const float Ratio = GetOpenRatio(); MaximumRatio = FMath::Max(MaximumRatio, static_cast<double>(Ratio));
 	if (Ratio <= OpenRearm) { bOpenArmed = true; }
 	if (Ratio >= ClosedRearm) { bClosedArmed = true; }
@@ -334,6 +431,11 @@ void AVBoRAxisPart::EvaluateState()
 }
 FString AVBoRAxisPart::GetDebugText() const
 {
+	if (Release == EVBoRAxisRelease::Detent)
+	{
+		return FString::Printf(TEXT("Approximate geometry | detent=%d angle=%.3f deg confirmed=%.3f deg | pauses=%d %.3f s | rebase discarded=%.3f deg | not-tested"),
+			DetentIndex, Value, DetentAnglesDeg.IsValidIndex(DetentIndex) ? DetentAnglesDeg[DetentIndex] : 0.f, Pauses, PausedSeconds, RecoveryDiscard);
+	}
 	return FString::Printf(TEXT("Approximate geometry | ratio=%.3f | attempts=%d grabs=%d open/close=%d/%d max=%.3f | pauses=%d %.3f s | rebase discarded=%.3f %s | not-tested"),
 		GetOpenRatio(), Attempts, Grabs, Opens, Closes, MaximumRatio, Pauses, PausedSeconds, RecoveryDiscard, Movement == EVBoRAxisMovement::Rotate ? TEXT("deg") : TEXT("cm"));
 }

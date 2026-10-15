@@ -130,6 +130,20 @@ void AP3VehicleMock::BeginPlay()
 	Glovebox->FinishSpawning(GetActorTransform());
 	Glovebox->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	GloveboxHandle->AttachToComponent(Glovebox->HingePivot, FAttachmentTransformRules::KeepWorldTransform);
+	// 차 원점 메시·축 자리값. +X 회전으로 끝이 위로 감 (근사 cm·deg, P5b D9)
+	GearLever = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
+	GearLever->AxisPivot->SetRelativeTransform(FTransform(GearAxisRotation, GearPivotCm));
+	GearLever->MeshRestFromRoot = FTransform(GearAxisRotation.Quaternion(), GearPivotCm + GearAxisRotation.RotateVector(FVector(0,GearSizeCm.Y/2,0)), GearSizeCm/100);
+	GearLever->Axis = EAxis::X; GearLever->Release = EVBoRAxisRelease::Detent;
+	GearLever->DetentAnglesDeg = GearDetentAnglesDeg; GearLever->DetentStartIndex = 1;
+	GearLever->DetentUpThresholdDeg = GearUpThresholdDeg; GearLever->DetentDownThresholdDeg = GearDownThresholdDeg;
+	GearLever->FinishSpawning(GetActorTransform()); GearLever->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+	// 버튼 +Z 면을 레버 끝 +Y 로 놓음. 잡기·단계와 연결하지 않음 (P5b D8)
+	const FTransform ButtonFromPivot(FRotationMatrix::MakeFromZ(FVector::YAxisVector).ToQuat(), FVector(0,GearSizeCm.Y,0));
+	const FTransform ButtonWorld = ButtonFromPivot * GearLever->AxisPivot->GetComponentTransform();
+	GearButton = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), ButtonWorld, this);
+	GearButton->ButtonMesh->SetRelativeScale3D(GearButtonSizeCm/100); GearButton->HitAreaScale = 1;
+	GearButton->FinishSpawning(ButtonWorld); GearButton->AttachToComponent(GearLever->AxisPivot, FAttachmentTransformRules::KeepWorldTransform);
 	ReachButton = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), FTransform::Identity, this);
 	ReachButton->Tags.Add(TEXT("Car.ReachButton")); ReachButton->HitAreaScale = 1;
 	ReachButton->ButtonMesh->SetRelativeScale3D(FVector(0.04,0.04,0.01));
@@ -182,6 +196,8 @@ void AP3VehicleMock::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (ConsoleLid) { ConsoleLid->Destroy(); }
 	if (GloveboxHandle) { GloveboxHandle->Destroy(); }
 	if (Glovebox) { Glovebox->Destroy(); }
+	if (GearButton) { GearButton->Destroy(); }
+	if (GearLever) { GearLever->Destroy(); }
 	if (ReachButton) { ReachButton->Destroy(); }
 	if (FrontKeyTable) { FrontKeyTable->Destroy(); }
 	if (RearKeyTable) { RearKeyTable->Destroy(); }
