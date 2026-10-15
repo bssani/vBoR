@@ -18,6 +18,7 @@
 | 회차 | 날짜 | 리뷰 대상 | 리뷰어 | 결과 |
 |---|---|---|---|---|
 | 1 | 2026-10-15 | `c3254f1` 1축 부품 걸림 옵션, 근사 차 기어 레버·끝 버튼 | Claude | **열림 2건(R1-1 제품, R1-2 시험만).** 빌드·시험 재현: non-unity·unity 성공(바뀐 것이 없어 다시 컴파일한 파일 0 — Codex non-unity 로그에서 헤더를 쓰는 14개 파일 컴파일·경고 0 확인), `vBoR.*` **197/197**, EXIT CODE 0. **Codex 토큰 6.70M(캐시 97%), 약 14분, 하위 에이전트 0, exec 45, 전체 시험 1번(최종 트리).** 빌드가 여러 번인 것은 UHT 오류(배열에 `Units` 메타) 수정과 경계 오차 수정 뒤라 받아들인다 |
+| 2 | 2026-10-15 | `7cc0e91` R1-1 알림을 `Tick`으로, R1-2 E8 비대칭 범위 | Claude | **열린 항목 없음 — 통과.** 빌드: non-unity·unity 성공(Codex R1 로그에서 마지막 소스 변경 뒤 non-unity 11개·unity 5개 묶음 컴파일, 경고 0). `vBoR.*` 첫 실행 197/198 — 실패 1은 P5b와 무관한 `vBoR.P0Buck.E8Persistence`(아래 2회차 참고), 다시 실행 **198/198**, EXIT CODE 0. **Codex 토큰 2.21M(캐시 93%), 약 5분, 하위 에이전트 0, exec 19, 빌드·전체 시험 각 1번(최종 트리)** |
 
 ### 1회차에 확인한 것
 
@@ -33,9 +34,22 @@
 - **P2d E16:** 제외 목록에 `GearLever`만 더했고 "문 손잡이 2개" 단언은 그대로다.
 - **범위:** P3 단계 데이터·규칙, 레벨·에셋은 그대로다. 시험용 `friend` 선언이 제품 헤더 세 곳에 늘었지만 기존 방식(`FP3FlowTestAccess` 등)과 같다. 주석은 사용자 말투(`~함`, 근거 ID)다.
 
+### 2회차에 확인한 것
+
+- **R1-1:** `EvaluateDetent`는 index 확정·로그·대기 배열 추가만 한다(`VBoRAxisPart.cpp:256`). `Tick` 앞부분(`:341-347`)이 대기 배열을 옮겨 받아 순서대로 소리·이벤트를 낸다.
+  - 이 Tick은 `TG_PostUpdateWork`라 SDK가 그 frame의 자세를 적용한 뒤다. 그래서 처리에서 읽는 레버 자세도 맞다.
+  - 처리 중 Actor가 지워지면 멈춘다. 처리 중에 생긴 새 전환은 다음 Tick으로 간다(배열을 옮겨 순회).
+  - 확정 위치 갱신은 그대로 바로 한다. 같은 frame 놓기 시험(`vBoR.P5b.R1SameFrameThresholdAndRelease`)이 상단 복귀와 이벤트 `{2}` 1번을 보인다.
+- **R1-2:** E8이 대칭·비대칭(−15/0/+25°, 14/14°) × `bReverse` 끔·켬으로 SDK 원시 회전·값·world 자세를 본다. 부호 곱을 빼면 비대칭 경우가 +15°에서 멈춰 실패한다.
+- 기존 이벤트 단언은 값을 바꾸지 않고 `Tick` 뒤로만 옮겼다. 제품 범위 계산은 바뀌지 않았다.
+- **P5b와 무관한 실패 1건(항목 아님):** 첫 전체 실행에서 `vBoR.P0Buck.E8Persistence`가 40번 반복 저장 중 33번째에 `candidate replacement failed (OS error 5)`로 실패했다(`P0BuckAlignmentTests.cpp:213`).
+  - P0-c 리뷰 M1("교체가 한 번 실패, 원인 모름")과 같은 현상이고, 오류 번호(5 = 접근 거부)가 처음 나왔다.
+  - `MoveFileExW` 교체(`VBoRBuckAlignment.cpp:226`)가 방금 쓴 파일을 다른 프로세스(백신·색인기 추정)가 잠깐 열고 있을 때 실패하는 모양이다.
+  - 다시 실행하면 통과했다. 이 브랜치는 그 코드를 건드리지 않았다. 따로 다룬다(HANDOFF).
+
 ## 항목
 
-### R1-1 걸림 이벤트가 ISDK 포인터 `Move` 처리 안에서 나감 — 반영함 (fix: defer gear detent notifications to Tick)
+### R1-1 걸림 이벤트가 ISDK 포인터 `Move` 처리 안에서 나감 — 반영함 (`7cc0e91`)
 
 **문제**
 - `OnDetentChanged.Broadcast`와 `StateAudio->Play`(`VBoRAxisPart.cpp:256`)는 `EvaluateDetent`에서 부른다. `EvaluateDetent`는 `AcceptTransform`(`:275`) 안에서 불리고, `AcceptTransform`은 변환기 `UpdateTracked`(`:124`)에서 불린다.
@@ -66,7 +80,7 @@
 - E5: Tick 전 하단 확정·이벤트/소리 0, Tick 뒤 `{1,0}`·소리 2번, 다음 Tick 중복 없음. 같은 frame 기준 도달 → 놓기 시험을 추가해 상단 복귀·`{2}`·소리 1번을 확인한다.
 - E3·E4·E6·E7·E10·E11은 Tick 뒤 알림을 확인한다. 검증 결과는 아래에 기록한다.
 
-### R1-2 E8 SDK 범위 시험이 대칭 걸림이라 `bReverse` 부호를 못 잡음 — 반영함 (fix: defer gear detent notifications to Tick) (시험만)
+### R1-2 E8 SDK 범위 시험이 대칭 걸림이라 `bReverse` 부호를 못 잡음 — 반영함 (`7cc0e91`) (시험만)
 
 **문제**
 - `FP5bRanges`(`P5bGearLeverTests.cpp:200`)는 기본 걸림 −20/0/+20°로 `bReverse` 끔·켬을 본다.
