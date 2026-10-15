@@ -16,6 +16,7 @@ class AVBoRHingedPanel;
 class AVBoRPokeButton;
 class AVBoRAxisPart;
 class AVBoRKeyTable;
+class AVBoRSteeringWheel;
 
 UCLASS(Blueprintable)
 class VBOR_API AP3VehicleMock : public AActor
@@ -73,6 +74,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 방향지시", meta=(Units="deg")) float TurnSignalDownThresholdDeg = 15;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 방향지시", meta=(Units="deg")) float TurnSignalNudgeDeg = 7;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRAxisPart> TurnSignalLever;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 스티어링", meta=(Units="cm")) FVector SteeringHubCm = FVector(35,-37,87);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 스티어링") FRotator SteeringAxisRotation = FRotator::ZeroRotator;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 스티어링", meta=(Units="cm", ClampMin="1")) float SteeringDiameterCm = 36;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 스티어링", meta=(Units="cm", ClampMin="0.1")) float SteeringThicknessCm = 3;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 스티어링", meta=(Units="deg", ClampMin="0.1")) float SteeringLimitDeg = 450;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 스티어링", meta=(Units="cm", ClampMin="0")) float SteeringMinGrabRadiusCm = 12;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 스티어링", meta=(Units="cm", ClampMin="0")) float SteeringMaxGrabRadiusCm = 24;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRSteeringWheel> SteeringWheel;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRPokeButton> ReachButton;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector FrontKeyTableCm = FVector(330,-90,0);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector RearKeyTableCm = FVector(-330,-90,0);
@@ -88,6 +97,7 @@ private:
 	friend struct FP3FlowTestAccess;
 	friend struct FP5bTestAccess;
 	friend struct FP5cTestAccess;
+	friend struct FP5dTestAccess;
 	void PlaceReachButton();
 	AVBoRKeyTable* CreateKeyTable(FVector PositionCm, const TCHAR* UnlockTag, const TCHAR* LockTag);
 	UFUNCTION() void KeyUnlockPressed(AVBoRKeyFob* Key);
