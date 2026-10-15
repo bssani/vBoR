@@ -147,6 +147,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 private:
+	friend class FP4bGateBlockingTest;
 	friend class FP1BoxSizeTest;
 	friend class FP1BoxPlacementTest;
 	friend class FP1BoxSupplyTest;
