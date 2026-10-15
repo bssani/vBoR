@@ -15,9 +15,29 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/WorldSettings.h"
 #include "Interaction/IsdkPokeInteractable.h"
+#include "Misc/OutputDevice.h"
+#include "Misc/OutputDeviceRedirector.h"
 
 namespace
 {
+	struct FBenchLogs : FOutputDevice
+	{
+		TArray<FString> Lines;
+		FBenchLogs() { GLog->FlushThreadedLogs(); GLog->AddOutputDevice(this); Lines.Reset(); }
+		~FBenchLogs() { GLog->RemoveOutputDevice(this); }
+		virtual void Serialize(const TCHAR* Text, ELogVerbosity::Type Verbosity, const FName& Category) override
+		{ if (Category == TEXT("LogP1Probe")) { Lines.Add(Text); } }
+		bool ContainsSnapshot(const TCHAR* Reason, const FString& GateFields)
+		{
+			GLog->FlushThreadedLogs();
+			for (const FString& Line : Lines)
+			{
+				if (Line.Contains(Reason) && Line.Contains(GateFields)) { return true; }
+			}
+			return false;
+		}
+	};
+
 	struct FPoweredWorld
 	{
 		UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
@@ -309,12 +329,25 @@ bool FP4bGateBlockingTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("E12 held box remains unchanged"), Box->GetActorTransform().Equals(Held));
 	Bench->Tick(0);
 	TestTrue(TEXT("E12 panel contains gate state and count"), Bench->Panel->Text.ToString().Contains(TEXT("Approximate gate:")) && Bench->Panel->Text.ToString().Contains(TEXT("obstructions=1")));
+	const FString GateFields = FString::Printf(TEXT("gate state=%s | gate angle=%.1f deg | gate obstructions=1"),
+		*Gate->GetStateText(), Gate->GetAngleDeg());
+	const int32 WarningRequests = Gate->GetWarningRequests();
+	FBenchLogs Logs;
 	Bench->ResetBagForNextTrial();
+	TestTrue(TEXT("R1-1 trial summary includes pre-reset gate state, angle and count on one line"), Logs.ContainsSnapshot(TEXT("Trial 1 summary"), GateFields));
 	TestTrue(TEXT("B restores default closed gate"), Gate->GetState() == EVBoRPoweredState::Closed);
-	TestEqual(TEXT("B clears obstruction count"), Gate->GetObstructionCount(), 0);
+	TestEqual(TEXT("B restores closed angle"), Gate->GetAngleDeg(), 0.0f);
+	TestEqual(TEXT("B preserves obstruction count"), Gate->GetObstructionCount(), 1);
+	TestEqual(TEXT("B preserves warning request count"), Gate->GetWarningRequests(), WarningRequests);
+	TestFalse(TEXT("B stops warning audio"), Gate->WarningAudio->IsPlaying());
+	Bench->Tick(0);
+	TestTrue(TEXT("R1-1 next trial snapshot includes closed gate and retained count"), Logs.ContainsSnapshot(
+		TEXT("State transition snapshot"), TEXT("gate state=Closed | gate angle=0.0 deg | gate obstructions=1")));
 	Gate->bStartOpen = true;
 	Bench->PlaceFromHead(FTransform(FRotator(0, -48, 0), FVector(50, 100, 165)));
 	TestTrue(TEXT("R restores configured start state"), Gate->GetState() == EVBoRPoweredState::Open);
+	TestEqual(TEXT("R clears obstruction count"), Gate->GetObstructionCount(), 0);
+	TestEqual(TEXT("R clears warning request count"), Gate->GetWarningRequests(), 0);
 	TestTrue(TEXT("R preserves vehicle origin attachment"), Gate->GetActorTransform().Equals(Bench->Trunk->GetActorTransform(), 0.01));
 	AVBoRPokeButton* Open = Gate->OpenButton;
 	Bench->Destroy();

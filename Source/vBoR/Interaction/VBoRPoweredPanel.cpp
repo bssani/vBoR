@@ -101,12 +101,14 @@ void AVBoRPoweredPanel::Request(bool bOpen)
 	bPendingCommand = true;
 }
 
-void AVBoRPoweredPanel::ResetPanel()
+void AVBoRPoweredPanel::ResetPanel(bool bClearCounts)
 {
 	Motion = FVBoRPoweredMotion();
 	Motion.State = bStartOpen ? EVBoRPoweredState::Open : EVBoRPoweredState::Closed;
 	Motion.AngleDeg = bStartOpen ? FMath::Clamp(OpenAngleDeg, 1.0f, 170.0f) : 0;
-	bPendingCommand = false; WarningElapsed = 0; WarningRequests = 0; ObstructionCount = 0;
+	bPendingCommand = false; WarningElapsed = 0;
+	// B 는 다음 시도에도 누적을 이어감 (P4b R1-1)
+	if (bClearCounts) { WarningRequests = 0; ObstructionCount = 0; }
 	WarningAudio->Stop();
 	ApplyAngle();
 	PublishState();

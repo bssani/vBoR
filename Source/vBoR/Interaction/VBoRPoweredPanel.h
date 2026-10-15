@@ -53,7 +53,7 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	UFUNCTION(BlueprintCallable, Category = "Powered Panel") void RequestOpen();
 	UFUNCTION(BlueprintCallable, Category = "Powered Panel") void RequestClose();
-	UFUNCTION(BlueprintCallable, Category = "Powered Panel") void ResetPanel();
+	UFUNCTION(BlueprintCallable, Category = "Powered Panel") void ResetPanel(bool bClearCounts = true);
 	UFUNCTION(BlueprintPure, Category = "Powered Panel") EVBoRPoweredState GetState() const { return Motion.State; }
 	UFUNCTION(BlueprintPure, Category = "Powered Panel") float GetAngleDeg() const { return Motion.AngleDeg; }
 	FString GetStateText() const;

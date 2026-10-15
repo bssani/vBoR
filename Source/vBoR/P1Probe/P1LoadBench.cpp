@@ -154,7 +154,7 @@ void AP1LoadBench::ResetBagForNextTrial()
 	// 직전 시도를 먼저 보존함 (B 는 자리와 누적을 유지, P1 R1-6)
 	RecordSnapshot(FString::Printf(TEXT("Trial %d summary"), TrialNumber));
 	ClearBoxes(true);
-	if (Gate) { Gate->ResetPanel(); }
+	if (Gate) { Gate->ResetPanel(false); }
 	SpawnBox();
 	++TrialNumber;
 	ResetCrossing();
@@ -424,6 +424,11 @@ void AP1LoadBench::RecordSnapshot(const FString& Reason)
 		TrialNumber, Metrics.Grabbed, Metrics.Assisted, Metrics.DroppedInside, Metrics.DroppedOutside, Metrics.HeldSeconds);
 	Snapshot += FString::Printf(TEXT(" | two-hand entries=%d / %.3f s"), Metrics.TwoHandEntries, Metrics.TwoHandSeconds);
 	Snapshot += FString::Printf(TEXT(" | boxes=%d | resting inside trunk=%d"), Boxes.Num(), GetRestingBoxCount());
+	if (Gate)
+	{
+		Snapshot += FString::Printf(TEXT(" | gate state=%s | gate angle=%.1f deg | gate obstructions=%d"),
+			*Gate->GetStateText(), Gate->GetAngleDeg(), Gate->GetObstructionCount());
+	}
 	Snapshot.ReplaceInline(TEXT("\n"), TEXT(" | "));
 	UE_LOG(LogP1Probe, Log, TEXT("%s"), *Snapshot);
 	UpdatePanel();
