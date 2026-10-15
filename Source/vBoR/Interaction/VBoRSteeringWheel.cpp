@@ -66,21 +66,22 @@ void AVBoRSteeringWheel::OnConstruction(const FTransform& Transform)
 	Super::OnConstruction(Transform);
 	AngleDeg = 0; RestPivot = AxisPivot->GetRelativeTransform();
 	WheelMesh->SetRelativeTransform(MeshRestFromRoot.GetRelativeTransform(RestPivot)); TopMarker->SetRelativeTransform(MarkerRestFromPivot);
-	bGrabValid = WheelMesh->GetStaticMesh() && FMath::IsFinite(LimitAngleDeg) && LimitAngleDeg > 0 &&
-		FMath::IsFinite(MinGrabRadiusCm) && FMath::IsFinite(MaxGrabRadiusCm) && MinGrabRadiusCm >= 0 && MaxGrabRadiusCm >= MinGrabRadiusCm &&
-		FMath::IsFinite(MinAxisDistanceCm) && MinAxisDistanceCm > 0 && FMath::IsFinite(MinPairDistanceCm) && MinPairDistanceCm > 0;
-	if (bGrabValid)
+	if (WheelMesh->GetStaticMesh())
 	{
 		const FBox Bounds = WheelMesh->GetStaticMesh()->GetBoundingBox().TransformBy(WheelMesh->GetRelativeTransform());
 		GrabBox->SetRelativeLocation(Bounds.GetCenter()); GrabBox->SetBoxExtent(Bounds.GetExtent()+FVector(FMath::Max(0.f,GrabMarginCm)));
 	}
-	else { UE_LOG(LogSteeringWheel, Warning, TEXT("%s: Missing mesh or invalid wheel limits/radii; grabbing disabled | approximate geometry | not-tested"),*GetName()); }
-	GrabBox->SetCollisionEnabled(bGrabValid ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
 }
 
 void AVBoRSteeringWheel::PreInitializeComponents()
 {
 	RestPivot = AxisPivot->GetRelativeTransform();
+	// 레벨에 저장된 Actor 도 실행 때 검사함 (construction 재실행에 기대지 않음, P5d R1-1)
+	bGrabValid = WheelMesh->GetStaticMesh() && FMath::IsFinite(LimitAngleDeg) && LimitAngleDeg > 0 &&
+		FMath::IsFinite(MinGrabRadiusCm) && FMath::IsFinite(MaxGrabRadiusCm) && MinGrabRadiusCm >= 0 && MaxGrabRadiusCm >= MinGrabRadiusCm &&
+		FMath::IsFinite(MinAxisDistanceCm) && MinAxisDistanceCm > 0 && FMath::IsFinite(MinPairDistanceCm) && MinPairDistanceCm > 0;
+	if (!bGrabValid) { UE_LOG(LogSteeringWheel, Warning, TEXT("%s: Missing mesh or invalid wheel limits/radii; grabbing disabled | approximate geometry | not-tested"),*GetName()); }
+	GrabBox->SetCollisionEnabled(bGrabValid ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
 	Grabbable->SetGrabCollider(GrabBox); Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm,bGrabValid);
 	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch,false);
 	GrabComponent->Configure(); GrabComponent->SetTransformTarget(AxisPivot);

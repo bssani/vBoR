@@ -1,5 +1,7 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
+#include "Misc/OutputDevice.h"
+#include "Misc/OutputDeviceRedirector.h"
 #include "P5dTestFixture.h"
 #include "P3VehicleMock.h"
 #include "Components/BoxComponent.h"
@@ -33,6 +35,14 @@ struct FP5dTestAccess
 
 namespace
 {
+	struct FP5dWarnings : FOutputDevice
+	{
+		int32 Count = 0;
+		FP5dWarnings() { GLog->FlushThreadedLogs(); GLog->AddOutputDevice(this); }
+		~FP5dWarnings() { GLog->RemoveOutputDevice(this); }
+		virtual void Serialize(const TCHAR* Message, ELogVerbosity::Type Verbosity, const FName& Category) override
+		{ if (Category == TEXT("LogSteeringWheel") && Verbosity == ELogVerbosity::Warning) { ++Count; } }
+	};
 	struct FP5dWorld
 	{
 		UWorld* World = UWorld::CreateWorld(EWorldType::Game,false);
@@ -195,6 +205,31 @@ bool FP5dSettings::RunTest(const FString&)
 	FP5dWorld W; auto* Wheel=W.Wheel(); W.Play(); TestTrue(TEXT("Palm allowed"),Wheel->Grabbable->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm)); TestFalse(TEXT("Pinch forbidden"),Wheel->Grabbable->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch));
 	TestFalse(TEXT("No throw"),Wheel->GrabComponent->IsThrowingEnabled()); TestFalse(TEXT("No physics"),Wheel->WheelMesh->IsSimulatingPhysics());
 	TestEqual(TEXT("Multi grab"),Wheel->GrabComponent->GetMultiGrabBehavior(),EIsdkMultiGrabBehavior::MultiGrab); TestEqual(TEXT("Two points"),Wheel->GrabComponent->GetMultiGrabTransformerObject()->MaxGrabPoints(),2); return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5dRuntimeSettings,"vBoR.P5d.R1RuntimeSettingsWithoutConstruction",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5dRuntimeSettings::RunTest(const FString&)
+{
+	FP5dWorld W; auto* Wheel = W.Wheel(); auto* Grabber = P5dPointer(Wheel);
+	TestEqual(TEXT("Valid construction leaves grab collision enabled"),Wheel->GrabBox->GetCollisionEnabled(),ECollisionEnabled::QueryOnly);
+	// construction 없이 실행 초기화만 거침 (레벨에 저장된 잘못된 값 재현, P5d R1-1)
+	Wheel->MaxGrabRadiusCm = Wheel->MinGrabRadiusCm - 1;
+	// 기대한 경고는 UE 가 Verbose 로 낮춤. 공식 계수로 1회 확인함 (P5d R1-1)
+	AddExpectedMessagePlain(TEXT("Missing mesh or invalid wheel limits/radii; grabbing disabled"),ELogVerbosity::Warning);
+	Wheel->PreInitializeComponents(); GLog->FlushThreadedLogs();
+	TestFalse(TEXT("Invalid runtime settings disable Palm"),Wheel->Grabbable->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm));
+	TestEqual(TEXT("Invalid runtime settings disable grab collision"),Wheel->GrabBox->GetCollisionEnabled(),ECollisionEnabled::NoCollision);
+	P5dPose(Wheel,0,0); FP5dTestAccess::Pointer(Wheel,Grabber,EIsdkPointerEventType::Select);
+	TestEqual(TEXT("Invalid runtime settings reject selection"),FP5dTestAccess::Count(Wheel),0); return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5dConstructionSettings,"vBoR.P5d.R1ConstructionDoesNotWarn",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5dConstructionSettings::RunTest(const FString&)
+{
+	FP5dWorld W; auto* Wheel = W.Wheel(); Wheel->MaxGrabRadiusCm = Wheel->MinGrabRadiusCm - 1;
+	FP5dWarnings Warnings;
+	Wheel->OnConstruction(Wheel->GetActorTransform()); Wheel->OnConstruction(Wheel->GetActorTransform()); GLog->FlushThreadedLogs();
+	TestEqual(TEXT("Repeated construction does not warn for invalid settings"),Warnings.Count,0); return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5dSameFrame,"vBoR.P5d.E14LimitAndReleaseSameFrame",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

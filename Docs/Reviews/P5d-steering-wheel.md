@@ -33,7 +33,7 @@
 
 ## 항목
 
-### R1-1 설정 검사가 `OnConstruction`에만 있어 레벨에 놓은 휠에는 실행 때 적용되지 않음 — 열림
+### R1-1 설정 검사가 `OnConstruction`에만 있어 레벨에 놓은 휠에는 실행 때 적용되지 않음 — 반영함 (fix(p5d): validate wheel settings at runtime)
 
 **문제**
 - `bGrabValid`(잡기 허용 여부)는 `OnConstruction`에서만 계산한다(`VBoRSteeringWheel.cpp:69-71`). 그런데 이 변수는 저장되지 않는 일반 변수(기본 true, `VBoRSteeringWheel.h:95`)다. `PreInitializeComponents`의 Palm 허용(`:84`)과 `BeginHold`(`:125`)는 이 저장된 값을 그대로 쓴다.
@@ -55,6 +55,87 @@
   - 선택 이벤트를 넣어도 잡은 손이 0이다.
 - 잘못된 설정으로 `OnConstruction`을 두 번 불러도 경고가 0번이다.
 - 기존 시험은 그대로 통과한다.
+
+## Codex R1 반영 기록 (2026-10-16)
+
+① 바뀐 파일
+- Source/vBoR/Interaction/VBoRSteeringWheel.cpp: 메시·한계·반지름·최소 거리
+  검사, 경고, GrabBox 충돌 설정을 PreInitializeComponents로 이동.
+  OnConstruction은 메시·표시·잡는 상자 배치를 유지.
+- Source/vBoR/P3Probe/P5dSteeringWheelTests.cpp: R1 시험 2개 추가.
+  construction 재호출 없이 반지름 범위를 뒤집고 PreInitializeComponents만
+  호출하여 경고 1회·Palm 거부·충돌 꺼짐·선택 뒤 소유 손 0을 확인.
+  잘못된 설정으로 OnConstruction 2회 호출하여 경고 0회 확인.
+- Docs/Reviews/P5d-steering-wheel.md: R1-1 반영 상태와 검증 기록.
+- HANDOFF.md: Codex 결과 갱신, 이전 결과 보존(git 무시 파일).
+
+② 명세 §6 완료 조건별 결과
+1. 충족: 기존 휠·근사 차 범위 유지, R1-1 실행 초기화 검사 반영.
+2. 충족: 최종 vBoR.* 232개 발견·232개 완료·232 Success·0 Fail.
+   P5d 20/20(기존 18 + R1 2), TEST COMPLETE EXIT CODE 0,
+   프로세스 exit 0. 기존 시험 단언 변경 없음.
+3. 충족: 최종 non-unity(-DisableUnity -Module=vBoR)·unity 모두
+   Result: Succeeded, exit 0, 컴파일 warning/error 0.
+4. 충족: 이 보고를 커밋 본문·리뷰 파일·HANDOFF.md에 기록.
+5. 충족: Quest 3·VR Preview·Blueprint/Details는 not-tested 유지.
+
+검증 기록(Saved/Logs/, git 무시)
+- P5d-R1-nonunity-build-final.log: 성공, exit 0, 경고·오류 0.
+- P5d-R1-unity-build-final.log: 성공, exit 0, 경고·오류 0.
+- P5d-R1-full-tests-final.log: 232/232, P5d 20/20, exit 0.
+- 첫 빌드 2개도 성공. 첫 전체 시험 P5d-R1-full-tests.log는 231/232,
+  exit 255: 새 시험의 별도 FOutputDevice 경고 계수 단언만 실패.
+  UE는 기대한 경고를 Verbose로 낮춤(Core/Private/Misc/AutomationTest.cpp:
+  313-315). 경고 1회 검증은 공식 AddExpectedMessagePlain의 기본
+  Occurrences=1로 확인하도록 중복 계수 단언을 제거함.
+  시험 수정으로 최종 트리가 바뀌어 빌드 2개·전체 시험을 재실행함.
+- 명령: Build.bat vBoREditor Win64 Development
+  -Project=C:\Git\vBoR\vBoR.uproject -WaitMutex
+  -DisablePlugin=OculusInteractionSamples
+  (non-unity에 -DisableUnity -Module=vBoR 추가).
+- 시험: UnrealEditor-Cmd.exe C:\Git\vBoR\vBoR.uproject
+  "-ExecCmds=Automation RunTests vBoR;Quit" -unattended -nullrhi
+  -nosplash -nosound
+  "-DisablePlugins=OculusInteractionSamples,McpAutomationBridge,UnrealAgent"
+  -log=P5d-R1-full-tests-final.log.
+- 샘플 CDO·headless XR·임시 world 로그는 기존 환경 잡음으로 구분.
+  최종 자동화 실패와 vBoR 컴파일 진단은 0.
+
+③ 명세와 다르게 한 것과 이유
+- 동작 차이 없음. R1-1 제안대로 검사·경고·충돌 처리를 실행 초기화로
+  옮김. 경고 1회는 UE 공식 기대 메시지 계수로 검증하고,
+  construction 경고 0회는 별도 로그 수집기로 확인함.
+- 하위 에이전트·자체 리뷰 루프·에디터 MCP 사용 없음.
+- 첫 시험 실패를 고친 뒤 재검증한 것 외 반복 빌드·전체 시험 없음.
+  의도적인 red 실행은 하지 않음. push·PR·머지 없음.
+
+④ 확인한 API 근거(헤더 직접 확인, 추정 없음)
+엔진 경로: C:/Program Files/Epic Games/UE_5.7/Engine/Source/Runtime/.
+- Engine/Classes/GameFramework/Actor.h:3123,3448:
+  PreInitializeComponents 실행 초기화, OnConstruction 배치.
+  Engine/Private/Level.cpp:1880-1885에서 WITH_EDITOR 밖은
+  construction을 다시 실행하지 않고 Finalize로 진행함도 확인.
+- Engine/Classes/Components/PrimitiveComponent.h:1943,2528:
+  SetCollisionEnabled/GetCollisionEnabled.
+- Core/Public/Misc/AutomationTest.h:1815:
+  AddExpectedMessagePlain, 기본 Occurrences=1로 정확한 1회 확인.
+- Core/Public/Misc/OutputDevice.h:145,
+  Core/Public/Misc/OutputDeviceRedirector.h:70,77,88:
+  Serialize, Add/RemoveOutputDevice, FlushThreadedLogs.
+- Plugins/MetaXRInteraction/Source/OculusInteraction/Public/Interaction/
+  IsdkGrabbableComponent.h:138,146:
+  IsGrabInputMethodAllowed/SetGrabInputMethodAllowed.
+
+⑤ 로컬에서 확인할 것
+- 빌드·합성 자동화는 위 최종 로그로 확인함. 리뷰어 재현은
+  Docs/Agent-Workflow.md §2.3·2.4 절차를 따름.
+- 에디터: 잘못된 설정의 Blueprint 자식을 레벨에 놓고 실행 시 잡기가
+  꺼지는지, 프로퍼티 편집마다 경고가 반복되지 않는지 확인 필요.
+  Blueprint·Details·레벨 직접 확인은 not-tested.
+- Quest 3 Link/VR Preview: 계획서 T-08, 명세 §7 전체(한 손·두 손,
+  놓고 다시 잡기, 한계·딸깍, 교차 추적 손실, 레버 근처 오선택,
+  허브 잡기 거부) not-tested. 합성 시험은 기기 검증을 대신하지 않음.
+- 질문 없음. Claude 다음 리뷰 대기.
 
 ## 참고 (항목 아님 — VR에서 볼 것)
 
