@@ -18,6 +18,15 @@
 | 회차 | 날짜 | 리뷰 대상 | 리뷰어 | 결과 |
 |---|---|---|---|---|
 | 1 | 2026-10-15 | `b44dc3c` 전동 판 부모·끼임 반전·버튼·키보드·P1 시험대 게이트 | Claude | **열림 1건(R1-1).** 나머지는 명세대로다. 빌드·시험 재현: non-unity·unity 성공, vBoR 경고·오류 0(Codex 첫 non-unity 로그에서 새 파일 컴파일·경고 0 확인), `vBoR.*` **171/171**, EXIT CODE 0. **Codex 토큰 4.45M(캐시 95%), 약 12분, 하위 에이전트 0, exec 33.** 기존 시험 두 개가 기본 닫힌 게이트와 부딪쳐 실패했고, 고친 뒤 빌드·전체 시험을 한 번 더 했다(실제 실패 때문이라 규칙 안) |
+| 2 | 2026-10-15 | `e5d0155` `B` 끼임 수 유지·시도 요약 로그에 게이트 | Claude | **열린 항목 없음 — 통과.** R1-1 반영 확인. 빌드·시험 재현: non-unity·unity 성공, vBoR 경고·오류 0(Codex 로그에서 바뀐 파일 컴파일·경고 0 확인), `vBoR.*` **171/171**, EXIT CODE 0. **Codex 토큰 2.25M(캐시 96%), 약 5분, 하위 에이전트 0, exec 21, 빌드·전체 시험 각 1번(최종 트리)** |
+
+### 2회차에 확인한 것
+
+- **R1-1:** `ResetPanel(bool bClearCounts = true)`로 자세·상태 되돌리기와 횟수 지우기를 나눴다.
+  - `B`는 `ResetPanel(false)`이다. 닫힘·0°로 돌아가고 경고음은 멈추며, 끼임 수와 경고음 요청 수는 이어진다. `R`은 기본값(true)으로 둘 다 지운다.
+  - `RecordSnapshot`에 `gate state | gate angle | gate obstructions`가 들어간다. 시험이 실제 `LogP1Probe` 줄로 본다: `Trial 1 summary`에 지우기 전 값, 다음 시도 snapshot에 닫힘·0°·끼임 1.
+  - 선택으로 둔 "Recent events" 끼임 한 줄은 넣지 않았다(선택 사항).
+- **범위:** 리뷰 항목 밖으로 바뀐 것이 없다.
 
 ### 1회차에 확인한 것
 
@@ -41,7 +50,7 @@
 
 ## 항목
 
-### R1-1 `B`에서 끼임 횟수가 0이 되고, 시험대 로그에 게이트가 없음 — 반영함 (fix: retain liftgate counts between trials)
+### R1-1 `B`에서 끼임 횟수가 0이 되고, 시험대 로그에 게이트가 없음 — 반영함 (`e5d0155`)
 
 **문제**
 - `B`(다음 시도)는 `Gate->ResetPanel()`을 부른다(`P1LoadBench.cpp:157`). `ResetPanel`은 자세와 함께 `ObstructionCount`·`WarningRequests`도 0으로 만든다(`VBoRPoweredPanel.cpp:104-109`).
