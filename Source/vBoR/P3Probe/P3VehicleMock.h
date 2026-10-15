@@ -56,6 +56,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 글러브박스", meta=(Units="cm", ClampMin="0")) float GloveboxMinAxisDistanceCm = 8;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRHingedPanel> Glovebox;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRAxisPart> GloveboxHandle;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 기어", meta=(Units="cm")) FVector GearPivotCm = FVector(39,-30,70);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 기어", meta=(Units="cm")) FVector GearSizeCm = FVector(2,16,2);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 기어") FRotator GearAxisRotation = FRotator::ZeroRotator;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 기어", meta=(ToolTip="Approximate detent angles in deg")) TArray<float> GearDetentAnglesDeg = {-20,0,20};
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 기어", meta=(Units="deg")) float GearUpThresholdDeg = 15;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 기어", meta=(Units="deg")) float GearDownThresholdDeg = 15;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 기어", meta=(Units="cm")) FVector GearButtonSizeCm = FVector(1.6,1.6,0.6);
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRAxisPart> GearLever;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRPokeButton> GearButton;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRPokeButton> ReachButton;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector FrontKeyTableCm = FVector(330,-90,0);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector RearKeyTableCm = FVector(-330,-90,0);
@@ -69,6 +78,7 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 private:
 	friend struct FP3FlowTestAccess;
+	friend struct FP5bTestAccess;
 	void PlaceReachButton();
 	AVBoRKeyTable* CreateKeyTable(FVector PositionCm, const TCHAR* UnlockTag, const TCHAR* LockTag);
 	UFUNCTION() void KeyUnlockPressed(AVBoRKeyFob* Key);

@@ -64,6 +64,7 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 private:
 	friend struct FP3FlowTestAccess;
+	friend struct FP5bTestAccess;
 	UPROPERTY() TObjectPtr<UVBoRVehicleAlignmentComponent> Alignment;
 	UPROPERTY() TObjectPtr<UVBoRApproachZoneComponent> Approach;
 	UPROPERTY() TObjectPtr<UVBoRSeatZoneComponent> Seat;
