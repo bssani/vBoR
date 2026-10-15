@@ -78,6 +78,21 @@ AVBoRCarryObject::AVBoRCarryObject()
 	StateAudio->SetSound(Sound.Object);
 }
 
+void AVBoRCarryObject::OnConstruction(const FTransform& Transform)
+{
+	Super::OnConstruction(Transform);
+	ApplyBoxSize();
+}
+
+void AVBoRCarryObject::ApplyBoxSize()
+{
+	const FBox Bounds = GetMeshLocalBounds();
+	if (!Bounds.IsValid || Bounds.GetSize().GetMin() <= KINDA_SMALL_NUMBER) { return; }
+	// 같은 root scale 을 메시·simple collision·적재 판정에서 공유함 (P1b D2, cm)
+	BoxSizeCm = BoxSizeCm.GetAbs().ComponentMax(FVector(1));
+	SetActorScale3D(BoxSizeCm / Bounds.GetSize());
+}
+
 void AVBoRCarryObject::PreInitializeComponents()
 {
 	// 자식 설정 반영 뒤 SDK BeginPlay 전에 Palm 만 허용하고 Throwable 을 끔 (P1 D1)
@@ -364,7 +379,7 @@ void AVBoRCarryObject::ReleaseCarry(int32 Hand, const FTransform* TrackedPoses)
 	bBlocked = false;
 	FTransform Goal = LoadTarget ? LoadTarget->GetGoalPose() : GetActorTransform();
 	Goal.SetScale3D(GetActorScale3D());
-	bAssisting = LoadTarget && FVBoRCarryMotion::CanAssist(GetActorTransform(), Goal, LoadTarget->IsStaticFit(this), AssistDistanceCm, AssistAngleDeg);
+	bAssisting = bUsePlacementAssist && LoadTarget && FVBoRCarryMotion::CanAssist(GetActorTransform(), Goal, LoadTarget->IsStaticFit(this), AssistDistanceCm, AssistAngleDeg);
 	bDropping = !bAssisting;
 	ReleaseResult = bAssisting ? TEXT("assisted seating (in progress)") : TEXT("vertical drop");
 	if (bAssisting) { AssistFrom = GetActorTransform(); AssistGoal = Goal; AssistStartedAt = GetWorld()->GetTimeSeconds(); }
@@ -431,6 +446,17 @@ void AVBoRCarryObject::Tick(float DeltaSeconds)
 		FTransform Pose = GetActorTransform();
 		Pose.SetLocation(FVBoRCarryMotion::Drop(Pose.GetLocation(), DropSpeedCmPerSecond, DeltaSeconds));
 		if (!TryMoveToPose(Pose)) { FinishPlacement(); }
+	}
+	// 손실 보류·잡은 상태는 제외함. 레벨 바닥 대신 시험대의 물리 바닥 기준 (P1b D6, cm)
+	if (bDestroyAtFloor && Session.Hand == INDEX_NONE && (bDropping || bReleasedOutside))
+	{
+		const FBox Bounds = GetCollisionBoundsInPose(GetActorTransform(), FTransform::Identity);
+		if (Bounds.IsValid && Bounds.Min.Z <= FloorHeightCm + FloorToleranceCm)
+		{
+			if (bDropping) { FinishPlacement(); }
+			Destroy();
+			return;
+		}
 	}
 	UpdateVisual();
 }

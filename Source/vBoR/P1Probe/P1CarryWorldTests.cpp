@@ -250,7 +250,7 @@ bool FP1CarryMissingCollisionTest::RunTest(const FString& Parameters)
 	AP1LoadBench* Bench = World->SpawnActor<AP1LoadBench>();
 	Bench->Bag = Object;
 	Bench->Tick(0);
-	TestTrue(TEXT("Bench panel shows missing collision cause"), Bench->Panel->Text.ToString().Contains(TEXT("Bag: No simple collision")));
+	TestTrue(TEXT("Bench panel shows missing collision cause"), Bench->Panel->Text.ToString().Contains(TEXT("Stand box: No simple collision")));
 	World->EndPlay(EEndPlayReason::Quit);
 	World->DestroyWorld(false);
 	return true;
@@ -299,6 +299,7 @@ bool FP1CarryCumulativeTest::RunTest(const FString& Parameters)
 	Bag->Tick(1);
 	TestEqual(TEXT("Second inside release increments drop seating"), Bench->GetTotals().DroppedInside, 1);
 	TestEqual(TEXT("Completed holds sum across regrabs"), Bench->GetTotals().HeldSeconds, 5.0);
+	Bag->bUsePlacementAssist = true;
 	Bag->SetActorLocation(Bench->Target->GetActorLocation() + FVector(0, 0, 5));
 	Bag->BeginCarry(0, nullptr, Bag->GetActorTransform());
 	Bag->Session.GrabAt = World->GetTimeSeconds() - 1;

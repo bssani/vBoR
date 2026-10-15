@@ -71,6 +71,8 @@ class VBOR_API AVBoRCarryObject : public AActor
 	GENERATED_BODY()
 public:
 	AVBoRCarryObject();
+	virtual void OnConstruction(const FTransform& Transform) override;
+	UFUNCTION(BlueprintCallable, Category = "Carry") void ApplyBoxSize();
 	virtual void PreInitializeComponents() override;
 	virtual void Tick(float DeltaSeconds) override;
 	void ResetToPose(const FTransform& Pose);
@@ -84,6 +86,17 @@ public:
 	void AdvanceHeldPose(float DeltaSeconds);
 	bool IsBlocked() const { return bBlocked; }
 	const FVBoRCarrySession& GetCarrySession() const { return Session; }
+	bool IsRestingInside() const { return Session.Hand == INDEX_NONE && !bDropping && !bAssisting && LoadTarget && bSeated; }
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry", meta = (Units = "cm", ClampMin = "1"))
+	FVector BoxSizeCm = FVector(45, 35, 30);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry")
+	bool bUsePlacementAssist = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Floor")
+	bool bDestroyAtFloor = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Floor", meta = (Units = "cm"))
+	float FloorHeightCm = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Floor", meta = (Units = "cm", ClampMin = "0"))
+	float FloorToleranceCm = 1;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Carry")
 	TObjectPtr<UStaticMeshComponent> Mesh;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Carry")
@@ -134,6 +147,10 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 private:
+	friend class FP1BoxSizeTest;
+	friend class FP1BoxPlacementTest;
+	friend class FP1BoxSupplyTest;
+	friend class FP1BoxHandsTest;
 	friend class FP1CarryPlacementTest;
 	friend class FP1CarryBlockedGapTest;
 	friend class FP1CarryCumulativeTest;

@@ -37,8 +37,18 @@ void FP1TrialTotals::Add(const FVBoRCarryMetrics& Metrics)
 FP1TrialTotals AP1LoadBench::GetTotals() const
 {
 	FP1TrialTotals Total = CompletedTrials;
-	if (Bag) { Total.Add(Bag->GetMetrics()); }
+	for (const AVBoRCarryObject* Box : Boxes) { if (IsValid(Box)) { Total.Add(Box->GetMetrics()); } }
 	return Total;
+}
+
+int32 AP1LoadBench::GetRestingBoxCount() const
+{
+	int32 Count = 0;
+	for (const AVBoRCarryObject* Box : Boxes)
+	{
+		if (IsValid(Box) && Box->IsRestingInside() && Target && Target->IsObjectInside(Box)) { ++Count; }
+	}
+	return Count;
 }
 
 AP1LoadBench::AP1LoadBench()
@@ -84,13 +94,8 @@ void AP1LoadBench::BeginPlay()
 
 void AP1LoadBench::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	if (Bag)
-	{
-		Bag->OnGrabbed.RemoveDynamic(this, &AP1LoadBench::HandleGrabbed);
-		Bag->OnCarryReleased.RemoveDynamic(this, &AP1LoadBench::HandleCarryReleased);
-		Bag->OnSeated.RemoveDynamic(this, &AP1LoadBench::HandleSeated);
-	}
-	for (AActor* Part : {static_cast<AActor*>(Bag.Get()), static_cast<AActor*>(Target.Get()), static_cast<AActor*>(Trunk.Get())})
+	ClearBoxes(false);
+	for (AActor* Part : {static_cast<AActor*>(Target.Get()), static_cast<AActor*>(Trunk.Get())})
 	{
 		if (IsValid(Part)) { Part->Destroy(); }
 	}
@@ -104,15 +109,18 @@ void AP1LoadBench::Tick(float DeltaSeconds)
 	if (bPlaced)
 	{
 		UpdateCrossing();
-		if (Bag)
+		ReplenishStand();
+		FString State;
+		for (const AVBoRCarryObject* Box : Boxes)
 		{
-			const FString State = Bag->GetStateText();
-			if (State != LastObservedState)
-			{
-				RecordEvent(FString::Printf(TEXT("State %s -> %s"), LastObservedState.IsEmpty() ? TEXT("none") : *LastObservedState, *State));
-				LastObservedState = State;
-				RecordSnapshot(TEXT("State transition snapshot"));
-			}
+			if (!IsValid(Box)) { continue; }
+			State += Box->GetName() + TEXT(": ") + Box->GetStateText() + TEXT(" | ");
+		}
+		if (State != LastObservedState)
+		{
+			RecordEvent(FString::Printf(TEXT("Box states: %s"), *State));
+			LastObservedState = State;
+			RecordSnapshot(TEXT("State transition snapshot"));
 		}
 	}
 	UpdatePanel();
@@ -134,39 +142,37 @@ void AP1LoadBench::ResetAndReposition()
 
 void AP1LoadBench::ResetCrossing()
 {
-	bPreviousBodyBeforeOpening = false;
-	bCrossingRecorded = false;
-	bBlockedAtCrossingRecorded = false;
+	Crossings.Reset();
 	EntranceCrossings = BlockedAtCrossings = 0;
 }
 
 void AP1LoadBench::ResetBagForNextTrial()
 {
-	if (!bPlaced || !Bag) { return; }
+	if (!bPlaced) { return; }
 	// 직전 시도를 먼저 보존함 (B 는 자리와 누적을 유지, P1 R1-6)
 	RecordSnapshot(FString::Printf(TEXT("Trial %d summary"), TrialNumber));
-	CompletedTrials.Add(Bag->GetMetrics());
-	Bag->ResetToPose(BagStartPose());
+	ClearBoxes(true);
+	SpawnBox();
 	++TrialNumber;
 	ResetCrossing();
-	LastObservedState = Bag->GetStateText();
-	RecordEvent(FString::Printf(TEXT("Trial %d: bag returned to stand; bench unchanged"), TrialNumber));
+	LastObservedState.Reset();
+	RecordEvent(FString::Printf(TEXT("Trial %d: all boxes cleared; one box on stand; bench unchanged"), TrialNumber));
 	UpdatePanel();
 }
 
 FTransform AP1LoadBench::BagStartPose() const
 {
-	// Cylinder local Z 를 차량 +Y 로 눕힘. 받침대 윗면에 바닥이 닿음 (D5)
-	return FTransform(GetActorQuat() * FRotator(0, 0, 90).Quaternion(), GetActorTransform().TransformPosition(
-		FVector(-StandBehindOpeningCm, 0, StandTopHeightCm + BagDiameterCm * 0.5f)),
-		Bag ? Bag->GetActorScale3D() : FVector::OneVector);
+	// 새 박스는 받침 윗면보다 0.1 mm 위에 둠 (접촉 수치 오차로 출고가 막히지 않게, P1b D5)
+	return FTransform(GetActorQuat(), GetActorTransform().TransformPosition(
+		FVector(-StandBehindOpeningCm, 0, StandTopHeightCm + BoxSizeCm.Z * 0.5f + 0.01f)));
 }
 
 FTransform AP1LoadBench::GoalPose() const
 {
 	const float FloorZ = Trunk ? Trunk->FloorHeightCm : 75.0f;
-	return FTransform(GetActorQuat() * FRotator(0, 0, 90).Quaternion(), GetActorTransform().TransformPosition(
-		FVector(GoalOffsetCm.X, GoalOffsetCm.Y, FloorZ + GoalOffsetCm.Z)));
+	// 박스 높이가 달라도 아랫면을 바닥에 맞춤 (P1b R1-1, GoalOffsetCm.Z 는 여유 cm)
+	return FTransform(GetActorQuat(), GetActorTransform().TransformPosition(
+		FVector(GoalOffsetCm.X, GoalOffsetCm.Y, FloorZ + BoxSizeCm.Z * 0.5f + GoalOffsetCm.Z)));
 }
 
 void AP1LoadBench::PlaceFromHead(const FTransform& Head)
@@ -174,10 +180,11 @@ void AP1LoadBench::PlaceFromHead(const FTransform& Head)
 	const FRotator Yaw(0, Head.Rotator().Yaw, 0);
 	if (!HandPawn) { HandPawn = Cast<AVBoRHandRigPawn>(UGameplayStatics::GetPlayerPawn(this, 0)); }
 	if (!HandPawn) { RecordEvent(TEXT("Placement waiting for hand pawn")); return; }
+	BoxSizeCm = BoxSizeCm.GetAbs().ComponentMax(FVector(1));
 	FVector Origin = Head.GetLocation() + Yaw.RotateVector(FVector(OpeningForwardCm, 0, 0));
 	// Stage 의 바닥은 Pawn 원점. 머리 높이로 들기 높이를 바꾸지 않음 (P1 R1-3)
 	Origin.Z = HandPawn->GetActorLocation().Z;
-	if (Bag) { Bag->ResetToPose(Bag->GetActorTransform()); } // 손 세션을 먼저 끝냄 (P1 §2 R)
+	ClearBoxes(false);
 	SetActorTransform(FTransform(Yaw, Origin));
 	Stand->SetRelativeLocation(FVector(-StandBehindOpeningCm, 0, StandTopHeightCm - StandSizeCm.Z * 0.5f));
 	Stand->SetRelativeScale3D(StandSizeCm / 100.0f);
@@ -192,19 +199,24 @@ void AP1LoadBench::PlaceFromHead(const FTransform& Head)
 		Target->LoadingRegion->SetBoxExtent(Size * 0.5);
 		Target->LoadingRegion->SetWorldTransform(RegionPose);
 	}
-	if (Bag) { Bag->ResetToPose(BagStartPose()); }
+	if (Target)
+	{
+		Target->GoalSizeCm = BoxSizeCm;
+		Target->OnConstruction(Target->GetActorTransform());
+	}
+	SpawnBox();
 	// 초기 배치와 R 을 입구 통과로 세지 않음 (P1 §2 경로)
 	ResetCrossing();
 	TrialNumber = 1;
 	CompletedTrials = FP1TrialTotals();
 	RecentEvents.Reset();
-	LastObservedState = Bag ? Bag->GetStateText() : FString();
+	LastObservedState.Reset();
 	bPlaced = true;
 	Panel->SetVisibility(true);
 	RecordEvent(TEXT("Bench placed/reset at head yaw; opening +130 cm; stand -100 cm; geometry approximate"));
 	RecordEvent(FString::Printf(TEXT("Physical floor reference: Pawn origin Z=%.2f cm; trial=1; totals cleared"), Origin.Z));
-	RecordEvent(FString::Printf(TEXT("Static target fit=%d (bag length %.1f cm, inside width %.1f cm)"),
-		Target && Bag && Target->IsStaticFit(Bag) ? 1 : 0, BagLengthCm, Trunk ? Trunk->InsideWidthCm : 0.0f));
+	RecordEvent(FString::Printf(TEXT("Static target fit=%d; approximate box %s cm; assistance off"),
+		Target && Bag && Target->IsStaticFit(Bag) ? 1 : 0, *BoxSizeCm.ToString()));
 	UpdatePanel();
 }
 
@@ -218,66 +230,125 @@ void AP1LoadBench::SpawnParts()
 	Target = World->SpawnActorDeferred<AVBoRLoadTarget>(TargetClass, DesiredGoal, this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (Target)
 	{
-		Target->GoalSizeCm = FVector(BagDiameterCm, BagDiameterCm, BagLengthCm);
-		Target->bShowGuide = true;
+		Target->GoalSizeCm = BoxSizeCm;
+		Target->bShowGuide = false;
 		Target->FinishSpawning(DesiredGoal);
 		Target->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	}
-	UStaticMesh* Cylinder = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-	if (!Cylinder) { RecordEvent(TEXT("Engine Cylinder mesh unavailable")); return; }
-	const FVector Extent = Cylinder->GetBoundingBox().GetExtent();
-	if (Extent.GetMin() <= KINDA_SMALL_NUMBER) { RecordEvent(TEXT("Engine Cylinder has invalid bounds")); return; }
-	FTransform Start = BagStartPose();
-	const FVector BagScale(BagDiameterCm / (2 * Extent.X), BagDiameterCm / (2 * Extent.Y), BagLengthCm / (2 * Extent.Z));
-	Start.SetScale3D(BagScale);
+}
+
+void AP1LoadBench::SpawnBox()
+{
+	const FTransform Start = BagStartPose();
+	UWorld* World = GetWorld();
+	if (!World) { return; }
 	Bag = World->SpawnActorDeferred<AVBoRCarryObject>(BagClass, Start, this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (Bag)
 	{
+		Bag->BoxSizeCm = BoxSizeCm;
 		Bag->LoadTarget = Target;
-		Bag->Mesh->SetStaticMesh(Cylinder);
-		// Mesh 가 Actor root 임. FinishSpawning 에도 원통 scale 을 넘겨 형상 유지 (P1 D3)
+		Bag->bUsePlacementAssist = false;
+		Bag->bDestroyAtFloor = true;
+		Bag->FloorHeightCm = GetActorLocation().Z;
 		Bag->FinishSpawning(Start);
 		Bag->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+		Boxes.Add(Bag);
+		AddTickPrerequisiteActor(Bag);
 		Bag->OnGrabbed.AddUniqueDynamic(this, &AP1LoadBench::HandleGrabbed);
 		Bag->OnCarryReleased.AddUniqueDynamic(this, &AP1LoadBench::HandleCarryReleased);
 		Bag->OnSeated.AddUniqueDynamic(this, &AP1LoadBench::HandleSeated);
+		Bag->OnDestroyed.AddUniqueDynamic(this, &AP1LoadBench::HandleBoxDestroyed);
 	}
+	bSourceLifted = false;
+}
+
+void AP1LoadBench::ClearBoxes(bool bPreserveMetrics)
+{
+	for (AVBoRCarryObject* Box : Boxes)
+	{
+		if (!IsValid(Box)) { continue; }
+		if (bPreserveMetrics) { CompletedTrials.Add(Box->GetMetrics()); }
+		Box->OnDestroyed.RemoveDynamic(this, &AP1LoadBench::HandleBoxDestroyed);
+		Box->OnGrabbed.RemoveDynamic(this, &AP1LoadBench::HandleGrabbed);
+		Box->OnCarryReleased.RemoveDynamic(this, &AP1LoadBench::HandleCarryReleased);
+		Box->OnSeated.RemoveDynamic(this, &AP1LoadBench::HandleSeated);
+		RemoveTickPrerequisiteActor(Box);
+		Box->ResetToPose(Box->GetActorTransform());
+		Box->Destroy();
+	}
+	Boxes.Reset();
+	Crossings.Reset();
+	Bag = nullptr;
+	bSourceLifted = false;
+}
+
+void AP1LoadBench::ReplenishStand()
+{
+	if (!bSourceLifted || (IsValid(Bag) && Bag->GetCarrySession().bPaused)) { return; }
+	// 출고 공간에 1 cm 여유가 생겨야 보충함 (손에 든 박스·되돌려 둔 박스와 겹치지 않게, P1b D5)
+	const FTransform Start = BagStartPose();
+	const FBox Slot(-BoxSizeCm * 0.5 - FVector(1), BoxSizeCm * 0.5 + FVector(1));
+	for (const AVBoRCarryObject* Box : Boxes)
+	{
+		if (!IsValid(Box)) { continue; }
+		const FBox Bounds = Box->GetCollisionBoundsInPose(Box->GetActorTransform(), Start);
+		if (Bounds.IsValid && Bounds.Intersect(Slot)) { return; }
+	}
+	SpawnBox();
+	RecordEvent(TEXT("Stand replenished: one approximate box"));
+}
+
+void AP1LoadBench::HandleBoxDestroyed(AActor* Object)
+{
+	AVBoRCarryObject* Box = Cast<AVBoRCarryObject>(Object);
+	if (!Box || !Boxes.Contains(Box)) { return; }
+	CompletedTrials.Add(Box->GetMetrics());
+	RemoveTickPrerequisiteActor(Box);
+	Crossings.Remove(Box);
+	Boxes.Remove(Box);
+	if (Box == Bag) { Bag = nullptr; }
+	RecordEvent(TEXT("Released box reached physical floor; removed"));
 }
 
 void AP1LoadBench::UpdateCrossing()
 {
-	if (!Bag || !Trunk) { bPreviousBodyBeforeOpening = false; return; }
-	// 충돌·안착과 같은 형상으로 입구를 잼 (원통 축 회전 때 외접 상자가 먼저 통과하지 않게, P1 R3 F1)
-	const FBox Bounds = Bag->GetCollisionBoundsInPose(Bag->GetActorTransform(), Trunk->GetActorTransform());
-	if (!Bounds.IsValid)
+	if (!Trunk) { return; }
+	for (AVBoRCarryObject* Box : Boxes)
 	{
-		// 형상이 없던 구간을 통과로 연결하지 않음. 누적 수는 유지 (P1 R3 F1)
-		bPreviousBodyBeforeOpening = false;
-		return;
-	}
-	const double MinX = Bounds.Min.X;
-	const double MaxX = Bounds.Max.X;
-	const bool bBlocked = Bag->IsBlocked();
-	const bool bBodyAtPlane = MinX <= 0.0f && MaxX >= -2.0f;
-	if (!bCrossingRecorded && bPreviousBodyBeforeOpening && MaxX >= 0.0f)
-	{
-		bCrossingRecorded = true;
-		++EntranceCrossings;
-		RecordEvent(FString::Printf(TEXT("Entrance crossing #%d, blocked=%d, bag bounds X [%.1f, %.1f] cm"),
-			EntranceCrossings, bBlocked ? 1 : 0, MinX, MaxX));
-	}
-	if (!bBlockedAtCrossingRecorded && bPreviousBodyBeforeOpening && bBlocked && bBodyAtPlane)
-	{
-		bBlockedAtCrossingRecorded = true;
-		++BlockedAtCrossings;
-		RecordEvent(FString::Printf(TEXT("Blocked at entrance #%d, bag bounds X [%.1f, %.1f] cm"),
-			BlockedAtCrossings, MinX, MaxX));
-	}
-	if (MaxX < -2.0f)
-	{
-		bPreviousBodyBeforeOpening = true;
-		bCrossingRecorded = false;
-		bBlockedAtCrossingRecorded = false;
+		if (!IsValid(Box)) { continue; }
+		FP1BoxCrossing& Crossing = Crossings.FindOrAdd(Box);
+		// 충돌·안착과 같은 형상으로 입구를 잼 (원통 축 회전 때 외접 상자가 먼저 통과하지 않게, P1 R3 F1)
+		const FBox Bounds = Box->GetCollisionBoundsInPose(Box->GetActorTransform(), Trunk->GetActorTransform());
+		if (!Bounds.IsValid)
+		{
+			// 형상이 없던 구간을 통과로 연결하지 않음. 누적 수는 유지 (P1 R3 F1)
+			Crossing.bPreviousBodyBeforeOpening = false;
+			continue;
+		}
+		const double MinX = Bounds.Min.X;
+		const double MaxX = Bounds.Max.X;
+		const bool bBlocked = Box->IsBlocked();
+		const bool bBodyAtPlane = MinX <= 0.0f && MaxX >= -2.0f;
+		if (!Crossing.bCrossingRecorded && Crossing.bPreviousBodyBeforeOpening && MaxX >= 0.0f)
+		{
+			Crossing.bCrossingRecorded = true;
+			++EntranceCrossings;
+			RecordEvent(FString::Printf(TEXT("Entrance crossing #%d, blocked=%d, box bounds X [%.1f, %.1f] cm"),
+				EntranceCrossings, bBlocked ? 1 : 0, MinX, MaxX));
+		}
+		if (!Crossing.bBlockedAtCrossingRecorded && Crossing.bPreviousBodyBeforeOpening && bBlocked && bBodyAtPlane)
+		{
+			Crossing.bBlockedAtCrossingRecorded = true;
+			++BlockedAtCrossings;
+			RecordEvent(FString::Printf(TEXT("Blocked at entrance #%d, box bounds X [%.1f, %.1f] cm"),
+				BlockedAtCrossings, MinX, MaxX));
+		}
+		if (MaxX < -2.0f)
+		{
+			Crossing.bPreviousBodyBeforeOpening = true;
+			Crossing.bCrossingRecorded = false;
+			Crossing.bBlockedAtCrossingRecorded = false;
+		}
 	}
 }
 
@@ -290,13 +361,14 @@ void AP1LoadBench::UpdatePanel()
 	const FP1TrialTotals Total = GetTotals();
 	FString Text = FString::Printf(TEXT("P1 | not-tested | Approximate geometry - not vehicle data\n"
 		"Rig: %s\nStatic target pose: %s | loading region: %s\nEntrance crossing: %d | blocked at crossing: %d\n"
-		"Bag: %s\n%s\nR: reset and re-place | B: next trial, bag only"), *Rig, *StaticFit, *CurrentFit,
+		"Stand box: %s\n%s\nR: reset and re-place | B: clear all boxes, refill stand"), *Rig, *StaticFit, *CurrentFit,
 		EntranceCrossings, BlockedAtCrossings, Bag ? *Bag->GetStateText() : TEXT("unavailable"),
 		Bag ? *Bag->GetMeasurementText() : TEXT("measurements unavailable"));
 	Text += FString::Printf(TEXT("\nTrial: %d | Total grabbed=%d, assisted=%d, drop inside=%d, outside=%d\nTotal held %.3f s | blocked=%d / %.3f s | pauses=%d / %.3f s"),
 		TrialNumber, Total.Grabbed, Total.Assisted, Total.DroppedInside, Total.DroppedOutside, Total.HeldSeconds,
 		Total.BlockedCount, Total.BlockedSeconds, Total.PauseCount, Total.PausedSeconds);
 	Text += FString::Printf(TEXT("\nTotal two-hand entries=%d / %.3f s"), Total.TwoHandEntries, Total.TwoHandSeconds);
+	Text += FString::Printf(TEXT("\nBoxes=%d | resting inside trunk=%d | approximate box %s cm"), Boxes.Num(), GetRestingBoxCount(), *BoxSizeCm.ToString());
 	Text += TEXT("\nRecent events:");
 	for (const FString& Event : RecentEvents) { Text += TEXT("\n") + Event; }
 	Panel->SetText(FText::FromString(Text));
@@ -320,13 +392,14 @@ void AP1LoadBench::RecordEvent(const FString& Event)
 void AP1LoadBench::RecordSnapshot(const FString& Reason)
 {
 	if (!Bag) { return; }
-	const FVBoRCarryMetrics Metrics = Bag->GetMetrics();
+	const FP1TrialTotals Metrics = GetTotals();
 	FString Snapshot = FString::Printf(TEXT("%s | state=%s | static goal pose fit=%d | loading region inside and clear=%d | entrance crossings=%d | blocked at crossing=%d | %s"),
 		*Reason, *Bag->GetStateText(), Target && Target->IsStaticFit(Bag) ? 1 : 0,
 		Target && Target->IsObjectInside(Bag) ? 1 : 0, EntranceCrossings, BlockedAtCrossings, *Bag->GetMeasurementText());
 	Snapshot += FString::Printf(TEXT(" | Trial %d totals: grabbed=%d, assisted=%d, drop inside=%d, outside=%d, held=%.3f s"),
 		TrialNumber, Metrics.Grabbed, Metrics.Assisted, Metrics.DroppedInside, Metrics.DroppedOutside, Metrics.HeldSeconds);
 	Snapshot += FString::Printf(TEXT(" | two-hand entries=%d / %.3f s"), Metrics.TwoHandEntries, Metrics.TwoHandSeconds);
+	Snapshot += FString::Printf(TEXT(" | boxes=%d | resting inside trunk=%d"), Boxes.Num(), GetRestingBoxCount());
 	Snapshot.ReplaceInline(TEXT("\n"), TEXT(" | "));
 	UE_LOG(LogP1Probe, Log, TEXT("%s"), *Snapshot);
 	UpdatePanel();
@@ -334,21 +407,22 @@ void AP1LoadBench::RecordSnapshot(const FString& Reason)
 
 void AP1LoadBench::HandleGrabbed(AVBoRCarryObject* Object)
 {
-	if (Object != Bag) { return; }
+	if (!Boxes.Contains(Object)) { return; }
+	if (Object == Bag) { bSourceLifted = true; }
 	RecordEvent(TEXT("Palm grab"));
 	RecordSnapshot(TEXT("Grab snapshot"));
 }
 
 void AP1LoadBench::HandleCarryReleased(AVBoRCarryObject* Object)
 {
-	if (Object != Bag) { return; }
+	if (!Boxes.Contains(Object)) { return; }
 	RecordEvent(TEXT("Carry released"));
 	RecordSnapshot(TEXT("Release snapshot"));
 }
 
 void AP1LoadBench::HandleSeated(AVBoRCarryObject* Object)
 {
-	if (Object != Bag) { return; }
-	RecordEvent(TEXT("Bag seated"));
+	if (!Boxes.Contains(Object)) { return; }
+	RecordEvent(TEXT("Box seated"));
 	RecordSnapshot(TEXT("Final placement snapshot"));
 }

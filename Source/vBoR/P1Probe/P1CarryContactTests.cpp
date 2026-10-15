@@ -66,6 +66,7 @@ bool FP1CarryDefaultAssistanceTest::RunTest(const FString& Parameters)
 	AVBoRCarryObject* Bag = Fixture.Bag(FVector(0, 0, 205));
 	Bag->SetActorRotation(FQuat::Identity);
 	Bag->LoadTarget = Target;
+	Bag->bUsePlacementAssist = true;
 	Fixture.BeginPlay();
 	UP1CarryTestObserver* Observer = NewObject<UP1CarryTestObserver>(Fixture.World);
 	Bag->OnSeated.AddDynamic(Observer, &UP1CarryTestObserver::OnSeated);
@@ -370,7 +371,8 @@ bool FP1CarryContactStateTest::RunTest(const FString& Parameters)
 	Bench->PlaceFromHead(FTransform(FVector(0, 0, 165)));
 	const FTransform Frame = Bench->Trunk->GetActorTransform();
 	Entrance.Wall(Frame.TransformPosition(FVector(25, 0, 100)), FVector(5, 300, 100));
-	Bench->Bag->SetActorLocation(Frame.TransformPosition(FVector(-20, 0, 100)));
+	Bench->Bag->Mesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cylinder.Cylinder")));
+	Bench->Bag->SetActorTransform(FTransform(Frame.GetRotation() * FRotator(0, 0, 90).Quaternion(), Frame.TransformPosition(FVector(-20, 0, 100)), FVector(0.28, 0.28, 1.2)));
 	Bench->Tick(0);
 	Desired = Bench->Bag->GetActorTransform();
 	Desired.SetLocation(Frame.TransformPosition(FVector(60, 0, 100)));
