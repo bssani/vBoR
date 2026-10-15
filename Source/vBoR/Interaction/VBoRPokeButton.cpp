@@ -116,6 +116,7 @@ void AVBoRPokeButton::HandleState(const FIsdkInteractableStateEvent& Event)
 
 void AVBoRPokeButton::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 {
+	if (PressFilter.IsBound() && !PressFilter.Execute(Event)) { return; }
 	if (Event.Type == EIsdkPointerEventType::Select) { OnButtonPressed.Broadcast(Event); }
 	else if (Event.Type == EIsdkPointerEventType::Unselect) { OnButtonReleased.Broadcast(Event); }
 }

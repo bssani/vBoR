@@ -1,6 +1,7 @@
 #pragma once
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "../Interaction/VBoRKeyFob.h"
 #include "P3VehicleMock.generated.h"
 
 class UStaticMeshComponent;
@@ -14,6 +15,7 @@ class AVBoRHingedDoor;
 class AVBoRHingedPanel;
 class AVBoRPokeButton;
 class AVBoRAxisPart;
+class AVBoRKeyTable;
 
 UCLASS(Blueprintable)
 class VBOR_API AP3VehicleMock : public AActor
@@ -46,12 +48,22 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRAxisPart> InsideAxisHandle;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRHingedPanel> ConsoleLid;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRPokeButton> ReachButton;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector FrontKeyTableCm = FVector(330,-90,0);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector RearKeyTableCm = FVector(-330,-90,0);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="근사 차량") TSubclassOf<AVBoRKeyTable> KeyTableClass;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRKeyTable> FrontKeyTable;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRKeyTable> RearKeyTable;
+	UPROPERTY(BlueprintAssignable, Category="Key") FVBoRKeyEvent OnKeyUnlockPressed;
+	UPROPERTY(BlueprintAssignable, Category="Key") FVBoRKeyEvent OnKeyLockPressed;
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 private:
 	friend struct FP3FlowTestAccess;
 	void PlaceReachButton();
+	AVBoRKeyTable* CreateKeyTable(FVector PositionCm, const TCHAR* UnlockTag, const TCHAR* LockTag);
+	UFUNCTION() void KeyUnlockPressed(AVBoRKeyFob* Key);
+	UFUNCTION() void KeyLockPressed(AVBoRKeyFob* Key);
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Plates;
 	UPROPERTY() TObjectPtr<UStaticMeshComponent> StartMarker;
 	UPROPERTY() TObjectPtr<UWidgetComponent> MockLabel;
