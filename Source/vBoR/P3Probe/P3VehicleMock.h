@@ -65,6 +65,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 기어", meta=(Units="cm")) FVector GearButtonSizeCm = FVector(1.6,1.6,0.6);
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRAxisPart> GearLever;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRPokeButton> GearButton;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 방향지시", meta=(Units="cm")) FVector TurnSignalPivotCm = FVector(39,-44,70);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 방향지시", meta=(Units="cm", ClampMin="0.1")) FVector TurnSignalSizeCm = FVector(2,16,2);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 방향지시") FRotator TurnSignalAxisRotation = FRotator::ZeroRotator;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 방향지시", meta=(ToolTip="Approximate detent angles in deg")) TArray<float> TurnSignalDetentAnglesDeg = {-20,0,20};
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 방향지시", meta=(Units="deg")) float TurnSignalUpThresholdDeg = 15;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 방향지시", meta=(Units="deg")) float TurnSignalDownThresholdDeg = 15;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 방향지시", meta=(Units="deg")) float TurnSignalNudgeDeg = 7;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRAxisPart> TurnSignalLever;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRPokeButton> ReachButton;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector FrontKeyTableCm = FVector(330,-90,0);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector RearKeyTableCm = FVector(-330,-90,0);
@@ -79,6 +87,7 @@ protected:
 private:
 	friend struct FP3FlowTestAccess;
 	friend struct FP5bTestAccess;
+	friend struct FP5cTestAccess;
 	void PlaceReachButton();
 	AVBoRKeyTable* CreateKeyTable(FVector PositionCm, const TCHAR* UnlockTag, const TCHAR* LockTag);
 	UFUNCTION() void KeyUnlockPressed(AVBoRKeyFob* Key);
