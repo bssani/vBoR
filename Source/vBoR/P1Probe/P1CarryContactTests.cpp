@@ -3,6 +3,7 @@
 #include "../Interaction/VBoRCarryObject.h"
 #include "../Interaction/VBoRLoadTarget.h"
 #include "../Interaction/VBoRHandRigPawn.h"
+#include "../Interaction/VBoRPoweredPanel.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -368,6 +369,8 @@ bool FP1CarryContactStateTest::RunTest(const FString& Parameters)
 	Controller->Possess(Entrance.World->SpawnActor<AVBoRHandRigPawn>());
 	AP1LoadBench* Bench = Entrance.World->SpawnActor<AP1LoadBench>();
 	Entrance.BeginPlay();
+	// 입구 뒤 벽의 막힘을 재는 시험이라 게이트는 열어 둠 (P4b D8)
+	Bench->Gate->bStartOpen = true;
 	Bench->PlaceFromHead(FTransform(FVector(0, 0, 165)));
 	const FTransform Frame = Bench->Trunk->GetActorTransform();
 	Entrance.Wall(Frame.TransformPosition(FVector(25, 0, 100)), FVector(5, 300, 100));

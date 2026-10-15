@@ -5,6 +5,7 @@
 #include "P1LoadBenchGameMode.h"
 #include "../Interaction/VBoRCarryObject.h"
 #include "../Interaction/VBoRLoadTarget.h"
+#include "../Interaction/VBoRPoweredPanel.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/TextRenderComponent.h"
@@ -248,6 +249,8 @@ bool FP1BenchHullCrossingTest::RunTest(const FString& Parameters)
 	AP1LoadBench* Bench = World->SpawnActor<AP1LoadBench>();
 	World->InitializeActorsForPlay(FURL());
 	World->GetWorldSettings()->NotifyBeginPlay();
+	// 범퍼·원통 hull 만 비교하는 시험. R·B 뒤에도 열린 입구 유지 (P4b D8)
+	Bench->Gate->bStartOpen = true;
 	for (double Yaw : {0.0, 37.0})
 	{
 		Bench->PlaceFromHead(FTransform(FRotator(0, Yaw, 0), FVector(200, -30, 165)));

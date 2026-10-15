@@ -4,6 +4,7 @@
 #include "../Interaction/VBoRCarryObject.h"
 #include "../Interaction/VBoRLoadTarget.h"
 #include "../Interaction/VBoRHandRigPawn.h"
+#include "../Interaction/VBoRPoweredPanel.h"
 #include "Camera/CameraComponent.h"
 #include "Components/InputComponent.h"
 #include "Components/SceneComponent.h"
@@ -71,6 +72,7 @@ AP1LoadBench::AP1LoadBench()
 	TrunkClass = AP1TrunkMock::StaticClass();
 	BagClass = AVBoRCarryObject::StaticClass();
 	TargetClass = AVBoRLoadTarget::StaticClass();
+	GateClass = AVBoRPoweredPanel::StaticClass();
 }
 
 void AP1LoadBench::BeginPlay()
@@ -95,7 +97,7 @@ void AP1LoadBench::BeginPlay()
 void AP1LoadBench::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	ClearBoxes(false);
-	for (AActor* Part : {static_cast<AActor*>(Target.Get()), static_cast<AActor*>(Trunk.Get())})
+	for (AActor* Part : {static_cast<AActor*>(Gate.Get()), static_cast<AActor*>(Target.Get()), static_cast<AActor*>(Trunk.Get())})
 	{
 		if (IsValid(Part)) { Part->Destroy(); }
 	}
@@ -152,6 +154,7 @@ void AP1LoadBench::ResetBagForNextTrial()
 	// 직전 시도를 먼저 보존함 (B 는 자리와 누적을 유지, P1 R1-6)
 	RecordSnapshot(FString::Printf(TEXT("Trial %d summary"), TrialNumber));
 	ClearBoxes(true);
+	if (Gate) { Gate->ResetPanel(); }
 	SpawnBox();
 	++TrialNumber;
 	ResetCrossing();
@@ -189,6 +192,7 @@ void AP1LoadBench::PlaceFromHead(const FTransform& Head)
 	Stand->SetRelativeLocation(FVector(-StandBehindOpeningCm, 0, StandTopHeightCm - StandSizeCm.Z * 0.5f));
 	Stand->SetRelativeScale3D(StandSizeCm / 100.0f);
 	if (!bPlaced) { SpawnParts(); }
+	if (Gate) { Gate->ResetPanel(); }
 	if (Target) { Target->SetActorTransform(GoalPose()); }
 	if (Target && Trunk)
 	{
@@ -226,6 +230,21 @@ void AP1LoadBench::SpawnParts()
 	if (!World) { return; }
 	Trunk = World->SpawnActor<AP1TrunkMock>(TrunkClass, GetActorTransform());
 	if (Trunk) { Trunk->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform); }
+	if (Trunk && GateClass)
+	{
+		Gate = World->SpawnActorDeferred<AVBoRPoweredPanel>(GateClass, GetActorTransform(), this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+		if (Gate)
+		{
+			// 차 원점은 입구 기준 그대로 두고 축·메시만 치수에 맞춤 (P4b D1·D8, cm)
+			Gate->HingeLocationCm = FVector(0, 0, Trunk->FloorHeightCm + Trunk->InsideHeightCm);
+			Gate->MeshRestFromRoot = FTransform(FQuat::Identity, FVector(-Trunk->PanelThicknessCm * 0.5f, 0,
+				Trunk->FloorHeightCm + Trunk->InsideHeightCm * 0.5f), FVector(Trunk->PanelThicknessCm, Trunk->InsideWidthCm, Trunk->InsideHeightCm) / 100.0);
+			Gate->OpenButtonFromHinge.SetLocation(FVector(-Trunk->PanelThicknessCm - 1, 20, -Trunk->InsideHeightCm + 10));
+			Gate->CloseButtonFromHinge.SetLocation(FVector(-Trunk->PanelThicknessCm - 1, -20, -Trunk->InsideHeightCm + 10));
+			Gate->FinishSpawning(GetActorTransform());
+			Gate->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+		}
+	}
 	const FTransform DesiredGoal = GoalPose();
 	Target = World->SpawnActorDeferred<AVBoRLoadTarget>(TargetClass, DesiredGoal, this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (Target)
@@ -369,6 +388,11 @@ void AP1LoadBench::UpdatePanel()
 		Total.BlockedCount, Total.BlockedSeconds, Total.PauseCount, Total.PausedSeconds);
 	Text += FString::Printf(TEXT("\nTotal two-hand entries=%d / %.3f s"), Total.TwoHandEntries, Total.TwoHandSeconds);
 	Text += FString::Printf(TEXT("\nBoxes=%d | resting inside trunk=%d | approximate box %s cm"), Boxes.Num(), GetRestingBoxCount(), *BoxSizeCm.ToString());
+	if (Gate)
+	{
+		Text += FString::Printf(TEXT("\nApproximate gate: %s | %.1f deg | obstructions=%d | %s: open / %s: close"),
+			*Gate->GetStateText(), Gate->GetAngleDeg(), Gate->GetObstructionCount(), *Gate->OpenKey.ToString(), *Gate->CloseKey.ToString());
+	}
 	Text += TEXT("\nRecent events:");
 	for (const FString& Event : RecentEvents) { Text += TEXT("\n") + Event; }
 	Panel->SetText(FText::FromString(Text));

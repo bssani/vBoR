@@ -10,6 +10,7 @@ class AP1TrunkMock;
 class AVBoRCarryObject;
 class AVBoRLoadTarget;
 class AVBoRHandRigPawn;
+class AVBoRPoweredPanel;
 class UStaticMeshComponent;
 class UTextRenderComponent;
 
@@ -64,6 +65,7 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Bench") TSubclassOf<AP1TrunkMock> TrunkClass;
 	UPROPERTY(EditAnywhere, Category = "Bench") TSubclassOf<AVBoRCarryObject> BagClass;
 	UPROPERTY(EditAnywhere, Category = "Bench") TSubclassOf<AVBoRLoadTarget> TargetClass;
+	UPROPERTY(EditAnywhere, Category = "Bench") TSubclassOf<AVBoRPoweredPanel> GateClass;
 
 	UPROPERTY(VisibleAnywhere, Category = "Bench") TObjectPtr<UStaticMeshComponent> Stand;
 	UPROPERTY(VisibleAnywhere, Category = "Bench") TObjectPtr<UTextRenderComponent> Panel;
@@ -71,6 +73,7 @@ public:
 	UPROPERTY(VisibleAnywhere, Category = "Bench") TObjectPtr<AVBoRCarryObject> Bag;
 	UPROPERTY(VisibleAnywhere, Category = "Bench") TArray<TObjectPtr<AVBoRCarryObject>> Boxes;
 	UPROPERTY(VisibleAnywhere, Category = "Bench") TObjectPtr<AVBoRLoadTarget> Target;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Bench") TObjectPtr<AVBoRPoweredPanel> Gate;
 	bool HasPlaced() const { return bPlaced; }
 	int32 GetEntranceCrossings() const { return EntranceCrossings; }
 	int32 GetBlockedAtCrossings() const { return BlockedAtCrossings; }
