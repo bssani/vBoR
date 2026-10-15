@@ -8,6 +8,7 @@
 #include "../Interaction/VBoRPokeButton.h"
 #include "../Interaction/VBoRKeyTable.h"
 #include "../Interaction/VBoRSteeringWheel.h"
+#include "../Interaction/VBoRTwoAxisPart.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
 #include "Components/WidgetComponent.h"
@@ -40,6 +41,8 @@ AP3VehicleMock::AP3VehicleMock()
 		Part->SetupAttachment(RootComponent); Part->SetStaticMesh(Cube.Object); Part->SetCollisionEnabled(ECollisionEnabled::NoCollision); Plates.Add(Part);
 	}
 	StartMarker = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StartMarker")); StartMarker->SetupAttachment(RootComponent);
+	MirrorSupport = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ApproximateMirrorSupport")); MirrorSupport->SetupAttachment(RootComponent);
+	MirrorSupport->SetStaticMesh(Cube.Object); MirrorSupport->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	StartMarker->SetStaticMesh(Cube.Object); StartMarker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	MockLabel = CreateDefaultSubobject<UWidgetComponent>(TEXT("ApproximationLabel")); MockLabel->SetupAttachment(RootComponent);
 	MockLabel->SetWidgetSpace(EWidgetSpace::World); MockLabel->SetDrawSize(FVector2D(650,100)); MockLabel->SetTwoSided(true); MockLabel->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -48,6 +51,10 @@ AP3VehicleMock::AP3VehicleMock()
 void AP3VehicleMock::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
+	// 받침은 차에 고정함 (거울 회전에 따라 지붕이 움직이지 않게, P5e D8, cm)
+	const double MirrorRoofZ = BodySizeCm.Z-1.5;
+	MirrorSupport->SetRelativeLocation(FVector(MirrorPivotCm.X,MirrorPivotCm.Y,(MirrorRoofZ+MirrorPivotCm.Z)/2));
+	MirrorSupport->SetRelativeScale3D(FVector(1.5,1.5,FMath::Max(0.1,MirrorRoofZ-MirrorPivotCm.Z))/100);
 	DriverEye->SetRelativeLocation(DriverEyeCm); PassengerView->SetRelativeLocation(PassengerEyeCm); RearView->SetRelativeLocation(RearEyeCm);
 	Approach->SetBoxExtent(FVector(BodySizeCm.X/2 + ApproachSurroundCm, BodySizeCm.Y/2 + ApproachSurroundCm, BodySizeCm.Z));
 	// eye 아래 40 cm·위 25 cm 이므로 중심을 7.5 cm 내림 (P3 §2-4)
@@ -166,6 +173,13 @@ void AP3VehicleMock::BeginPlay()
 		SteeringWheel->FinishSpawning(GetActorTransform()); SteeringWheel->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform);
 		Plates[12]->SetHiddenInGame(true);
 	}
+	RearviewMirror = GetWorld()->SpawnActorDeferred<AVBoRTwoAxisPart>(AVBoRTwoAxisPart::StaticClass(),GetActorTransform(),this);
+	if (RearviewMirror)
+	{
+		RearviewMirror->Pivot->SetRelativeLocation(MirrorPivotCm);
+		RearviewMirror->MeshRestFromRoot = FTransform(FQuat::Identity,MirrorCenterCm,MirrorSizeCm/100);
+		RearviewMirror->FinishSpawning(GetActorTransform()); RearviewMirror->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform);
+	}
 	ReachButton = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), FTransform::Identity, this);
 	ReachButton->Tags.Add(TEXT("Car.ReachButton")); ReachButton->HitAreaScale = 1;
 	ReachButton->ButtonMesh->SetRelativeScale3D(FVector(0.04,0.04,0.01));
@@ -222,6 +236,8 @@ void AP3VehicleMock::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (GearLever) { GearLever->Destroy(); }
 	if (TurnSignalLever) { TurnSignalLever->Destroy(); }
 	if (SteeringWheel) { SteeringWheel->Destroy(); }
+	if (RearviewMirror) { RearviewMirror->Destroy(); }
+	if (MirrorSupport) { MirrorSupport->DestroyComponent(); }
 	if (ReachButton) { ReachButton->Destroy(); }
 	if (FrontKeyTable) { FrontKeyTable->Destroy(); }
 	if (RearKeyTable) { RearKeyTable->Destroy(); }

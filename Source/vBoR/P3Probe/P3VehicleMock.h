@@ -17,6 +17,7 @@ class AVBoRPokeButton;
 class AVBoRAxisPart;
 class AVBoRKeyTable;
 class AVBoRSteeringWheel;
+class AVBoRTwoAxisPart;
 
 UCLASS(Blueprintable)
 class VBOR_API AP3VehicleMock : public AActor
@@ -82,6 +83,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 스티어링", meta=(Units="cm", ClampMin="0")) float SteeringMinGrabRadiusCm = 12;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 스티어링", meta=(Units="cm", ClampMin="0")) float SteeringMaxGrabRadiusCm = 24;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRSteeringWheel> SteeringWheel;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 룸미러", meta=(Units="cm")) FVector MirrorPivotCm = FVector(38,0,127);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 룸미러", meta=(Units="cm")) FVector MirrorCenterCm = FVector(35,0,127);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 룸미러", meta=(Units="cm", ClampMin="0.1")) FVector MirrorSizeCm = FVector(2,25,7);
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRTwoAxisPart> RearviewMirror;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<UStaticMeshComponent> MirrorSupport;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRPokeButton> ReachButton;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector FrontKeyTableCm = FVector(330,-90,0);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector RearKeyTableCm = FVector(-330,-90,0);
@@ -98,6 +104,7 @@ private:
 	friend struct FP5bTestAccess;
 	friend struct FP5cTestAccess;
 	friend struct FP5dTestAccess;
+	friend struct FP5eTestAccess;
 	void PlaceReachButton();
 	AVBoRKeyTable* CreateKeyTable(FVector PositionCm, const TCHAR* UnlockTag, const TCHAR* LockTag);
 	UFUNCTION() void KeyUnlockPressed(AVBoRKeyFob* Key);
