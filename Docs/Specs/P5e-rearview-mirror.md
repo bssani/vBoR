@@ -7,7 +7,7 @@
 | 베이스 브랜치 | `main` @ P5d 머지(PR #18, `8351b0d`) 뒤 이 명세 커밋 |
 | 작업 브랜치 | `codex/P5e-rearview-mirror` |
 | 리뷰 파일 | `Docs/Reviews/P5e-rearview-mirror.md` (첫 리뷰 때 생김) |
-| 상태 | 구현 1회차(`50ae1c2`) 리뷰함 — R1-1 반영 대기 |
+| 상태 | 리뷰 2회차 통과(`0a7bb3e`) — 머지 대기 |
 
 ## 0. 결정
 
