@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Editor toolbar icon</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#5b8cff}a:hover{color:#8fb0ff}
+</style>
+</helmet>
+<div style="width: 880px; height: 300px; box-sizing: border-box; padding: 24px; display: flex; gap: 24px; background: #0b0f17; color: #eef2f7; font-family: Roboto, system-ui, sans-serif;">
+
+<div style="flex-grow: 1; display: flex; flex-direction: column; gap: 20px;">
+
+<div style="display: flex; flex-direction: column; gap: 8px;">
+<span style="font-size: 12px; line-height: 16px; color: #9aa6b8;">While playing (Play in editor or VR Preview)</span>
+<div style="height: 44px; box-sizing: border-box; padding: 0 8px; display: flex; align-items: center; gap: 4px; background: #242424; border: 1px solid #383838; border-radius: 6px;">
+<span style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: #2f2f2f;"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#c0c0c0" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="10" height="10" rx="1"></rect></svg></span>
+<span style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#c0c0c0" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M7 5v10M13 5v10"></path></svg></span>
+<span style="width: 1px; height: 24px; margin: 0 6px; background: #383838;"></span>
+<button type="button" aria-label="vBoR Operator" style="height: 32px; box-sizing: border-box; padding: 0 10px 0 6px; display: flex; align-items: center; gap: 6px; border-radius: 4px; border: 1px solid #5b8cff; background: #1c2534; color: #eef2f7; font: 400 13px/18px Roboto, system-ui, sans-serif;"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#5b8cff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.75" y="3.75" width="14.5" height="12.5" rx="2"></rect><path d="M6.5 7v6M10 7v6M13.5 7v6"></path><path d="M5.25 11h2.5M8.75 8.75h2.5M12.25 10.25h2.5"></path></svg>Operator</button>
+</div>
+<div style="margin-left: 96px; width: 320px; box-sizing: border-box; padding: 8px 12px; border-radius: 6px; border: 1px solid #2e3a4e; background: #131a26; display: flex; flex-direction: column; gap: 2px;">
+<span style="font-size: 13px; line-height: 18px; font-weight: 700;">vBoR Operator</span>
+<span style="font-size: 12px; line-height: 16px; color: #9aa6b8;">Show the operator window. Restores it if minimized, reopens it if closed.</span>
+</div>
+</div>
+
+<div style="display: flex; flex-direction: column; gap: 8px;">
+<span style="font-size: 12px; line-height: 16px; color: #9aa6b8;">Not playing — greyed</span>
+<div style="height: 44px; box-sizing: border-box; padding: 0 8px; display: flex; align-items: center; gap: 4px; background: #242424; border: 1px solid #383838; border-radius: 6px;">
+<span style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="#3cc285" aria-hidden="true"><path d="M6 4.5v11l9-5.5z"></path></svg></span>
+<span style="width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 4px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#c0c0c0" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M7 9l3 3 3-3"></path></svg></span>
+<span style="width: 1px; height: 24px; margin: 0 6px; background: #383838;"></span>
+<button type="button" disabled aria-label="vBoR Operator" style="height: 32px; box-sizing: border-box; padding: 0 10px 0 6px; display: flex; align-items: center; gap: 6px; border-radius: 4px; border: 1px solid transparent; background: transparent; color: #6b6b6b; font: 400 13px/18px Roboto, system-ui, sans-serif;"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="#6b6b6b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.75" y="3.75" width="14.5" height="12.5" rx="2"></rect><path d="M6.5 7v6M10 7v6M13.5 7v6"></path><path d="M5.25 11h2.5M8.75 8.75h2.5M12.25 10.25h2.5"></path></svg>Operator</button>
+<span style="margin-left: 8px; font-size: 12px; line-height: 16px; color: #9aa6b8;">Tooltip: Start Play first.</span>
+</div>
+</div>
+
+</div>
+
+<div style="width: 220px; flex-shrink: 0; box-sizing: border-box; padding: 16px; border-radius: 12px; border: 1px solid #2e3a4e; background: #131a26; display: flex; flex-direction: column; align-items: center; gap: 12px;">
+<div style="width: 120px; height: 120px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #1c2534;">
+<svg width="80" height="80" viewBox="0 0 20 20" fill="none" stroke="#5b8cff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Operator panel icon"><rect x="2.75" y="3.75" width="14.5" height="12.5" rx="2"></rect><path d="M6.5 7v6M10 7v6M13.5 7v6"></path><path d="M5.25 11h2.5M8.75 8.75h2.5M12.25 10.25h2.5"></path></svg>
+</div>
+<span style="font-size: 13px; line-height: 18px; font-weight: 700;">Operator panel icon</span>
+<span style="font-size: 12px; line-height: 16px; color: #9aa6b8; text-align: center;">20 × 20 grid, 1.5 px outline. One SVG, tinted blue when enabled and grey when greyed.</span>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":880,"height":300}}'>
+class Component extends DCLogic {
+renderVals() {
+return {};
+}
+}
+</script>
+</body>
+</html>
