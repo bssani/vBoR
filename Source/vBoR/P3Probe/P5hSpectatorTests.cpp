@@ -16,16 +16,30 @@
 #include "Components/StaticMeshComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/WorldSettings.h"
 #include "Interaction/IsdkGrabberComponent.h"
 #include "IsdkRuntimeSettings.h"
 #include "Misc/App.h"
+#include "Fonts/FontMeasure.h"
+#include "Framework/Application/SlateApplication.h"
+#include "Layout/ArrangedChildren.h"
+#include "Rendering/SlateRenderer.h"
+#include "UObject/UnrealType.h"
+#include "Widgets/Text/STextBlock.h"
 
 struct FP5hTestAccess
 {
 	static FString Line(UVBoRSpectatorSubsystem* S) { return S->PartLine; }
 	static bool HasResources(UVBoRSpectatorSubsystem* S) { return S->WidgetRenderer != nullptr || S->SlateWidget.IsValid() || S->RenderTarget != nullptr; }
+	static FVector2D Size() { return UVBoRSpectatorSubsystem::DrawSize; }
+	static TSharedRef<SWidget> Widget(UVBoRSpectatorSubsystem* S, const FText& Mission, const FString& Parts, const FText& Label = FText::GetEmpty())
+	{
+		S->CurrentBanner = {Label.IsEmpty() ? FText::Format(S->MissionLabel,14,14) : Label,Mission,14,14,true};
+		S->PartLine = Parts;
+		return S->MakeWidget();
+	}
 };
 
 namespace
@@ -62,6 +76,15 @@ namespace
 		FVBoRSpectatorBanner Banner() { return VBoRSpectator::Banner(*Runner,FVBoRSpectatorLabels()); }
 	};
 	FString P5hLine(FVBoRSpectatorNames& Names) { return Names.Line(TEXT("Interacting: ")); }
+	void P5hArrange(const TSharedRef<SWidget>& Widget, const FGeometry& Geometry, TArray<FArrangedWidget>& Texts, TArray<FArrangedWidget>& Borders)
+	{
+		if (Widget->GetType() == FName(TEXT("STextBlock"))) { Texts.Emplace(Widget,Geometry); }
+		if (Widget->GetType() == FName(TEXT("SBorder"))) { Borders.Emplace(Widget,Geometry); }
+		FArrangedChildren Children(EVisibility::Visible);
+		Widget->ArrangeChildren(Geometry,Children);
+		for (int32 I = 0; I < Children.Num(); ++I)
+		{ P5hArrange(Children[I].Widget,Children[I].Geometry,Texts,Borders); }
+	}
 	UIsdkGrabberComponent* P5hPointer(AActor* Owner, int32 Hand = 0)
 	{
 		auto* G = NewObject<UIsdkGrabberComponent>(Owner);
@@ -329,6 +352,96 @@ bool FP5hResize::RunTest(const FString&)
 	TestTrue(TEXT("Editable eye ratio resubmitted"),L.Update(FIntPoint(2520,1080),1.5f,0.22f));
 	TestTrue(TEXT("Editable band resubmitted"),L.Update(FIntPoint(2520,1080),1.5f,0.3f));
 	TestTrue(TEXT("Changed layout valid"),L.Layout.IsValid());
+	return true;
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5hBandFit,"vBoR.P5h.E17MeasuredBandFit",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5hBandFit::RunTest(const FString&)
+{
+	if (!TestTrue(TEXT("Slate font services available under nullrhi"),FSlateApplication::IsInitialized())) { return false; }
+	const auto Measure = FSlateApplication::Get().GetRenderer()->GetFontMeasureService();
+	FP5hWorld W; W.World->SpawnActor<AP3VehicleMock>(); W.Play();
+	auto* S = W.World->GetSubsystem<UVBoRSpectatorSubsystem>();
+	TArray<FText> Missions = {S->CompletedMission,S->ExploreMission,S->UnknownMission};
+	for (int32 I = 1; I <= 20; ++I)
+	{
+		if (I == 17) { continue; }
+		FVBoRScenarioStep Step; Step.StepId = FName(*FString::Printf(TEXT("%02d"),I));
+		Missions.Add(VBoRSpectator::MissionText(Step,S->UnknownMission));
+	}
+	// 근사 차에서 이름을 모아 가장 넓은 두 개를 고름 (이름 변경도 시험에 반영, P5h E17)
+	TArray<FString> PartNames;
+	for (TActorIterator<AActor> It(W.World); It; ++It)
+	{
+		if (const auto* Part = Cast<IVBoRSpectatorPart>(*It))
+		{ if (!Part->GetSpectatorName().IsEmpty()) { PartNames.AddUnique(Part->GetSpectatorName().ToString()); } }
+	}
+	const auto Probe = FP5hTestAccess::Widget(S,Missions[0],TEXT("Probe"));
+	Probe->SlatePrepass(1);
+	TArray<FArrangedWidget> ProbeTexts, ProbeBorders;
+	P5hArrange(Probe,FGeometry::MakeRoot(FP5hTestAccess::Size(),FSlateLayoutTransform(1.f)),ProbeTexts,ProbeBorders);
+	if (!TestEqual(TEXT("Label, parts, mission, progress text widgets"),ProbeTexts.Num(),4)) { return false; }
+	const auto LabelFont = StaticCastSharedRef<STextBlock>(ProbeTexts[0].Widget)->GetFont();
+	FText LongestLabel = FText::Format(S->MissionLabel,14,14);
+	for (const FText& Label : {S->ReadyLabel,S->FreeLabel})
+	{ if (Measure->Measure(Label,LabelFont).X > Measure->Measure(LongestLabel,LabelFont).X) { LongestLabel = Label; } }
+	const auto PartFont = StaticCastSharedRef<STextBlock>(ProbeTexts[1].Widget)->GetFont();
+	PartNames.Sort([&](const FString& A, const FString& B) { return Measure->Measure(A,PartFont).X > Measure->Measure(B,PartFont).X; });
+	if (!TestTrue(TEXT("Mock provides at least two named parts"),PartNames.Num() >= 2)) { return false; }
+	const FString LongestParts = S->InteractingPrefix.ToString()+PartNames[0]+TEXT(" · ")+PartNames[1];
+	// 폭을 넘는 에셋 문구도 같은 위젯에 넣음 (말줄임 때 줄 높이·막대 위치 유지, P5h R1-2)
+	const int32 DefaultCount = Missions.Num();
+	Missions.Add(FText::FromString(FString::ChrN(400,TEXT('W'))));
+	for (int32 I = 0; I < Missions.Num(); ++I)
+	{
+		const auto Widget = FP5hTestAccess::Widget(S,Missions[I],LongestParts,LongestLabel);
+		Widget->SlatePrepass(1);
+		TArray<FArrangedWidget> Texts, Borders;
+		P5hArrange(Widget,FGeometry::MakeRoot(FP5hTestAccess::Size(),FSlateLayoutTransform(1.f)),Texts,Borders);
+		if (!TestEqual(TEXT("Three rows with four text widgets"),Texts.Num(),4) || !TestEqual(TEXT("Band border"),Borders.Num(),1)) { return false; }
+		for (int32 T = 0; T < Texts.Num(); ++T)
+		{
+			const auto Text = StaticCastSharedRef<STextBlock>(Texts[T].Widget);
+			const FVector2D Measured = Measure->Measure(Text->GetText(),Text->GetFont());
+			if (I < DefaultCount || T != 2)
+			{ TestTrue(*FString::Printf(TEXT("Text fits allotted width: %s"),*Text->GetText().ToString()),Measured.X <= Texts[T].Geometry.GetLocalSize().X); }
+			else { TestTrue(TEXT("Long asset text exceeds width and needs ellipsis"),Measured.X > Texts[T].Geometry.GetLocalSize().X); }
+			TestTrue(TEXT("Measured font height fits row"),Measure->GetMaxCharacterHeight(Text->GetFont()) <= Texts[T].Geometry.GetLocalSize().Y);
+		}
+		const auto Top = [&](int32 T) { return Texts[T].Geometry.GetAbsolutePosition().Y; };
+		const auto Bottom = [&](int32 T) { return Top(T)+Texts[T].Geometry.GetLocalSize().Y; };
+		TestTrue(TEXT("Parts share label row"),Top(1) >= Top(0) && Bottom(1) <= Bottom(0));
+		TestTrue(TEXT("Header ends before mission"),Bottom(0) <= Top(2));
+		TestTrue(TEXT("Single mission row ends before progress"),Bottom(2) <= Top(3));
+		TestTrue(TEXT("Three desired row heights plus widget padding fit band"),Borders[0].Widget->GetDesiredSize().Y <= Borders[0].Geometry.GetLocalSize().Y);
+		TestTrue(TEXT("Progress stays inside band"),Bottom(3) <= Borders[0].Geometry.GetAbsolutePosition().Y+Borders[0].Geometry.GetLocalSize().Y);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5hConfig,"vBoR.P5h.E18ConfigDefaults",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5hConfig::RunTest(const FString&)
+{
+	UClass* Class = UVBoRSpectatorSubsystem::StaticClass();
+	TestTrue(TEXT("Game config class"),Class->HasAnyClassFlags(CLASS_Config));
+	TestEqual(TEXT("DefaultGame.ini config category"),Class->ClassConfigName,FName(TEXT("Game")));
+	const FName Properties[] = {TEXT("RedrawsPerSecond"),TEXT("EyeAspect"),TEXT("BandHeight"),TEXT("NameHoldSeconds"),
+		TEXT("ReadyLabel"),TEXT("MissionLabel"),TEXT("FreeLabel"),TEXT("CompletedMission"),TEXT("ExploreMission"),TEXT("UnknownMission"),TEXT("InteractingPrefix"),
+		TEXT("BackgroundColor"),TEXT("TextColor"),TEXT("AccentColor"),TEXT("LabelFontSize"),TEXT("MissionFontSize"),TEXT("PartFontSize")};
+	for (FName Name : Properties)
+	{
+		const FProperty* Property = Class->FindPropertyByName(Name);
+		TestTrue(*FString::Printf(TEXT("Config property %s"),*Name.ToString()),Property && Property->HasAnyPropertyFlags(CPF_Config));
+	}
+	auto* Defaults = GetMutableDefault<UVBoRSpectatorSubsystem>();
+	// ini 를 쓰지 않고 CDO 상속만 확인함. 월드 정리 뒤 원래 값 복구 (P5h R1-1)
+	TGuardValue<float> Aspect(Defaults->EyeAspect,1.5f), Band(Defaults->BandHeight,0.25f);
+	FP5hWorld W;
+	const auto* S = W.World->GetSubsystem<UVBoRSpectatorSubsystem>();
+	if (TestNotNull(TEXT("New world subsystem"),S))
+	{
+		TestEqual(TEXT("World inherits configured eye ratio"),S->EyeAspect,1.5f);
+		TestEqual(TEXT("World inherits configured band height"),S->BandHeight,0.25f);
+	}
 	return true;
 }
 #endif

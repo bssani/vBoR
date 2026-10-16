@@ -24,7 +24,6 @@
 
 namespace
 {
-	const FVector2D DrawSize(1920,1080);
 	ISpectatorScreenController* SpectatorScreen(bool bRequireActive = true)
 	{
 		if (!FApp::CanEverRender() || !GEngine || !GEngine->XRSystem.IsValid()) { return nullptr; }
@@ -130,32 +129,31 @@ TSharedRef<SWidget> UVBoRSpectatorSubsystem::MakeWidget()
 		.BorderBackgroundColor_Lambda([this] { return BackgroundColor; }).Padding(FMargin(32,12))
 		[
 			SNew(SVerticalBox)
-			+ SVerticalBox::Slot().FillHeight(1)
+			+ SVerticalBox::Slot().AutoHeight()
 			[
 				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().FillWidth(0.7f).Padding(0,0,24,0)
+				+ SHorizontalBox::Slot().AutoWidth()
 				[
-					SNew(SVerticalBox)
-					+ SVerticalBox::Slot().AutoHeight()
-					[
-						SNew(STextBlock).Text_Lambda([this] { return CurrentBanner.Label; })
-						.Font_Lambda([this] { return FCoreStyle::GetDefaultFontStyle("Bold",LabelFontSize); })
-						.ColorAndOpacity_Lambda([this] { return FSlateColor(AccentColor); })
-					]
-					+ SVerticalBox::Slot().FillHeight(1)
-					[
-						SNew(STextBlock).Text_Lambda([this] { return CurrentBanner.Mission; }).AutoWrapText(true)
-						.Font_Lambda([this] { return FCoreStyle::GetDefaultFontStyle("Regular",MissionFontSize); })
-						.ColorAndOpacity_Lambda([this] { return FSlateColor(TextColor); })
-					]
+					SNew(STextBlock).Text_Lambda([this] { return CurrentBanner.Label; })
+					.Font_Lambda([this] { return FCoreStyle::GetDefaultFontStyle("Bold",LabelFontSize); })
+					.ColorAndOpacity_Lambda([this] { return FSlateColor(AccentColor); })
 				]
-				+ SHorizontalBox::Slot().FillWidth(0.3f).VAlign(VAlign_Center)
+				+ SHorizontalBox::Slot().FillWidth(1).Padding(24,0,0,0).VAlign(VAlign_Center)
 				[
-					SNew(STextBlock).Text_Lambda([this] { return FText::FromString(PartLine); }).AutoWrapText(true)
+					SNew(STextBlock).Text_Lambda([this] { return FText::FromString(PartLine); })
+					.AutoWrapText(false).OverflowPolicy(ETextOverflowPolicy::Ellipsis).Justification(ETextJustify::Right)
 					.Visibility_Lambda([this] { return PartLine.IsEmpty() ? EVisibility::Hidden : EVisibility::Visible; })
 					.Font_Lambda([this] { return FCoreStyle::GetDefaultFontStyle("Regular",PartFontSize); })
 					.ColorAndOpacity_Lambda([this] { return FSlateColor(TextColor); })
 				]
+			]
+			// 미션 폭을 전부 쓰고 한 줄로 제한함 (긴 에셋 문구가 막대를 덮지 않게, P5h R1-2)
+			+ SVerticalBox::Slot().AutoHeight()
+			[
+				SNew(STextBlock).Text_Lambda([this] { return CurrentBanner.Mission; })
+				.AutoWrapText(false).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+				.Font_Lambda([this] { return FCoreStyle::GetDefaultFontStyle("Regular",MissionFontSize); })
+				.ColorAndOpacity_Lambda([this] { return FSlateColor(TextColor); })
 			]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0,4,0,0)
 			[

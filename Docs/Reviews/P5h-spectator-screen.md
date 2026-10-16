@@ -62,7 +62,7 @@
 
 ## 항목
 
-### R1-1 관전 화면 값(비율·띠 높이·글꼴·문구)을 바꿀 곳이 없음 — 열림
+### R1-1 관전 화면 값(비율·띠 높이·글꼴·문구)을 바꿀 곳이 없음 — 반영함 (fix(p5h): configure and fit spectator banner)
 
 **문제:**
 - 값은 `UVBoRSpectatorSubsystem`의 `EditAnywhere` 프로퍼티다(`VBoRSpectatorSubsystem.h:18-34`).
@@ -81,7 +81,7 @@
 - 클래스에 `CLASS_Config`가 있다. 비율·띠 높이·이름 유지 시간·다시 그리는 빈도·글꼴 크기·문구·색 프로퍼티에 `CPF_Config`가 있다.
 - CDO의 `EyeAspect`·`BandHeight`를 바꾸면 새로 만든 게임 월드의 서브시스템이 그 값을 쓴다. 시험 끝에 CDO 값을 되돌린다.
 
-### R1-2 자유모드 완료 문구가 두 줄로 넘어가 진행 막대를 덮음 — 열림
+### R1-2 자유모드 완료 문구가 두 줄로 넘어가 진행 막대를 덮음 — 반영함 (fix(p5h): configure and fit spectator banner)
 
 **문제:**
 - 띠는 1080 기준 237.6 px이고, 위아래 여백 12를 빼면 213.6 px다(`VBoRSpectatorSubsystem.cpp:125-130`).
@@ -110,6 +110,50 @@
 - 가장 긴 꼬리표와, 근사 차 이름 두 개로 만든 가장 긴 부품 줄이 꼬리표 줄에 함께 들어간다.
 - 세 줄 높이(꼬리표 줄·미션·막대 줄)와 여백의 합이 띠 높이 이하다.
 - 폭·높이·여백은 위젯이 쓰는 값에서 읽는다. 위젯을 바꾸면 시험도 따라가게 하기 위해서다.
+
+### Codex 반영 결과 — 2026-10-16
+
+**완료.** R1-1·R1-2 반영, 질문 없음. 커밋 제목: `fix(p5h): configure and fit spectator banner`.
+
+① **바뀐 파일**
+- `Source/vBoR/Spectator/VBoRSpectatorSubsystem.h`: `Config=Game`와 설정 프로퍼티 17개의 `Config`. 위젯과 시험이 같은 렌더 크기를 읽도록 `DrawSize`를 클래스 안으로 옮김.
+- `Source/vBoR/Spectator/VBoRSpectatorSubsystem.cpp`: 꼬리표·부품 이름 / 전체 폭 미션 / 진행 막대의 세 줄. 미션·부품 이름은 한 줄·말줄임.
+- `Source/vBoR/P3Probe/P5hSpectatorTests.cpp`: E17 글꼴·실제 위젯 배치 측정, E18 Config 플래그·CDO 상속 추가. 기존 13개 시험·단언 유지.
+- `Docs/Reviews/P5h-spectator-screen.md`: 두 항목 상태와 이 보고. `HANDOFF.md`는 결과만 갱신(git 제외).
+
+② **명세 §6 완료 조건**
+1. §2의 1–4: 기존 관전 경로·영어 미션·부품 수집을 유지하며 R1-1·R1-2와 시험 추가 완료.
+2. E17·E18 포함 P5h **15/15**, 기존 시험 포함 전체 **291/291** 통과. E17은 원본 19개 기본 문구·완료·탐색·fallback, 가장 넓은 꼬리표·부품 두 이름, 긴 에셋 문구를 실제 `MakeWidget`에 넣음. 위젯의 글꼴·할당 폭·행 높이·border 여백을 읽어 세 줄이 띠 안에 들어가는지 확인. E18은 설정 17개의 플래그와 변경한 CDO 값이 새 게임 월드 서브시스템에 상속되는지 확인한 뒤 복구.
+3. 최종 트리 non-unity(`-DisableUnity -Module=vBoR`)·unity 모두 `Result: Succeeded`, 프로세스 exit 0, vBoR 컴파일 경고·오류 0. 로컬 도구 플러그인의 StructUtils 폐기 안내는 별도 환경 잡음.
+4. 이 보고를 커밋 본문·HANDOFF에 기록.
+5. Quest 3·TV·VR 기능 시험 상태 **not-tested** 유지.
+
+**최종 검증 로그**(`Saved/Logs/`, git 제외):
+- `P5hR1-FinalNonUnity.log`: `Result: Succeeded`, exit 0.
+- `P5hR1-FinalUnity.log`: `Result: Succeeded`, exit 0.
+- `P5hR1-Full.log`: 발견 291, 완료 291, Success 291, Fail 0, P5h 15/15, `TEST COMPLETE. EXIT CODE: 0`, 프로세스 exit 0. 전체 시험 1회. P0Buck.E8Persistence도 성공하여 재실행 없음.
+- 자동화 종료 뒤 `UnrealEditor*` 프로세스 0개.
+- 중간 확인: `P5hR1-Focused.log` P5h 15/15, exit 0. 이때 임시 E3 수정이 들어 있었으며, 최종 전체 시험에는 원래 E3 시험으로 복구됨.
+
+③ **명세와 다르게 한 것과 이유**
+- 제품 구현은 제안대로 반영. ini·설정 화면·콘솔 명령·에셋 변경 없음. 관전 경로·4:3 계산·러너·부품 동작 변경 없음. MCP·하위 에이전트·자체 리뷰 없음.
+- 절차상 추가 빌드 발생: 명세 E3 표에 맞춰 기존 시험을 바꿨다가, 개정 이력의 기존 시험 유지 지시를 늦게 확인해 취소함. 중간 트리 non-unity·unity와 P5h 확인 후, 복구한 최종 C++ 트리로 non-unity·unity를 다시 확인함. 전체 시험은 최종 트리에서 한 번만 실행. 초기 로그는 `P5hR1-NonUnity.log`·`P5hR1-Unity.log`.
+
+④ **API 헤더 확인**
+엔진 기준 경로: `C:/Program Files/Epic Games/UE_5.7/Engine/Source/`.
+- `Runtime/CoreUObject/Public/UObject/ObjectMacros.h:207` CLASS_Config, `:433` CPF_Config.
+- `Runtime/Slate/Public/Widgets/Text/STextBlock.h:115` AutoWrapText, `:148` OverflowPolicy, `:180` GetText, `:274` GetFont.
+- `Runtime/SlateCore/Public/Styling/SlateTypes.h:78` ETextOverflowPolicy(Ellipsis).
+- `Runtime/SlateCore/Public/Rendering/SlateRenderer.h:87` GetFontMeasureService.
+- `Runtime/SlateCore/Public/Fonts/FontMeasure.h:39` Measure, `:172` GetMaxCharacterHeight.
+- `Runtime/SlateCore/Public/Widgets/SWidget.h:669` SlatePrepass, `:849` ArrangeChildren.
+- `Runtime/SlateCore/Public/Layout/Geometry.h:197` MakeRoot.
+새 플러그인 API 사용 없음. 위 API는 헤더와 실제 로컬 빌드·시험으로 확인했으며 추정에 의존하지 않음.
+
+⑤ **로컬에서 확인할 것**
+- 빌드·headless 자동화는 위 로그로 확인 완료.
+- Blueprint·에셋·레벨 작업 없음. ini 값 변경 실사용은 명세 §7의 DefaultGame.ini 절을 사용자가 넣고 다시 실행해 확인(이번에는 ini를 쓰지 않고 CDO 상속만 자동화).
+- Quest 3 Link + TV, 명세 §7 전체: 띠가 TV에만 보이는지, 4:3 시야, 몇 m 거리 글꼴 가독성·말줄임, 미션·진행 막대·FREE MODE 전환, 부품 이름과 해제 후 유지 시간, F6 재진입, 확장 디스플레이 배치. 계획서 **T-08 및 리허설 — not-tested**.
 
 ## 질문
 
