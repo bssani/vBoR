@@ -15,6 +15,7 @@ struct VBOR_API FVBoRScenarioStep
 	GENERATED_BODY()
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="원본 시나리오 번호. 17번 없음")) FName StepId;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="참가자에게 보이는 한국어 안내")) FText Instruction;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="TV 관전용 영어 문구. 비어 있으면 단계 ID 기본표 사용")) FText SpectatorText;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="단계를 완료할 현재 상태 또는 확인 규칙")) EVBoRStepRule Rule = EVBoRStepRule::Confirm;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="규칙 대상의 Actor 또는 Component 태그. 하나만 일치해야 함")) FName TargetTag;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(Units="deg", ClampMin="0", ToolTip="문 열림 목표 각도. 합격 기준이 아닌 자리값")) float DoorOpenDeg = 45;

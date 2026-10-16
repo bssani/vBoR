@@ -120,3 +120,8 @@ void AVBoRPokeButton::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 	if (Event.Type == EIsdkPointerEventType::Select) { OnButtonPressed.Broadcast(Event); }
 	else if (Event.Type == EIsdkPointerEventType::Unselect) { OnButtonReleased.Broadcast(Event); }
 }
+
+bool AVBoRPokeButton::IsSpectatorInteracting() const
+{
+	return Poke && Poke->GetInteractableState() == EIsdkInteractableState::Select;
+}

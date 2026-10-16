@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "Interaction/IsdkIInteractableState.h"
 #include "Interaction/Pointable/IsdkInteractionPointerEvent.h"
+#include "VBoRSpectatorPart.h"
 #include "VBoRPokeButton.generated.h"
 
 class UStaticMeshComponent;
@@ -19,11 +20,15 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVBoRPokeButtonEvent, const FIsdkInt
 DECLARE_DELEGATE_RetVal_OneParam(bool, FVBoRPokePressFilter, const FIsdkInteractionPointerEvent&);
 
 UCLASS(Blueprintable)
-class VBOR_API AVBoRPokeButton : public AActor
+class VBOR_API AVBoRPokeButton : public AActor, public IVBoRSpectatorPart
 {
 	GENERATED_BODY()
 public:
 	AVBoRPokeButton();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spectator") FText SpectatorName;
+	virtual FText GetSpectatorName() const override { return SpectatorName; }
+	virtual bool IsSpectatorInteracting() const override;
+
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void PreInitializeComponents() override;
 	FVector GetRestFrontWorld() const;

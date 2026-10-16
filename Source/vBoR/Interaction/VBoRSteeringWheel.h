@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "Interaction/Grabbable/IsdkTransformer.h"
 #include "Interaction/Grabbable/IsdkGrabTransformerComponent.h"
+#include "VBoRSpectatorPart.h"
 #include "VBoRSteeringWheel.generated.h"
 
 class UStaticMeshComponent;
@@ -47,11 +48,15 @@ private:
 };
 
 UCLASS(Blueprintable)
-class VBOR_API AVBoRSteeringWheel : public AActor
+class VBOR_API AVBoRSteeringWheel : public AActor, public IVBoRSpectatorPart
 {
 	GENERATED_BODY()
 public:
 	AVBoRSteeringWheel();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spectator") FText SpectatorName;
+	virtual FText GetSpectatorName() const override { return SpectatorName; }
+	virtual bool IsSpectatorInteracting() const override { return !HandOrder.IsEmpty(); }
+
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void PreInitializeComponents() override;
 	virtual void Tick(float DeltaSeconds) override;

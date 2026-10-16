@@ -5,6 +5,7 @@
 #include "Interaction/Grabbable/IsdkTransformer.h"
 #include "Interaction/Grabbable/IsdkGrabTransformerComponent.h"
 #include "VBoRTwoAxisMotion.h"
+#include "VBoRSpectatorPart.h"
 #include "VBoRTwoAxisPart.generated.h"
 
 class UBoxComponent;
@@ -42,11 +43,15 @@ private:
 };
 
 UCLASS(Blueprintable)
-class VBOR_API AVBoRTwoAxisPart : public AActor
+class VBOR_API AVBoRTwoAxisPart : public AActor, public IVBoRSpectatorPart
 {
 	GENERATED_BODY()
 public:
 	AVBoRTwoAxisPart();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spectator") FText SpectatorName;
+	virtual FText GetSpectatorName() const override { return SpectatorName; }
+	virtual bool IsSpectatorInteracting() const override { return Motion.GrabHand != INDEX_NONE || Motion.PushHand != INDEX_NONE; }
+
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void PreInitializeComponents() override;
 	virtual void Tick(float DeltaSeconds) override;

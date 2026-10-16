@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "Interaction/Grabbable/IsdkTransformer.h"
 #include "Interaction/Grabbable/IsdkGrabTransformerComponent.h"
+#include "VBoRSpectatorPart.h"
 #include "VBoRAxisPart.generated.h"
 
 class UStaticMeshComponent;
@@ -64,11 +65,15 @@ private:
 };
 
 UCLASS(Blueprintable)
-class VBOR_API AVBoRAxisPart : public AActor
+class VBOR_API AVBoRAxisPart : public AActor, public IVBoRSpectatorPart
 {
 	GENERATED_BODY()
 public:
 	AVBoRAxisPart();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spectator") FText SpectatorName;
+	virtual FText GetSpectatorName() const override { return SpectatorName; }
+	virtual bool IsSpectatorInteracting() const override { return HoldingGrabber != nullptr; }
+
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void PreInitializeComponents() override;
 	virtual void Tick(float DeltaSeconds) override;

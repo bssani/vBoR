@@ -5,6 +5,7 @@
 #include "Interaction/Grabbable/IsdkTransformer.h"
 #include "Interaction/Grabbable/IsdkGrabTransformerComponent.h"
 #include "VBoRKnobMotion.h"
+#include "VBoRSpectatorPart.h"
 #include "VBoRKnob.generated.h"
 
 class UBoxComponent;
@@ -45,11 +46,15 @@ private:
 };
 
 UCLASS(Blueprintable)
-class VBOR_API AVBoRKnob : public AActor
+class VBOR_API AVBoRKnob : public AActor, public IVBoRSpectatorPart
 {
 	GENERATED_BODY()
 public:
 	AVBoRKnob();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spectator") FText SpectatorName;
+	virtual FText GetSpectatorName() const override { return SpectatorName; }
+	virtual bool IsSpectatorInteracting() const override { return Motion.GrabHand != INDEX_NONE; }
+
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void PreInitializeComponents() override;
 	virtual void Tick(float DeltaSeconds) override;
