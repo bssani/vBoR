@@ -1,4 +1,7 @@
 #include "P3VehicleMock.h"
+#include "../Interaction/VBoRFloorRoute.h"
+#include "Components/BoxComponent.h"
+#include "Components/SplineComponent.h"
 #include "../Interaction/VBoREyePointComponent.h"
 #include "../Interaction/VBoRViewpointComponent.h"
 #include "../Interaction/VBoRParticipantZones.h"
@@ -41,7 +44,11 @@ AP3VehicleMock::AP3VehicleMock()
 		UStaticMeshComponent* Part = CreateDefaultSubobject<UStaticMeshComponent>(Name);
 		Part->SetupAttachment(RootComponent); Part->SetStaticMesh(Cube.Object); Part->SetCollisionEnabled(ECollisionEnabled::NoCollision); Plates.Add(Part);
 	}
+	Footprint = CreateDefaultSubobject<UBoxComponent>(TEXT("CarFootprint")); Footprint->SetupAttachment(RootComponent);
+	Footprint->ComponentTags.Add(TEXT("Car.Footprint")); Footprint->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Footprint->SetHiddenInGame(true);
 	StartMarker = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StartMarker")); StartMarker->SetupAttachment(RootComponent);
+	StartMarker->ComponentTags.Add(TEXT("Car.Start"));
 	MirrorSupport = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ApproximateMirrorSupport")); MirrorSupport->SetupAttachment(RootComponent);
 	MirrorSupport->SetStaticMesh(Cube.Object); MirrorSupport->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	KnobSupport = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ApproximateKnobConsoleSupport")); KnobSupport->SetupAttachment(RootComponent);
@@ -54,6 +61,8 @@ AP3VehicleMock::AP3VehicleMock()
 void AP3VehicleMock::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
+	Footprint->SetRelativeLocation(FVector(0,0,BodySizeCm.Z*0.5));
+	Footprint->SetBoxExtent(FVector(BodySizeCm.X*0.5 + FootprintMarginCm, BodySizeCm.Y*0.5 + FootprintMarginCm, BodySizeCm.Z*0.5));
 	// 받침은 차에 고정함 (노브 회전에 따라 콘솔이 움직이지 않게, P5f D8, cm)
 	KnobSupport->SetRelativeLocation(KnobSupportCenterCm); KnobSupport->SetRelativeScale3D(KnobSupportSizeCm/100);
 	// 받침은 차에 고정함 (거울 회전에 따라 지붕이 움직이지 않게, P5e D8, cm)
@@ -79,7 +88,7 @@ void AP3VehicleMock::OnConstruction(const FTransform& Transform)
 	Plate(10,DriverEyeCm+FVector(-28,0,-40),FVector(8,46,60));
 	Plate(11,DashboardCenterCm,DashboardSizeCm);
 	Plate(12,DriverEyeCm+FVector(55,0,-28),FVector(5,30,30));
-	// 차 앞 +X 에서 -X 를 바라봄. 시작 머리 기록은 그대로 둠 (U-10, P4a D7)
+	// 차 앞 +X 에서 -X 를 바라봄. 이 표시 위에서 시작 머리 기록함 (U-10, P3b D9)
 	StartMarker->SetRelativeLocation(FVector(X+StartOutsideCm,0,0.5)); StartMarker->SetRelativeRotation(FRotator(0,180,0)); StartMarker->SetRelativeScale3D(FVector(0.6,0.6,0.005));
 	MockLabel->SetRelativeLocation(FVector(X+StartOutsideCm-40,0,60)); MockLabel->SetRelativeRotation(FRotator::ZeroRotator); MockLabel->SetRelativeScale3D(FVector(0.08));
 	PlaceReachButton();
@@ -91,6 +100,10 @@ void AP3VehicleMock::BeginPlay()
 	MockLabel->SetSlateWidget(SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 32)).ColorAndOpacity(FLinearColor::Yellow).Text(FText::FromString(TEXT("시작 위치 / 근사 형상·자리값"))));
 	FrontKeyTable = CreateKeyTable(FrontKeyTableCm, TEXT("Car.FrontKey.Unlock"), TEXT("Car.FrontKey.Lock"));
 	RearKeyTable = CreateKeyTable(RearKeyTableCm, TEXT("Car.RearKey.Unlock"), TEXT("Car.RearKey.Lock"));
+	DriverDoorRoute = GetWorld()->SpawnActorDeferred<AVBoRFloorRoute>(AVBoRFloorRoute::StaticClass(), GetActorTransform(), this);
+	DriverDoorRoute->Tags.Add(TEXT("Route.ToDriverDoor"));
+	DriverDoorRoute->Spline->SetSplinePoints(DriverDoorRoutePointsCm, ESplineCoordinateSpace::Local);
+	DriverDoorRoute->FinishSpawning(GetActorTransform()); DriverDoorRoute->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	Door = GetWorld()->SpawnActorDeferred<AVBoRHingedDoor>(AVBoRHingedDoor::StaticClass(), FTransform(FRotator(0,180,0).Quaternion(), GetActorTransform().TransformPosition(DoorHingeCm)), this);
 	const FTransform DoorWorld(FRotator(0,GetActorRotation().Yaw+180,0), GetActorTransform().TransformPosition(DoorHingeCm));
 	Door->Tags.Add(TEXT("Car.DriverDoor")); Door->SpectatorName = FText::FromString(TEXT("Driver Door"));
@@ -254,6 +267,7 @@ void AP3VehicleMock::PlaceReachButton()
 
 void AP3VehicleMock::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (DriverDoorRoute) { DriverDoorRoute->Destroy(); }
 	if (Door) { Door->Destroy(); }
 	if (OutsideAxisHandle) { OutsideAxisHandle->Destroy(); }
 	if (InsideAxisHandle) { InsideAxisHandle->Destroy(); }

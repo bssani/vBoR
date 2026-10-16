@@ -203,6 +203,11 @@ void UVBoRVehicleAlignmentComponent::AdvanceSwitch(double DeltaSeconds)
 	}
 }
 
+USceneComponent* UVBoRVehicleAlignmentComponent::GetCurrentEye() const
+{
+	return CurrentViewpoint ? static_cast<USceneComponent*>(CurrentViewpoint.Get()) : BaseEye.Get();
+}
+
 bool UVBoRVehicleAlignmentComponent::ReadWorldHead(FTransform& OutHead) const
 {
 	if (!AlignmentPawn || !GEngine || !GEngine->XRSystem.IsValid()) { return false; }

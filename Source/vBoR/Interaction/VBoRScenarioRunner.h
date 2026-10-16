@@ -17,6 +17,7 @@ class UArrowComponent;
 class UStaticMeshComponent;
 class STextBlock;
 class SBorder;
+class AVBoRFloorRoute;
 
 enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel, ReapplyAlignment };
 enum class EVBoRCommandSource : uint8 { Participant, Operator };
@@ -84,6 +85,7 @@ private:
 	friend struct FP5bTestAccess;
 	friend struct FP5gTestAccess;
 	friend struct FP5iTestAccess;
+	friend struct FP3bTestAccess;
 	UPROPERTY() TObjectPtr<UVBoRVehicleAlignmentComponent> Alignment;
 	UPROPERTY() TObjectPtr<UVBoRApproachZoneComponent> Approach;
 	UPROPERTY() TObjectPtr<UVBoRSeatZoneComponent> Seat;
@@ -95,6 +97,14 @@ private:
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> MarkerRing;
 	UPROPERTY() TArray<TObjectPtr<UObject>> Targets;
 	UPROPERTY() TArray<TObjectPtr<USceneComponent>> Markers;
+	UPROPERTY() TArray<TObjectPtr<AVBoRFloorRoute>> Routes;
+	UPROPERTY() TObjectPtr<USceneComponent> StartMarker;
+	double RouteDwellSeconds = 0;
+	bool bRouteArrived = false, bRouteAllowed = false;
+	FString FloorRouteNotice;
+	void BeginRoute();
+	void SampleRoute(bool bTracked, const FTransform& Head, double DeltaSeconds);
+	void RecordStartFallback();
 	TMap<TWeakObjectPtr<AVBoRPokeButton>, int32> ButtonCounts;
 	TSharedPtr<STextBlock> PanelText;
 	TSharedPtr<STextBlock> OperatorText;
@@ -141,7 +151,7 @@ private:
 	void PlacePanel();
 	void HandlePawnMoved();
 	void SampleHead(bool bTracked, const FTransform& Head, double DeltaSeconds);
-	void PlacePanelAtHead(const FTransform& Head);
+	void PlacePanelAtHead(const FTransform& Head, bool bAtRouteArrival = false);
 	bool RecordHead(const TCHAR* Label, bool bTracked, const FTransform& Head);
 	FString ActionLabel() const;
 	void RefreshPanel();

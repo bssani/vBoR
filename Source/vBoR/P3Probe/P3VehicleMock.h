@@ -19,6 +19,8 @@ class AVBoRKeyTable;
 class AVBoRSteeringWheel;
 class AVBoRTwoAxisPart;
 class AVBoRKnob;
+class AVBoRFloorRoute;
+class UBoxComponent;
 
 UCLASS(Blueprintable)
 class VBOR_API AP3VehicleMock : public AActor
@@ -37,6 +39,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm", ClampMin="4")) FVector DashboardSizeCm;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) float ApproachSurroundCm = 150;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) float StartOutsideCm = 250;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<UBoxComponent> Footprint;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm", ClampMin="0")) float FootprintMarginCm = 20;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(ToolTip="차 기준 경로 점 (근사 형상·자리값, cm)")) TArray<FVector> DriverDoorRoutePointsCm = {FVector(360,-20,0), FVector(330,-150,0), FVector(150,-165,0), FVector(-65,-165,0)};
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRFloorRoute> DriverDoorRoute;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<UVBoREyePointComponent> DriverEye;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<UVBoRViewpointComponent> PassengerView;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<UVBoRViewpointComponent> RearView;

@@ -33,6 +33,7 @@ public:
 	int32 ReapplyCompletions = 0;
 	FString Describe() const;
 	bool ReadWorldHead(FTransform& OutHead) const;
+	USceneComponent* GetCurrentEye() const;
 	FString DescribeHead(bool bTracked, const FVector& WorldHead) const;
 	FVBoRPawnMoved OnPawnMoved;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="정렬") TObjectPtr<UVBoREyePointComponent> BaseEye;

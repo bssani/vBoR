@@ -23,7 +23,7 @@ struct FVBoRCommandDecision
 
 struct FVBoROperatorStatus
 {
-	FString Mode, Title, Mission, Progress, Waiting, Alignment, Seat, Counts, Discards, LastCommand;
+	FString Mode, Title, Mission, Progress, Waiting, Alignment, Seat, Counts, Discards, LastCommand, FloorRouteNotice;
 	bool bNeedsCheck = false, bApplied = false;
 };
 
