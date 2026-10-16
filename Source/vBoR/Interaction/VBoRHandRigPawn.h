@@ -17,6 +17,7 @@ class VBOR_API UVBoRHandRigLeft : public UIsdkHandRigComponentLeft
 public:
 	UVBoRHandRigLeft();
 	bool ReadPalmGrab(bool& bOutClosed) const;
+	bool ReadPinchGrab(bool& bOutClosed) const;
 };
 
 UCLASS()
@@ -26,6 +27,7 @@ class VBOR_API UVBoRHandRigRight : public UIsdkHandRigComponentRight
 public:
 	UVBoRHandRigRight();
 	bool ReadPalmGrab(bool& bOutClosed) const;
+	bool ReadPinchGrab(bool& bOutClosed) const;
 };
 
 UCLASS(Blueprintable)

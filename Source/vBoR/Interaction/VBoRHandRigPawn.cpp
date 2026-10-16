@@ -12,6 +12,7 @@
 #include "Rig/IsdkGrabInteractionRigComponent.h"
 #include "Interaction/IsdkGrabberComponent.h"
 #include "HandPoseDetection/IsdkHandPalmGrabRecognizer.h"
+#include "HandPoseDetection/IsdkHandFingerPinchGrabRecognizer.h"
 #include "StructTypesNonGenerated.h"
 
 namespace
@@ -45,6 +46,13 @@ bool UVBoRHandRigLeft::ReadPalmGrab(bool& bOutClosed) const
 	return true;
 }
 
+bool UVBoRHandRigLeft::ReadPinchGrab(bool& bOutClosed) const
+{
+	// OpenXR 의 SDK 인식기와 같은 상태를 읽음 (추적 복구 뒤 실제 놓기 확인, P5e D6)
+	if (!PinchGrabRecognizer) { return false; }
+	bOutClosed = PinchGrabRecognizer->IsActive(); return true;
+}
+
 UVBoRHandRigRight::UVBoRHandRigRight()
 {
 	RigModifiersToSpawn.Add(UIsdkPokeLimiterRigModifier::StaticClass());
@@ -57,6 +65,12 @@ bool UVBoRHandRigRight::ReadPalmGrab(bool& bOutClosed) const
 	if (!PalmGrabRecognizer) { return false; }
 	bOutClosed = PalmGrabRecognizer->IsActive();
 	return true;
+}
+
+bool UVBoRHandRigRight::ReadPinchGrab(bool& bOutClosed) const
+{
+	if (!PinchGrabRecognizer) { return false; }
+	bOutClosed = PinchGrabRecognizer->IsActive(); return true;
 }
 
 AVBoRHandRigPawn::AVBoRHandRigPawn()
