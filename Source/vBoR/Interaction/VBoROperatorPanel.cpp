@@ -59,8 +59,8 @@ namespace
 void SVBoROperatorPanel::Tick(const FGeometry& Geometry, double CurrentTime, float DeltaTime)
 {
 	SCompoundWidget::Tick(Geometry,CurrentTime,DeltaTime);
-	if (!Runner.IsValid()) { return; }
-	for (auto& Entry : Buttons) { Entry.Value->SetButtonStyle(&Styles[static_cast<int32>(Runner->GetOperatorStyle(Entry.Key))]); }
+	Snapshot = Runner.IsValid() ? Runner->GetOperatorSnapshot() : FVBoROperatorSnapshot{};
+	for (auto& Entry : Buttons) { Entry.Value->SetButtonStyle(&Styles[static_cast<int32>(Snapshot.Buttons[static_cast<int32>(Entry.Key)].Style)]); }
 }
 
 FReply SVBoROperatorPanel::OnPreviewKeyDown(const FGeometry&, const FKeyEvent& Event)
@@ -72,15 +72,15 @@ FReply SVBoROperatorPanel::OnPreviewKeyDown(const FGeometry&, const FKeyEvent& E
 TSharedRef<SWidget> SVBoROperatorPanel::Button(EVBoROperatorButton Id)
 {
 	const auto& Shortcut = VBoROperator::Shortcut(Id);
-	auto Style = [this,Id]() { return Runner.IsValid() ? Runner->GetOperatorStyle(Id) : EVBoROperatorStyle::Disabled; };
+	auto Style = [this,Id]() { return Snapshot.Buttons[static_cast<int32>(Id)].Style; };
 	const auto Badge = SNew(STextBlock).Font(Font(12)).ColorAndOpacity(VBoROperator::Color(TEXT("9aa6b8")))
-		.Text_Lambda([this,Id]() { return FText::FromString(Runner.IsValid() ? Runner->OperatorButtonBadge(Id) : FString()); });
+		.Text_Lambda([this,Id]() { return FText::FromString(Snapshot.Buttons[static_cast<int32>(Id)].Badge); });
 	TSharedPtr<SButton> Widget;
 	const auto Box = SNew(SBox).HeightOverride(40)
 	[
 		SAssignNew(Widget,SButton).ButtonStyle(&Styles[static_cast<int32>(Style())]).ContentPadding(FMargin(0))
-		.IsEnabled_Lambda([this,Id]() { return Runner.IsValid() && Runner->EvaluateOperatorButton(Id).bAccepted; })
-		.ToolTipText_Lambda([this,Id]() { return FText::FromString(Runner.IsValid() ? Runner->EvaluateOperatorButton(Id).Reason : FString()); })
+		.IsEnabled_Lambda([this,Id]() { return Runner.IsValid() && Snapshot.Buttons[static_cast<int32>(Id)].Decision.bAccepted; })
+		.ToolTipText_Lambda([this,Id]() { return FText::FromString(Snapshot.Buttons[static_cast<int32>(Id)].Decision.Reason); })
 		.OnClicked_Lambda([this,Id]() { if (Runner.IsValid()) { Runner->PressOperatorButton(Id); } return FReply::Handled(); })
 		[
 			SNew(SHorizontalBox)
@@ -111,13 +111,14 @@ TSharedRef<SWidget> SVBoROperatorPanel::Section(const TCHAR* Title, TSharedRef<S
 void SVBoROperatorPanel::Construct(const FArguments& Args)
 {
 	Runner = Args._Runner;
+	Snapshot = Runner.IsValid() ? Runner->GetOperatorSnapshot() : FVBoROperatorSnapshot{};
 	for (int32 I = 0; I < 5; ++I) { Styles[I] = VBoROperator::ButtonStyle(static_cast<EVBoROperatorStyle>(I)); }
 	PanelBrush = FSlateRoundedBoxBrush(VBoROperator::Color(TEXT("131a26")),12.f,VBoROperator::Color(TEXT("2e3a4e")),1.f);
 	WarningBrush = FSlateRoundedBoxBrush(VBoROperator::Color(TEXT("131a26")),12.f,VBoROperator::Color(TEXT("f2b544")),1.f);
 	auto StatusText = [this](FString FVBoROperatorStatus::*Field, float Px, const TCHAR* Hex, bool bBold = false)
 	{
 		return SNew(STextBlock).Font(Font(Px,bBold)).ColorAndOpacity(VBoROperator::Color(Hex)).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
-			.Text_Lambda([this,Field]() { return FText::FromString(Runner.IsValid() ? Runner->GetOperatorStatus().*Field : FString()); });
+			.Text_Lambda([this,Field]() { return FText::FromString(Snapshot.Status.*Field); });
 	};
 	auto StatusRow = [&](const TCHAR* Label, FString FVBoROperatorStatus::*Field)
 	{
@@ -132,7 +133,7 @@ void SVBoROperatorPanel::Construct(const FArguments& Args)
 			+ SHorizontalBox::Slot().FillWidth(1).Padding(4,0,0,0)[Button(Right)];
 	};
 	const auto AlignmentText = StatusText(&FVBoROperatorStatus::Alignment,15,TEXT("eef2f7"));
-	AlignmentText->SetColorAndOpacity(TAttribute<FSlateColor>::CreateLambda([this]() { return FSlateColor(VBoROperator::Color(Runner.IsValid() && Runner->GetOperatorStatus().bApplied ? TEXT("3cc285") : TEXT("f2b544"))); }));
+	AlignmentText->SetColorAndOpacity(TAttribute<FSlateColor>::CreateLambda([this]() { return FSlateColor(VBoROperator::Color(Snapshot.Status.bApplied ? TEXT("3cc285") : TEXT("f2b544"))); }));
 	ChildSlot
 	[
 		SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).BorderBackgroundColor(VBoROperator::Color(TEXT("0b0f17"))).Padding(0)
@@ -169,7 +170,7 @@ void SVBoROperatorPanel::Construct(const FArguments& Args)
 				+ SVerticalBox::Slot().AutoHeight().Padding(24,16,24,0)
 				[
 					SNew(SBorder).BorderImage(&WarningBrush).Padding(16)
-					.Visibility_Lambda([this]() { return Runner.IsValid() && Runner->GetOperatorStatus().bNeedsCheck ? EVisibility::Visible : EVisibility::Collapsed; })
+					.Visibility_Lambda([this]() { return Snapshot.Status.bNeedsCheck ? EVisibility::Visible : EVisibility::Collapsed; })
 					[WrappedText(TEXT("Alignment needs check. Re-apply the setup alignment from the driver seat."),14,TEXT("f2b544"))]
 				]
 				+ SVerticalBox::Slot().AutoHeight().Padding(24,16,24,0)
@@ -188,7 +189,7 @@ void SVBoROperatorPanel::Construct(const FArguments& Args)
 					[Section(TEXT("Alignment and view"),SNew(SVerticalBox)
 						+ SVerticalBox::Slot().AutoHeight()[Button(EVBoROperatorButton::Reapply)]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0,8)[SNew(STextBlock).Font(Font(12)).ColorAndOpacity(VBoROperator::Color(TEXT("9aa6b8"))).AutoWrapText(true)
-							.Text_Lambda([this]() { return FText::FromString(Runner.IsValid() ? Runner->ReapplyHelp() : FString()); })]
+							.Text_Lambda([this]() { return FText::FromString(Snapshot.ReapplyHelp); })]
 						+ SVerticalBox::Slot().AutoHeight()[Button(EVBoROperatorButton::Info)]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0,8,0,0)[WrappedText(TEXT("If the Quest tracking space moved, save again in the P0-c Buck setup level."),12,TEXT("9aa6b8"))])]]
 				+ SVerticalBox::Slot().AutoHeight().Padding(24,16,24,0)

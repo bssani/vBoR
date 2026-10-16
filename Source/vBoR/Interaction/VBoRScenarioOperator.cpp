@@ -36,15 +36,26 @@ namespace
 	}
 	bool SeatAction(EVBoRFlowCommand Action)
 	{ return Action == EVBoRFlowCommand::ReturnBase || Action == EVBoRFlowCommand::Viewpoint || Action == EVBoRFlowCommand::Passenger || Action == EVBoRFlowCommand::Rear; }
+	EVBoROperatorStyle ButtonStyle(EVBoROperatorButton Button, const FVBoRCommandDecision& Decision, bool bReapplyPrimary, const FString& Badge)
+	{
+		if (!Decision.bAccepted) { return EVBoROperatorStyle::Disabled; }
+		if ((Button == EVBoROperatorButton::Confirm && !bReapplyPrimary) || (Button == EVBoROperatorButton::Reapply && bReapplyPrimary)) { return EVBoROperatorStyle::Primary; }
+		if (Badge == TEXT("Current")) { return EVBoROperatorStyle::Current; }
+		return Button == EVBoROperatorButton::Reload ? EVBoROperatorStyle::Danger : EVBoROperatorStyle::Secondary;
+	}
 }
 
 UVBoRViewpointComponent* AVBoRScenarioRunner::CommandViewpoint(EVBoRFlowCommand Action) const
 {
+	if (!SeatAction(Action) || Action == EVBoRFlowCommand::ReturnBase) { return nullptr; }
 	if (Action == EVBoRFlowCommand::Viewpoint)
 	{ return CurrentStep() && CurrentStep()->Rule == EVBoRStepRule::Viewpoint && Targets.IsValidIndex(StepIndex) ? Cast<UVBoRViewpointComponent>(Targets[StepIndex]) : nullptr; }
 	const FName Tag = Action == EVBoRFlowCommand::Passenger ? FName(TEXT("Car.PassengerView")) : FName(TEXT("Car.RearView"));
 	UVBoRViewpointComponent* Found = nullptr;
 	int32 Matches = 0;
+#if WITH_DEV_AUTOMATION_TESTS
+	++OperatorViewpointScans;
+#endif
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 	{
 		TArray<UVBoRViewpointComponent*> Views; It->GetComponents(Views);
@@ -57,6 +68,11 @@ UVBoRViewpointComponent* AVBoRScenarioRunner::CommandViewpoint(EVBoRFlowCommand 
 }
 
 FVBoRCommandDecision AVBoRScenarioRunner::EvaluateCommand(const FVBoRFlowCommand& Command) const
+{
+	return EvaluateCommand(Command, CommandViewpoint(Command.Action));
+}
+
+FVBoRCommandDecision AVBoRScenarioRunner::EvaluateCommand(const FVBoRFlowCommand& Command, UVBoRViewpointComponent* Viewpoint) const
 {
 	auto Reject = [](EVBoRDiscard Kind, const TCHAR* English, const TCHAR* Korean)
 	{ return FVBoRCommandDecision{false, Kind, English, Korean}; };
@@ -76,11 +92,11 @@ FVBoRCommandDecision AVBoRScenarioRunner::EvaluateCommand(const FVBoRFlowCommand
 	}
 	if (Action == EVBoRFlowCommand::IgnoreAlignment)
 	{
-		if (Alignment && Alignment->IsSwitching()) { return Reject(EVBoRDiscard::Transition, TEXT("View transition in progress"), TEXT("명령 버림 — 전환 중")); }
 		if (bFreeMode) { return Reject(EVBoRDiscard::Rule, TEXT("No steps in free mode"), TEXT("명령 버림 — 자유모드에는 단계 없음")); }
 		if (!bRunning && !ValidationProblems.IsEmpty()) { return Reject(EVBoRDiscard::None, TEXT("Scenario tag validation failed"), TEXT("명령 버림 — 태그 검사 실패는 무시할 수 없음")); }
 		// 이미 시작했으면 원래처럼 상태·센 값 유지함 (P5i D3, no-op 버튼 흐림)
 		if (bRunning) { return Reject(EVBoRDiscard::None, TEXT("Scenario already started"), TEXT("")); }
+		if (Alignment && Alignment->IsSwitching()) { return Reject(EVBoRDiscard::Transition, TEXT("View transition in progress"), TEXT("명령 버림 — 전환 중")); }
 		return {};
 	}
 	if (!bRunning && !bFreeMode && Action != EVBoRFlowCommand::Restart)
@@ -93,7 +109,7 @@ FVBoRCommandDecision AVBoRScenarioRunner::EvaluateCommand(const FVBoRFlowCommand
 	{
 		if (bFreeMode && !bOperator && (!Alignment || !Alignment->IsSwitching()) && (Command.bConfirmLocked || ConfirmLockRemaining > 0 || bPanelPlacementPending))
 		{ return Reject(EVBoRDiscard::Lock, TEXT("Panel placement locked"), TEXT("좌석 명령 버림 — 패널 다시 놓기 잠금")); }
-		const FString Reason = Alignment ? Alignment->SwitchRejection(CommandViewpoint(Action), Action == EVBoRFlowCommand::ReturnBase) : FString(TEXT("Alignment component missing"));
+		const FString Reason = Alignment ? Alignment->SwitchRejection(Viewpoint, Action == EVBoRFlowCommand::ReturnBase) : FString(TEXT("Alignment component missing"));
 		if (!Reason.IsEmpty())
 		{ return {false, EVBoRDiscard::Transition, Reason, FString::Printf(TEXT("시점 명령 %s | 버림"), bOperator ? TEXT("진행자") : TEXT("참가자"))}; }
 		return {};
@@ -196,20 +212,45 @@ FVBoROperatorStatus AVBoRScenarioRunner::GetOperatorStatus() const
 
 FString AVBoRScenarioRunner::OperatorButtonBadge(EVBoROperatorButton Button) const
 {
+	return OperatorButtonBadge(Button, CommandViewpoint(FlowAction(Button)));
+}
+
+FString AVBoRScenarioRunner::OperatorButtonBadge(EVBoROperatorButton Button, UVBoRViewpointComponent* Viewpoint) const
+{
 	if (Button == EVBoROperatorButton::Info) { return bOperatorInfo ? TEXT("On") : TEXT("Off"); }
 	if (!Alignment || Alignment->IsSwitching()) { return FString(); }
 	if ((Button == EVBoROperatorButton::Driver && Alignment->IsBaseViewpoint()) ||
-		((Button == EVBoROperatorButton::Passenger || Button == EVBoROperatorButton::Rear) && Alignment->IsAtViewpoint(CommandViewpoint(FlowAction(Button))))) { return TEXT("Current"); }
+		((Button == EVBoROperatorButton::Passenger || Button == EVBoROperatorButton::Rear) && Alignment->IsAtViewpoint(Viewpoint))) { return TEXT("Current"); }
 	return FString();
 }
 
 EVBoROperatorStyle AVBoRScenarioRunner::GetOperatorStyle(EVBoROperatorButton Button) const
 {
-	if (!EvaluateOperatorButton(Button).bAccepted) { return EVBoROperatorStyle::Disabled; }
 	const bool bReapplyPrimary = Alignment && Alignment->State == EVBoRAlignmentState::NeedsCheck && EvaluateOperatorButton(EVBoROperatorButton::Reapply).bAccepted;
-	if ((Button == EVBoROperatorButton::Confirm && !bReapplyPrimary) || (Button == EVBoROperatorButton::Reapply && bReapplyPrimary)) { return EVBoROperatorStyle::Primary; }
-	if (OperatorButtonBadge(Button) == TEXT("Current")) { return EVBoROperatorStyle::Current; }
-	return Button == EVBoROperatorButton::Reload ? EVBoROperatorStyle::Danger : EVBoROperatorStyle::Secondary;
+	return ButtonStyle(Button, EvaluateOperatorButton(Button), bReapplyPrimary, OperatorButtonBadge(Button));
+}
+
+FVBoROperatorSnapshot AVBoRScenarioRunner::GetOperatorSnapshot() const
+{
+	FVBoROperatorSnapshot Snapshot;
+	Snapshot.Status = GetOperatorStatus();
+	Snapshot.ReapplyHelp = ReapplyHelp();
+	// 좌석별 탐색 결과를 판정·꼬리표에 같이 씀 (P5i R1-3, frame 당 두 번만 월드 순회)
+	for (const auto& Shortcut : VBoROperator::Shortcuts())
+	{
+		const auto Button = Shortcut.Button;
+		auto& State = Snapshot.Buttons[static_cast<int32>(Button)];
+		UVBoRViewpointComponent* Viewpoint = CommandViewpoint(FlowAction(Button));
+		State.Decision = Button == EVBoROperatorButton::Info ? EvaluateOperatorButton(Button) : EvaluateCommand({FlowAction(Button), EVBoRCommandSource::Operator, GetToken()}, Viewpoint);
+		State.Badge = OperatorButtonBadge(Button, Viewpoint);
+	}
+	const bool bReapplyPrimary = Snapshot.Status.bNeedsCheck && Snapshot.Buttons[static_cast<int32>(EVBoROperatorButton::Reapply)].Decision.bAccepted;
+	for (const auto& Shortcut : VBoROperator::Shortcuts())
+	{
+		auto& State = Snapshot.Buttons[static_cast<int32>(Shortcut.Button)];
+		State.Style = ButtonStyle(Shortcut.Button, State.Decision, bReapplyPrimary, State.Badge);
+	}
+	return Snapshot;
 }
 
 FString AVBoRScenarioRunner::ReapplyHelp() const
@@ -230,6 +271,8 @@ void AVBoRScenarioRunner::ShowOperatorWindow()
 			.ScreenPosition(Placement.Position).ClientSize(Placement.ClientSize).AdjustInitialSizeAndPositionForDPIScale(!Placement.bRemembered)
 			[Content];
 		OperatorWindow->SetWidgetToFocusOnActivate(Content);
+		OperatorWindow->SetOnWindowClosed(FOnWindowClosed::CreateLambda([WeakRunner = TWeakObjectPtr<AVBoRScenarioRunner>(this)](const TSharedRef<SWindow>& Window)
+		{ if (WeakRunner.IsValid()) { WeakRunner->HandleOperatorWindowClosed(Window); } }));
 		FSlateApplication::Get().AddWindow(OperatorWindow.ToSharedRef());
 	}
 	if (OperatorWindow->IsWindowMinimized()) { OperatorWindow->Restore(); }
@@ -239,7 +282,15 @@ void AVBoRScenarioRunner::ShowOperatorWindow()
 void AVBoRScenarioRunner::CloseOperatorWindow()
 {
 	if (!OperatorWindow) { return; }
-	FVBoROperatorPlacement::Session().Remember(OperatorWindow->GetPositionInScreen(), OperatorWindow->GetClientSizeInScreen());
-	if (FSlateApplication::IsInitialized()) { FSlateApplication::Get().RequestDestroyWindow(OperatorWindow.ToSharedRef()); }
+	const auto Window = OperatorWindow.ToSharedRef();
+	HandleOperatorWindowClosed(Window);
+	if (FSlateApplication::IsInitialized()) { FSlateApplication::Get().RequestDestroyWindow(Window); }
+}
+
+void AVBoRScenarioRunner::HandleOperatorWindowClosed(const TSharedRef<SWindow>& Window)
+{
+	// EndPlay 뒤 늦게 온 닫힘은 새 창·기억한 자리를 건드리지 않음 (P5i R1-1)
+	if (OperatorWindow != Window) { return; }
+	FVBoROperatorPlacement::Session().Remember(Window->GetPositionInScreen(), Window->GetClientSizeInScreen());
 	OperatorWindow.Reset();
 }

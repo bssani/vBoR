@@ -82,7 +82,7 @@
 
 ### R1-1 — 창을 Alt+F4·작업 표시줄로 닫으면 `ShowOperatorWindow`가 다시 만들지 않음
 
-- 상태: **열림**
+- 상태: **반영함 (fix(p5i): restore window and command behavior)**
 - **문제:** `Interaction/VBoRScenarioOperator.cpp:224`는 `OperatorWindow` 포인터가 비어 있을 때만 창을 만든다. 창이 밖에서 닫혀도 이 포인터는 비지 않는다.
   - 닫기 버튼을 없앤 것(`:228` `HasCloseButton(false)`)은 Slate 테두리의 버튼만 숨긴다. 엔진은 Alt+F4를 막지 않는다(엔진 `Runtime/ApplicationCore/Private/Windows/WindowsApplication.cpp:2286-2289` "Allow alt+f4 to close the window"). `SC_CLOSE`는 `WM_CLOSE`로 넘어가고(`:2941-2948`), Slate는 그 창을 없앤다(`Runtime/Slate/Private/Framework/Application/SlateApplication.cpp:7239-7260` → `RequestDestroyWindow`). 작업 표시줄 오른쪽 클릭 "창 닫기"도 같은 `SC_CLOSE`다.
   - 그 뒤 `ShowOperatorWindow`는 만들기를 건너뛴다. `IsWindowMinimized`는 죽은 native 창에서 거짓이고(엔진 `Runtime/SlateCore/Private/Widgets/SWindow.cpp:1504-1512`), `BringToFront`(`:236`)는 아무것도 하지 않는다.
@@ -99,7 +99,7 @@
 
 ### R1-2 — `Start without alignment`(O)의 전환 중 검사를 앞으로 옮겨 기존 센 값이 바뀜
 
-- 상태: **열림**
+- 상태: **반영함 (fix(p5i): restore window and command behavior)**
 - **문제:** `Interaction/VBoRScenarioOperator.cpp:79`는 O를 볼 때 시점 전환 중인지를 맨 먼저 본다. 옛 `Dispatch`(`main`의 `VBoRScenarioRunner.cpp:347-353`)는 O를 전환 검사(`:381`)보다 먼저 처리했다. 자유모드면 규칙 버림, 이미 시작했으면 기록·센 값 없이 무시했다. 그래서 두 경우가 달라졌다.
   - 진행 중 좌석 암전 때 O: 지금은 `TransitionDiscards` +1, 기록 `명령 버림 — 전환 중`. 전에는 아무것도 세지 않았다.
   - 자유모드 좌석 암전 때 O: 지금은 `TransitionDiscards`. 전에는 `RuleDiscards`.
@@ -112,7 +112,7 @@
 
 ### R1-3 — 진행자 창이 매 frame 월드 전체를 약 18번 훑음
 
-- 상태: **열림**
+- 상태: **반영함 (fix(p5i): restore window and command behavior)**
 - **문제:** 창의 lambda가 판정 함수를 frame마다 따로 부르고, 좌석 판정은 부를 때마다 월드의 모든 Actor와 component를 돈다. 아래 수는 코드를 읽어 센 것이다(측정 아님).
   - `CommandViewpoint`(`Interaction/VBoRScenarioOperator.cpp:41-57`)는 `TActorIterator`로 모든 Actor를 돌고, Actor마다 `GetComponents`를 두 번 해 배열 두 개를 만든다.
   - 좌석 버튼 하나에 frame마다 판정 4번: `Tick`의 모양(`Interaction/VBoROperatorPanel.cpp:63`), 이름·키 글자색(`:89`·`:95`, 둘 다 `GetOperatorStyle`), 켜짐(`:82`). `GetOperatorStyle`(`VBoRScenarioOperator.cpp:206-213`)은 동승석·2열에서 꼬리표(`:202`)로 `CommandViewpoint`를 한 번 더 부른다. 운전석 판정(`:96`)도 쓰지 않는 `Car.RearView`를 찾느라 월드를 돈다.
@@ -133,3 +133,49 @@
 - **E7**은 판정 함수와, 그 함수로 만든 결과 문구를 비교한다. `Dispatch`가 판정을 그대로 쓰므로 일치는 구조상 당연하다. 옛 `Dispatch` 동작이 남았는지는 기존 시험 291개가 그대로 통과한 것으로 본다. R1-2는 그 시험들이 보지 않던 틈이다.
 - **E1**의 두 번째 단언(`GIsAutomationTesting`)은 `-nullrhi`에서 `CanEverRender`가 이미 거짓이라 그 분기만 따로 보지 못한다. 자동화로 대신할 방법이 없어 받아들인다.
 - **"Waiting for"**는 태그 검사 실패로 시작하지 못할 때도 `Alignment check`로 나온다(`VBoRScenarioOperator.cpp:185`). 고치지 않아도 된다. 그때는 VR 안 진행자 줄이 태그 문제를 보인다.
+
+
+## Codex 리뷰 1회차 반영 결과
+
+완료 — P5i 리뷰 1회차 R1-1–R1-3 반영 (2026-10-16, Codex 앱).
+
+- 브랜치: codex/P5i-operator-panel, 시작 6988cd6 위 새 커밋.
+- 커밋 제목: fix(p5i): restore window and command behavior
+- R1-1·R1-2·R1-3 모두 반영함. 미해결 질문 없음. Claude 다음 리뷰 대기.
+
+① 바뀐 파일
+- Source/vBoR/Interaction/VBoRScenarioOperator.cpp: 창 닫힘 콜백·공통 자리 기억, O 검사 순서 복원, 프레임 스냅숏 생성과 공통 판정/스타일 사용.
+- Source/vBoR/Interaction/VBoRScenarioRunner.h: 닫힘 처리·스냅숏 API, EvaluateCommand의 내부 시점 인자 overload, 자동화 전용 순회 계수.
+- Source/vBoR/Interaction/VBoROperatorPanel.h, .cpp: 상태·12개 버튼 판정/모양/꼬리표·설명을 Tick에서 한 번 갱신하고 Slate attribute는 스냅숏만 읽음.
+- Source/vBoR/P3Probe/P5iOperatorPanelTests.cpp: 회귀시험 3개 추가, E20 기대 전환 버림 수 5→4, E23에 상태 변경 후 Tick 추가.
+- Docs/Reviews/P5i-operator-panel.md: 세 항목 상태와 이 보고. HANDOFF.md는 git 무시 파일에 별도 기록.
+
+② 완료 조건 및 리뷰 항목별 상태
+- §6-1 / R1-1: SetOnWindowClosed에서 TWeakObjectPtr 러너를 확인하고 자리·client 크기를 기억한 뒤 소유 포인터를 비움. EndPlay의 CloseOperatorWindow도 같은 함수를 거침. 늦은 이전 창 콜백은 새 창과 자리를 덮어쓰지 않음. 자동화에서 native 창 없이 직접 닫힘 처리·후속 Close·늦은 콜백을 확인함.
+- §6-1 / R1-2: O는 자유모드·태그 실패·이미 시작 여부를 먼저 검사함. 진행 중 좌석 암전의 O는 버림 수·기록·단계/generation 유지, 자유모드 암전의 O는 RuleDiscards +1. 시작 전 재적용 암전의 O는 비활성·TransitionDiscards +1이고 흐름을 시작하지 않으며, 재적용 성공 후 1단계 시작을 확인함.
+- §6-1 / R1-3: 패널은 생성 시와 매 Tick에 스냅숏 하나를 만듦. 상태는 한 번, 각 버튼 판정도 한 번. 운전석은 월드를 탐색하지 않고 동승석·2열은 각 한 번 탐색해 판정과 꼬리표가 공유함. Tick + SlatePrepass에서 월드 순회 정확히 2회, 8가지 상태의 버튼 판정·버림 종류·이유·기록·모양·꼬리표가 live API와 같고 실제 버튼 켜짐과 상태 갱신도 일치함.
+- §6-2: 발견 317, 완료 317, Success 317, Fail 0. P5i 26/26(기존 23 + 신규 3), TEST COMPLETE. EXIT CODE: 0, 프로세스 exit 0. 기존 P3/P5g/P5h 포함 전체 한 번 실행. E8Persistence 간헐 실패는 이번에 발생하지 않음.
+- §6-3: 최종 C++ 트리로 non-unity(-DisableUnity -Module=vBoR)·unity 각각 한 번, 모두 Result: Succeeded / 프로세스 exit 0. vBoR 컴파일·링크 경고/오류 0. 복구 빌드·전체 시험 재실행 없음.
+- §6-4: 이 보고를 리뷰 파일·커밋 본문·HANDOFF.md에 기록함.
+- §6-5: GUI·VR Preview·Quest 3 기기 확인은 not-tested.
+
+③ 명세와 다르게 한 것과 이유
+- 제품 요구사항 차이 없음. 세 제안을 반영했으며 판정 규칙은 EvaluateCommand의 공통 구현 하나를 사용함. 스냅숏용 overload는 같은 프레임에 찾은 시점을 인자로 받을 뿐 판정 조건을 복제하지 않음.
+- 시점을 InitializeFlow에서 고정 보관하지 않음. 실제 Dispatch는 계속 명령 시점의 월드와 상태로 판정함. 프레임 스냅숏은 표시용이며 버튼 클릭/키는 기존 QueueLive 경로를 유지함.
+- E20은 리뷰에서 지정한 P5i 신규 시험 기대값만 수정함. E23은 표시가 Tick 스냅숏을 읽으므로 상태를 바꾼 뒤 Tick을 한 번 호출하도록 조정함. P3/P5g 등 기존 시험 단언·입력은 이번에 수정하지 않음.
+- 하위 에이전트·자체 리뷰 루프·MCP·에셋 작업 없음. Spectator/·Config/·Content/·Plugins/ 변경 없음. P5j/P5k 시작 안 함. push·PR·머지 없음.
+
+④ API 헤더 확인 (추정 없음)
+- 신규 플러그인 API 없음. 기존 ISDK·MetaXR 호출 변경 없음.
+- 엔진 기준 경로: C:/Program Files/Epic Games/UE_5.7/Engine/Source/
+- Runtime/SlateCore/Public/Widgets/SWindow.h:54,498,513,712 — FOnWindowClosed 서명, 화면 위치/client 크기, SetOnWindowClosed. Private/Widgets/SWindow.cpp:1361,1402-1404 — delegate 저장·파괴 알림 시 호출 확인.
+- Runtime/Slate/Public/Framework/Application/SlateApplication.h:1640 — RequestDestroyWindow. 명시 종료는 창 reference를 보관하고 공통 상태 정리 뒤 파괴를 요청함.
+- Runtime/Core/Public/UObject/WeakObjectPtrTemplates.h:244-246 — TWeakObjectPtr 유효성 검사. Runtime/Core/Public/Delegates/DelegateSignatureImpl.inl:377 — CreateLambda.
+- 변경 API는 로컬 헤더와 실제 non-unity/unity 빌드로 확인함.
+
+⑤ 로컬에서 확인할 것 / 검증 근거
+- Saved/Logs/P5iR1NonUnityBuild.log: Result: Succeeded, exit 0. Saved/Logs/P5iR1UnityBuild.log: Result: Succeeded, exit 0. 두 로그 모두 컴파일/링크 진단 경고·오류 없음(WarningsAsErrors 옵션 문자열은 진단이 아님).
+- Saved/Logs/P5iR1AllAutomation.log: 발견·완료·Success 317/317, Fail 0, P5i 26/26, engine exit 0. Saved/Logs/P5iR1AllAutomationProcess.log 및 실행 프로세스 exit 0. 샘플·McpAutomationBridge·UnrealAgent를 끄고 실행. P5i BeginEvents/EndEvents 구간 경고·오류 0. 기존 XR 확장/샘플 CDO 및 기존 시험 월드 정리 잡음은 시험 결과와 분리함.
+- GUI: 실제 OS 창의 Alt+F4·작업 표시줄 닫힘 후 ShowOperatorWindow 재생성, 자리·크기 보존, 최소화 복구, Play 종료와 레벨 재열기를 확인할 것. 이번 자동화는 native 창 없이 닫힘 처리 함수와 Slate widget만 시험함. 실제 GUI not-tested.
+- Quest 3 Link/VR Preview: L_P3_Flow에서 O의 진행 중·자유모드·시작 전 재적용 암전 동작, 버튼 상태의 즉시 갱신, 기존 정렬 재적용·좌석/흐름 키 일치를 확인할 것. 계획서 T-01·T-04·T-05·T-08·T-09 및 명세 §7은 not-tested. 합성 시험으로 기기·운영 동작을 통과 처리하지 않음.
+- 시작·종료 시 UnrealEditor/UnrealEditor-Cmd 프로세스 없음 확인. 작업 트리는 이 리뷰 범위의 파일만 변경함.

@@ -20,6 +20,7 @@
 #include "Styling/CoreStyle.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Input/SButton.h"
+#include "Widgets/SWindow.h"
 #include "XRTrackingSystemBase.h"
 
 struct FP5iTestAccess
@@ -32,6 +33,14 @@ struct FP5iTestAccess
 	static void Dispatch(AVBoRScenarioRunner* R, const FVBoRFlowCommand& C) { R->Dispatch(C); }
 	static void Lock(AVBoRScenarioRunner* R) { R->ConfirmLockRemaining = 1; }
 	static void Invalid(AVBoRScenarioRunner* R) { R->ValidationProblems = TEXT("invalid tags"); }
+	static void SetWindow(AVBoRScenarioRunner* R, const TSharedRef<SWindow>& Window) { R->OperatorWindow = Window; }
+	static void WindowClosed(AVBoRScenarioRunner* R, const TSharedRef<SWindow>& Window) { R->HandleOperatorWindowClosed(Window); }
+	static void CloseWindow(AVBoRScenarioRunner* R) { R->CloseOperatorWindow(); }
+	static void ResetScans(AVBoRScenarioRunner* R) { R->OperatorViewpointScans = 0; }
+	static int32 Scans(AVBoRScenarioRunner* R) { return R->OperatorViewpointScans; }
+	static const FVBoROperatorSnapshot& Snapshot(const SVBoROperatorPanel& Panel) { return Panel.Snapshot; }
+	static bool ButtonEnabled(const SVBoROperatorPanel& Panel, EVBoROperatorButton Button)
+	{ for (const auto& Entry : Panel.Buttons) { if (Entry.Key == Button) { return Entry.Value->IsEnabled(); } } return false; }
 };
 
 namespace
@@ -300,7 +309,7 @@ bool FP5iE20::RunTest(const FString&)
 {
 	FP5iWorld W; W.Button(B::Reapply);
 	for (B Id : {B::Passenger,B::Confirm,B::Next,B::Ignore,B::Reapply}) { W.Button(Id); }
-	TestEqual(TEXT("Transition discards"),W.Runner->TransitionDiscards,5); TestEqual(TEXT("Same step"),W.Runner->GetStepIndex(),0); W.FinishSwitch(); return true;
+	TestEqual(TEXT("Transition discards"),W.Runner->TransitionDiscards,4); TestEqual(TEXT("Same step"),W.Runner->GetStepIndex(),0); W.FinishSwitch(); return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE21,"vBoR.P5i.E21ButtonStyles",Flags)
@@ -341,6 +350,7 @@ bool FP5iE23::RunTest(const FString&)
 	}
 	// 실제 위젯의 상태 줄이 긴 이유를 한 줄 말줄임으로 처리하는지 확인함 (P5i E23)
 	W.Alignment->State = EVBoRAlignmentState::NeedsCheck; W.Alignment->Reason = FString::ChrN(400,TEXT('W'));
+	Widget->Tick(FGeometry(),0,0);
 	Widget->SlatePrepass(1); int32 EllipsisCount = 0;
 	TFunction<void(TSharedRef<SWidget>)> Visit = [&](TSharedRef<SWidget> Node)
 	{
@@ -360,5 +370,98 @@ bool FP5iE24::RunTest(const FString&)
 	for (FKey Key : {EKeys::F1,EKeys::F5})
 	{ for (const auto& Binding : W.Runner->InputComponent->KeyBindings) { TestFalse(TEXT("Old key absent"),Binding.Chord.Key == Key); } }
 	W.Free(); TestTrue(TEXT("R restart shown"),W.Runner->GetOperatorText().Contains(TEXT("R 처음부터"))); TestFalse(TEXT("F5 absent"),W.Runner->GetOperatorText().Contains(TEXT("F5"))); return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iR1Close,"vBoR.P5i.R1ExternalWindowClose",Flags)
+bool FP5iR1Close::RunTest(const FString&)
+{
+	TGuardValue<FVBoROperatorPlacement> Placement(FVBoROperatorPlacement::Session(),FVBoROperatorPlacement{});
+	FP5iWorld W;
+	const auto Window = SNew(SWindow).ScreenPosition(FVector2D(1300,40)).ClientSize(FVector2D(720,900));
+	const FVector2D Position = Window->GetPositionInScreen(), Size = Window->GetClientSizeInScreen();
+	FP5iTestAccess::SetWindow(W.Runner,Window);
+	FP5iTestAccess::WindowClosed(W.Runner,Window);
+	TestFalse(TEXT("External close clears owned window"),W.Runner->HasOperatorWindow());
+	TestTrue(TEXT("External close remembers position and client size"),FVBoROperatorPlacement::Session().bRemembered && FVBoROperatorPlacement::Session().Position == Position && FVBoROperatorPlacement::Session().ClientSize == Size);
+	FP5iTestAccess::CloseWindow(W.Runner);
+	TestTrue(TEXT("EndPlay close after external close preserves placement"),FVBoROperatorPlacement::Session().Position == Position && FVBoROperatorPlacement::Session().ClientSize == Size);
+	const auto Replacement = SNew(SWindow).ScreenPosition(FVector2D(1600,80)).ClientSize(FVector2D(680,850));
+	FP5iTestAccess::SetWindow(W.Runner,Replacement);
+	FP5iTestAccess::WindowClosed(W.Runner,Window);
+	TestTrue(TEXT("Late old close leaves replacement alive"),W.Runner->HasOperatorWindow());
+	TestTrue(TEXT("Late old close preserves remembered placement"),FVBoROperatorPlacement::Session().Position == Position && FVBoROperatorPlacement::Session().ClientSize == Size);
+	FP5iTestAccess::WindowClosed(W.Runner,Replacement);
+	TestFalse(TEXT("Replacement can close independently"),W.Runner->HasOperatorWindow());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iR1Ignore,"vBoR.P5i.R1IgnoreDuringTransitions",Flags)
+bool FP5iR1Ignore::RunTest(const FString&)
+{
+	{
+		FP5iWorld W; W.Button(B::Passenger);
+		const int32 Transitions = W.Runner->TransitionDiscards, Rules = W.Runner->RuleDiscards;
+		const auto Token = W.Runner->GetToken(); const FString Record = W.Runner->LastRecord;
+		W.Button(B::Ignore);
+		TestEqual(TEXT("Running O does not count transition discard"),W.Runner->TransitionDiscards,Transitions);
+		TestEqual(TEXT("Running O does not count rule discard"),W.Runner->RuleDiscards,Rules);
+		TestEqual(TEXT("Running O preserves record"),W.Runner->LastRecord,Record);
+		TestTrue(TEXT("Running O preserves step and generation"),W.Runner->GetToken().StepIndex == Token.StepIndex && W.Runner->GetToken().Generation == Token.Generation);
+	}
+	{
+		FP5iWorld W; W.Free(); W.Button(B::Passenger);
+		const int32 Transitions = W.Runner->TransitionDiscards, Rules = W.Runner->RuleDiscards;
+		W.Button(B::Ignore);
+		TestEqual(TEXT("Free O is a rule discard"),W.Runner->RuleDiscards,Rules+1);
+		TestEqual(TEXT("Free O does not count transition discard"),W.Runner->TransitionDiscards,Transitions);
+	}
+	{
+		FP5iWorld W(false); FString Reason; TestTrue(TEXT("Setup saved for reapply"),FVBoRBuckAlignmentStore::Save(W.Path,W.Saved,Reason));
+		W.Button(B::Reapply);
+		TestFalse(TEXT("Waiting O disabled during reapply"),W.Runner->EvaluateOperatorButton(B::Ignore).bAccepted);
+		W.Button(B::Ignore);
+		TestEqual(TEXT("Waiting O counts transition discard"),W.Runner->TransitionDiscards,1);
+		TestFalse(TEXT("Waiting O does not start flow"),W.Runner->IsRunning());
+		W.FinishSwitch(); TestTrue(TEXT("Applied alignment starts flow"),W.Runner->IsRunning());
+		TestEqual(TEXT("Reapply starts first step"),W.Runner->GetStepIndex(),0);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iR1Snapshot,"vBoR.P5i.R1OneSnapshotPerFrame",Flags)
+bool FP5iR1Snapshot::RunTest(const FString&)
+{
+	for (int32 State = 0; State < 8; ++State)
+	{
+		FP5iWorld W(State != 0);
+		const auto Widget = SNew(SVBoROperatorPanel).Runner(W.Runner);
+		if (State == 1) { W.Free(); }
+		if (State == 2) { W.Button(B::Passenger); }
+		if (State == 3) { W.Free(); W.Button(B::Reload); }
+		if (State == 4) { W.NeedsCheck(); }
+		if (State == 5) { FP5iTestAccess::Lock(W.Runner); }
+		if (State == 6) { FP5iTestAccess::Invalid(W.Runner); }
+		if (State == 7) { W.Button(B::Passenger); W.FinishSwitch(); W.Ready(); }
+		FP5iTestAccess::ResetScans(W.Runner);
+		Widget->Tick(FGeometry(),0,0); Widget->SlatePrepass(1);
+		const auto& Snapshot = FP5iTestAccess::Snapshot(*Widget);
+		for (const auto& Shortcut : VBoROperator::Shortcuts())
+		{ TestEqual(TEXT("Actual button reads snapshot enabled state"),FP5iTestAccess::ButtonEnabled(*Widget,Shortcut.Button),Snapshot.Buttons[static_cast<int32>(Shortcut.Button)].Decision.bAccepted); }
+		TestEqual(TEXT("Tick and prepass scan once per passenger/rear seat"),FP5iTestAccess::Scans(W.Runner),2);
+		for (const auto& Shortcut : VBoROperator::Shortcuts())
+		{
+			const auto& Button = Snapshot.Buttons[static_cast<int32>(Shortcut.Button)];
+			const auto Live = W.Runner->EvaluateOperatorButton(Shortcut.Button);
+			TestEqual(Shortcut.Label,Button.Decision.bAccepted,Live.bAccepted);
+			TestTrue(TEXT("Snapshot discard category matches live decision"),Button.Decision.Discard == Live.Discard);
+			TestEqual(TEXT("Snapshot reason matches live decision"),Button.Decision.Reason,Live.Reason);
+			TestEqual(TEXT("Snapshot record matches live decision"),Button.Decision.Record,Live.Record);
+			TestTrue(TEXT("Snapshot style matches live style"),Button.Style == W.Runner->GetOperatorStyle(Shortcut.Button));
+			TestEqual(TEXT("Snapshot badge matches live badge"),Button.Badge,W.Runner->OperatorButtonBadge(Shortcut.Button));
+		}
+		const auto Status = W.Runner->GetOperatorStatus();
+		TestTrue(TEXT("Snapshot refreshes status after state change"),Snapshot.Status.Title == Status.Title && Snapshot.Status.Alignment == Status.Alignment && Snapshot.Status.Seat == Status.Seat && Snapshot.Status.LastCommand == Status.LastCommand);
+	}
+	return true;
 }
 #endif

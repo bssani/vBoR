@@ -69,6 +69,7 @@ public:
 	void PressOperatorButton(EVBoROperatorButton Button);
 	bool HandleOperatorKey(FKey Key, bool bRepeat = false);
 	FVBoROperatorStatus GetOperatorStatus() const;
+	FVBoROperatorSnapshot GetOperatorSnapshot() const;
 	EVBoROperatorStyle GetOperatorStyle(EVBoROperatorButton Button) const;
 	FString OperatorButtonBadge(EVBoROperatorButton Button) const;
 	FString ReapplyHelp() const;
@@ -116,8 +117,14 @@ private:
 	int32 OperatorCompletedSteps = 0;
 	TSharedPtr<SWindow> OperatorWindow;
 	void CloseOperatorWindow();
+	void HandleOperatorWindowClosed(const TSharedRef<SWindow>& Window);
 	void FinishReapply();
+	FVBoRCommandDecision EvaluateCommand(const FVBoRFlowCommand& Command, UVBoRViewpointComponent* Viewpoint) const;
+	FString OperatorButtonBadge(EVBoROperatorButton Button, UVBoRViewpointComponent* Viewpoint) const;
 	UVBoRViewpointComponent* CommandViewpoint(EVBoRFlowCommand Action) const;
+#if WITH_DEV_AUTOMATION_TESTS
+	mutable int32 OperatorViewpointScans = 0;
+#endif
 	void RecordDecision(const FVBoRFlowCommand& Command, const FVBoRCommandDecision& Decision);
 	EVBoRFlowCommand PanelAction = EVBoRFlowCommand::ReturnBase;
 	EVBoRFlowCommand FreeSeatActions[2] = {EVBoRFlowCommand::Passenger, EVBoRFlowCommand::Rear};

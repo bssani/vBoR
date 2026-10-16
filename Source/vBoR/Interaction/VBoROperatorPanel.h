@@ -27,6 +27,20 @@ struct FVBoROperatorStatus
 	bool bNeedsCheck = false, bApplied = false;
 };
 
+struct FVBoROperatorButtonState
+{
+	FVBoRCommandDecision Decision;
+	EVBoROperatorStyle Style = EVBoROperatorStyle::Disabled;
+	FString Badge;
+};
+
+struct FVBoROperatorSnapshot
+{
+	FVBoROperatorStatus Status;
+	FVBoROperatorButtonState Buttons[static_cast<int32>(EVBoROperatorButton::Count)];
+	FString ReapplyHelp;
+};
+
 struct FVBoROperatorShortcut
 {
 	EVBoROperatorButton Button;
@@ -62,7 +76,9 @@ public:
 	virtual FReply OnPreviewKeyDown(const FGeometry&, const FKeyEvent& Event) override;
 	virtual void Tick(const FGeometry&, double CurrentTime, float DeltaTime) override;
 private:
+	friend struct FP5iTestAccess;
 	TWeakObjectPtr<AVBoRScenarioRunner> Runner;
+	FVBoROperatorSnapshot Snapshot;
 	FButtonStyle Styles[5];
 	FSlateBrush PanelBrush, WarningBrush;
 	TArray<TPair<EVBoROperatorButton, TSharedPtr<SButton>>> Buttons;
