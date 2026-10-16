@@ -11,8 +11,8 @@ void FVBoRKnobMotion::AdvanceGrab(bool bTracked, const FQuat& Palm)
 	if (GrabHand == INDEX_NONE) { return; }
 	if (!bTracked || Palm.ContainsNaN() || !Palm.IsNormalized()) { bPaused = true; return; }
 	const FQuat Delta = (Palm * LastPalm.Inverse()).GetNormalized();
-	// 피벗 +Z 음의 회전이 윗면 시계 방향임 (P5f D2·D3, rad → deg)
-	const double TwistDeg = -FMath::RadiansToDegrees(Delta.GetTwistAngle(FVector::ZAxisVector));
+	// 피벗 +Z 양의 회전이 앞에서 오른쪽으로 향함 (P5f D2·R1-1, rad → deg)
+	const double TwistDeg = FMath::RadiansToDegrees(Delta.GetTwistAngle(FVector::ZAxisVector));
 	if (bPaused) { RecoveryDiscardDeg = FMath::Abs(TwistDeg); }
 	else if (FMath::Abs(TwistDeg) <= JumpThresholdDeg + 1.e-6)
 	{

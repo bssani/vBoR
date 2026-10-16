@@ -139,7 +139,7 @@ void AVBoRKnob::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 void AVBoRKnob::ApplyPose()
 {
 	// 표시 각도만 한 바퀴로 줄임 (누적값은 유지하고 회전 계산 오차를 줄임, P5f D2, deg)
-	RotationAxis->SetRelativeRotation(FQuat(FVector::ZAxisVector,FMath::DegreesToRadians(-FMath::Fmod(Motion.AngleDeg,360.0))));
+	RotationAxis->SetRelativeRotation(FQuat(FVector::ZAxisVector,FMath::DegreesToRadians(FMath::Fmod(Motion.AngleDeg,360.0))));
 }
 
 void AVBoRKnob::PlayStepSound() { StateAudio->Play(); }

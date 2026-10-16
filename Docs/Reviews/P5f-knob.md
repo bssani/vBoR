@@ -46,7 +46,7 @@
 
 ## 항목
 
-### R1-1 각도 +가 위에서 볼 때 반시계 방향임 — 명세 D2의 부호 설명이 틀렸음 — 열림
+### R1-1 각도 +가 위에서 볼 때 반시계 방향임 — 명세 D2의 부호 설명이 틀렸음 — 반영함 (fix(p5f): align clockwise knob rotation)
 
 **문제**
 - 지금 구현에서 각도 +는 위에서 볼 때 **반시계** 방향이다. `VBoRKnobMotion.cpp:34`는 피벗 +Z 둘레 비틀림에 −를 붙여 더한다. `VBoRKnob.cpp:142`는 표시를 `FQuat(Z, −각도)`로 돌린다.
@@ -68,6 +68,14 @@
 - 회전 표시(`:186`): +20° 뒤 표시가 피벗의 오른쪽(`Pivot->GetRightVector()`) 쪽으로 움직인다. 쉬는 자리는 +X 쪽이다. 좌표 Y 대신 오른쪽 벡터와 비교해서, "오른쪽"의 뜻을 엔진 정의에 묶는다.
 - 옮기고 돌린 차(`:198-199`): 차 +Z 둘레 +12°, 즉 차 기준 앞에서 오른쪽으로 비튼 것이 각도 +12다. 같은 비틂 뒤 회전 표시도 차의 오른쪽 벡터 쪽으로 간다.
 - 나머지 P5f 시험은 그대로 통과한다.
+
+**반영 결과 (2026-10-16, Codex)**
+- `VBoRKnobMotion.cpp`의 비틀림 누적과 `VBoRKnob.cpp`의 표시 회전에서 음수 부호를 제거했다. `VBoRKnobMotion.h`·`.cpp` 주석도 피벗 +Z 양의 회전 = 앞 → 오른쪽으로 맞췄다.
+- `P5fTwist`와 E14 world 회전을 +Z 양의 회전으로 바꿨다. E13은 +20° 뒤 표시가 `Pivot->GetRightVector()` 쪽인지 검사한다. E14는 옮기고 돌린 차에서 +12° world 비틂 → 각도 +12를 확인하고, 같은 비틂을 실제 차 노브에 넣어 표시가 `Car->GetActorRightVector()` 쪽으로 움직이는지도 확인한다. 받침 고정 단언은 유지했다.
+- 다른 P5f 단언·다른 부품·근사 차 자리값은 바꾸지 않았다. 제안과 다르게 한 것과 질문은 없다.
+- 최종 non-unity(`-DisableUnity -Module=vBoR`)·unity 각각 한 번 성공(`Result: Succeeded`, 프로세스 exit 0), vBoR 컴파일·링크 경고/오류 0. 로컬 도구 StructUtils 폐기 예정 의존 안내 각 2줄은 별도다.
+- 전체 시험 한 번: `vBoR.*` 271개 발견·271개 완료·271 Success·0 Fail, P5f 16/16. `TEST COMPLETE. EXIT CODE: 0`, 프로세스 exit 0. `P0Buck.E8Persistence` 첫 실행 통과. 로그는 `Saved/Logs/P5fR1-NonUnity.txt`, `P5fR1-Unity.txt`, `P5fR1-Automation.log`다.
+- Quest 3 Link·VR Preview·Blueprint/Details와 T-08은 `not-tested`다. 에디터·MCP·에셋 작업, push·PR·머지는 하지 않았다.
 
 ## 질문
 

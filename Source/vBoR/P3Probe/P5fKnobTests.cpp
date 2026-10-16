@@ -41,7 +41,7 @@ namespace
 		}
 		~FP5fWorld() { World->EndPlay(EEndPlayReason::Quit); World->DestroyWorld(false); }
 	};
-	FQuat P5fTwist(double ClockwiseDeg) { return FQuat(FVector::ZAxisVector,FMath::DegreesToRadians(-ClockwiseDeg)); }
+	FQuat P5fTwist(double ClockwiseDeg) { return FQuat(FVector::ZAxisVector,FMath::DegreesToRadians(ClockwiseDeg)); }
 	void P5fMove(AP5fTrackedKnob* K, double Angle) { K->Palm.SetRotation(P5fTwist(Angle)); K->Tick(0.016f); }
 	UIsdkGrabberComponent* P5fPointer(AVBoRKnob* K)
 	{ auto* G=NewObject<UIsdkGrabberComponent>(K); G->InteractorTags.AddTag(IsdkGameplayTags::TAG_Isdk_Type_Device_Left); return G; }
@@ -183,7 +183,7 @@ bool FP5fVisual::RunTest(const FString&)
 	auto Check=[this,Overlay](FLinearColor Expected) { FLinearColor Color; Overlay->GetVectorParameterValue(FMaterialParameterInfo(TEXT("ColorParam")),Color); TestTrue(TEXT("Color"),Color.Equals(Expected)); };
 	FP5fTestAccess::Pointer(K,G,EIsdkPointerEventType::Hover); K->Tick(0.016f); Check(K->HoverColor); FP5fTestAccess::Pointer(K,G,EIsdkPointerEventType::Select); P5fMove(K,20); Check(K->GrabColor);
 	TestTrue(TEXT("Marker follows knob"),K->RotationMarker->GetComponentTransform().Equals(K->MarkerRestFromPivot*K->RotationAxis->GetComponentTransform(),0.001));
-	TestTrue(TEXT("Marker turns clockwise"),K->RotationMarker->GetComponentLocation().Y<0); FP5fTestAccess::Pointer(K,G,EIsdkPointerEventType::Unselect); FP5fTestAccess::Pointer(K,G,EIsdkPointerEventType::Unhover); K->Tick(0.016f); Check(FLinearColor::Transparent);
+	TestTrue(TEXT("Marker turns toward pivot right"),FVector::DotProduct(K->RotationMarker->GetComponentLocation()-K->Pivot->GetComponentLocation(),K->Pivot->GetRightVector())>0); FP5fTestAccess::Pointer(K,G,EIsdkPointerEventType::Unselect); FP5fTestAccess::Pointer(K,G,EIsdkPointerEventType::Unhover); K->Tick(0.016f); Check(FLinearColor::Transparent);
 	TestNotNull(TEXT("Click sound assigned"),K->StateAudio->Sound.Get()); return true;
 }
 
@@ -195,9 +195,11 @@ bool FP5fCar::RunTest(const FString&)
 	TestTrue(TEXT("Mesh authored world pose"),K->KnobMesh->GetComponentTransform().Equals(FTransform(FQuat::Identity,Car->KnobPivotCm+FVector(0,0,Car->KnobHeightCm/2),FVector(Car->KnobDiameterCm,Car->KnobDiameterCm,Car->KnobHeightCm)/100)*CarWorld,0.001));
 	TestTrue(TEXT("Support authored world pose"),Car->KnobSupport->GetComponentTransform().Equals(FTransform(FQuat::Identity,Car->KnobSupportCenterCm,Car->KnobSupportSizeCm/100)*CarWorld,0.001));
 	const FTransform Support=Car->KnobSupport->GetComponentTransform(); auto* Input=W.Knob(); Input->SetActorTransform(CarWorld); Input->Pivot->SetRelativeLocation(Car->KnobPivotCm); FP5fTestAccess::Select(Input);
-	const FQuat WorldDelta(CarWorld.TransformVectorNoScale(FVector::ZAxisVector),FMath::DegreesToRadians(-12.0)); Input->Palm.SetRotation(CarWorld.GetRotation().Inverse()*WorldDelta*CarWorld.GetRotation()); Input->Tick(0.016f);
+	const FQuat WorldDelta(CarWorld.TransformVectorNoScale(FVector::ZAxisVector),FMath::DegreesToRadians(12.0)); Input->Palm.SetRotation(CarWorld.GetRotation().Inverse()*WorldDelta*CarWorld.GetRotation()); Input->Tick(0.016f);
 	TestTrue(TEXT("Clockwise about car Z is positive"),FMath::IsNearlyEqual(Input->GetAngleDeg(),12.0,0.001));
-	FP5fTestAccess::Motion(K).BeginGrab(0,FQuat::Identity); FP5fTestAccess::Motion(K).AdvanceGrab(true,P5fTwist(29)); K->Tick(0.016f); TestTrue(TEXT("Support fixed"),Car->KnobSupport->GetComponentTransform().Equals(Support,0.001));
+	FP5fTestAccess::Motion(K).BeginGrab(0,FQuat::Identity); FP5fTestAccess::Motion(K).AdvanceGrab(true,Input->Palm.GetRotation()); K->Tick(0.016f);
+	TestTrue(TEXT("Same twist moves marker toward car right"),FVector::DotProduct(K->RotationMarker->GetComponentLocation()-K->Pivot->GetComponentLocation(),Car->GetActorRightVector())>0);
+	TestTrue(TEXT("Support fixed"),Car->KnobSupport->GetComponentTransform().Equals(Support,0.001));
 	auto Bounds=[CarWorld](UStaticMeshComponent* Mesh) { return Mesh->GetStaticMesh()->GetBoundingBox().TransformBy(Mesh->GetComponentTransform().GetRelativeTransform(CarWorld)); };
 	const FBox B=Bounds(K->KnobMesh); for (int32 I : {9,11}) { TestFalse(TEXT("Clears seat and dashboard"),B.Intersect(Bounds(FP5fTestAccess::Plates(Car)[I]))); }
 	for (auto* Mesh : {Car->ConsoleLid->DoorMesh.Get(),Car->GearLever->PartMesh.Get(),Car->TurnSignalLever->PartMesh.Get(),Car->SteeringWheel->WheelMesh.Get()}) { TestFalse(TEXT("Clears other controls"),B.Intersect(Bounds(Mesh))); } return true;
