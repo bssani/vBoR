@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "VBoRScenarioAsset.h"
+#include "VBoROperatorPanel.h"
 #include "Interaction/Pointable/IsdkInteractionPointerEvent.h"
 #include "VBoRScenarioRunner.generated.h"
 
@@ -17,7 +18,7 @@ class UStaticMeshComponent;
 class STextBlock;
 class SBorder;
 
-enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel };
+enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel, ReapplyAlignment };
 enum class EVBoRCommandSource : uint8 { Participant, Operator };
 struct FVBoRFlowToken { int32 StepIndex = INDEX_NONE; uint64 Generation = 0; };
 struct FVBoRFlowCommand
@@ -62,6 +63,18 @@ public:
 	int32 PreviousCount = 0, RetryCount = 0, SkipCount = 0;
 	int32 EndCount = 0;
 	bool bAlignmentIgnored = false;
+	int32 ReapplyCount = 0;
+	FVBoRCommandDecision EvaluateCommand(const FVBoRFlowCommand& Command) const;
+	FVBoRCommandDecision EvaluateOperatorButton(EVBoROperatorButton Button) const;
+	void PressOperatorButton(EVBoROperatorButton Button);
+	bool HandleOperatorKey(FKey Key, bool bRepeat = false);
+	FVBoROperatorStatus GetOperatorStatus() const;
+	FVBoROperatorSnapshot GetOperatorSnapshot() const;
+	EVBoROperatorStyle GetOperatorStyle(EVBoROperatorButton Button) const;
+	FString OperatorButtonBadge(EVBoROperatorButton Button) const;
+	FString ReapplyHelp() const;
+	UFUNCTION(BlueprintCallable, Category="안내") void ShowOperatorWindow();
+	bool HasOperatorWindow() const { return OperatorWindow.IsValid(); }
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
@@ -70,6 +83,7 @@ private:
 	friend struct FP3FlowTestAccess;
 	friend struct FP5bTestAccess;
 	friend struct FP5gTestAccess;
+	friend struct FP5iTestAccess;
 	UPROPERTY() TObjectPtr<UVBoRVehicleAlignmentComponent> Alignment;
 	UPROPERTY() TObjectPtr<UVBoRApproachZoneComponent> Approach;
 	UPROPERTY() TObjectPtr<UVBoRSeatZoneComponent> Seat;
@@ -98,6 +112,20 @@ private:
 	bool bOperatorInfo = false, bPanelPlacementPending = true, bSeatedPanelPlaced = false;
 	bool bStartHeadPending = false, bSeatHeadRecorded = false;
 	bool bPawnMovedBeforeFlow = false;
+	bool bReapplyPending = false;
+	FString LastOperatorCommand;
+	int32 OperatorCompletedSteps = 0;
+	TSharedPtr<SWindow> OperatorWindow;
+	void CloseOperatorWindow();
+	void HandleOperatorWindowClosed(const TSharedRef<SWindow>& Window);
+	void FinishReapply();
+	FVBoRCommandDecision EvaluateCommand(const FVBoRFlowCommand& Command, UVBoRViewpointComponent* Viewpoint) const;
+	FString OperatorButtonBadge(EVBoROperatorButton Button, UVBoRViewpointComponent* Viewpoint) const;
+	UVBoRViewpointComponent* CommandViewpoint(EVBoRFlowCommand Action) const;
+#if WITH_DEV_AUTOMATION_TESTS
+	mutable int32 OperatorViewpointScans = 0;
+#endif
+	void RecordDecision(const FVBoRFlowCommand& Command, const FVBoRCommandDecision& Decision);
 	EVBoRFlowCommand PanelAction = EVBoRFlowCommand::ReturnBase;
 	EVBoRFlowCommand FreeSeatActions[2] = {EVBoRFlowCommand::Passenger, EVBoRFlowCommand::Rear};
 	const FVBoRScenarioStep* CurrentStep() const;
@@ -125,4 +153,5 @@ private:
 	void KeyConfirm(); void KeyNext(); void KeyPrevious(); void KeyPassenger(); void KeyRear(); void KeyReturn(); void KeyRestart(); void KeyIgnore();
 	void KeyOperatorInfo();
 	void KeyFreeMode(); void KeyReloadLevel();
+	void KeyReapply();
 };

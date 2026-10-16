@@ -24,12 +24,21 @@ void UVBoRVehicleAlignmentComponent::BeginPlay()
 	Super::BeginPlay();
 	if (!BaseEye) { BaseEye = GetOwner()->FindComponentByClass<UVBoREyePointComponent>(); }
 	RecenterHandle = FCoreDelegates::VRHeadsetRecenter.AddUObject(this, &UVBoRVehicleAlignmentComponent::HandleRecenter);
+	AlignmentPawn = UGameplayStatics::GetPlayerPawn(this, 0);
+	LoadSetupAlignment();
+}
+
+FString UVBoRVehicleAlignmentComponent::SavedAlignmentPath() const
+{ return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Calibration/BuckEye.json")); }
+
+void UVBoRVehicleAlignmentComponent::LoadSetupAlignment()
+{
 	FVBoRBuckSavedAlignment Loaded; FString LoadReason;
-	const bool bLoaded = FVBoRBuckAlignmentStore::Load(FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Calibration/BuckEye.json")), Loaded, LoadReason);
+	const bool bLoaded = FVBoRBuckAlignmentStore::Load(SavedAlignmentPath(), Loaded, LoadReason);
 	int32 Origin = INDEX_NONE;
 	if (GEngine && GEngine->XRSystem.IsValid()) { Origin = GEngine->XRSystem->GetTrackingOrigin(); }
 	const FVector2D Bounds = UHeadMountedDisplayFunctionLibrary::GetPlayAreaBounds(EHMDTrackingOrigin::Stage);
-	InitializeAlignment(UGameplayStatics::GetPlayerPawn(this, 0), bLoaded ? &Loaded : nullptr, Origin, Bounds);
+	InitializeAlignment(AlignmentPawn, bLoaded ? &Loaded : nullptr, Origin, Bounds);
 	if (!bLoaded) { Reason += TEXT(" — ") + LoadReason; }
 }
 
@@ -47,7 +56,7 @@ void UVBoRVehicleAlignmentComponent::EndPlay(const EEndPlayReason::Type EndPlayR
 void UVBoRVehicleAlignmentComponent::InitializeAlignment(APawn* Pawn, const FVBoRBuckSavedAlignment* Value, int32 Origin, const FVector2D& PlayArea)
 {
 	AlignmentPawn = Pawn; bHasSaved = Value != nullptr;
-	CurrentViewpoint = nullptr; PendingViewpoint = nullptr; bSwitching = false;
+	CurrentViewpoint = nullptr; PendingViewpoint = nullptr; bSwitching = false; bReapplying = false;
 	State = EVBoRAlignmentState::NoSavedValue;
 	if (!Value) { Reason = TEXT("저장값 없음 — P0-c 레벨에서 C로 저장"); }
 	else
@@ -88,16 +97,60 @@ void UVBoRVehicleAlignmentComponent::TickComponent(float DeltaTime, ELevelTick T
 
 bool UVBoRVehicleAlignmentComponent::SwitchViewpoint(UVBoRViewpointComponent* Viewpoint)
 {
-	if (!IsValid(Viewpoint)) { ++SwitchRequests; ++SwitchDiscards; UE_LOG(LogP3Flow, Log, TEXT("시점 버림 — 대상 없음")); return false; }
+	if (!SwitchRejection(Viewpoint).IsEmpty())
+	{
+		++SwitchRequests; ++SwitchDiscards;
+		UE_LOG(LogP3Flow, Log, TEXT("시점 버림 — %s"), !IsValid(Viewpoint) ? TEXT("대상 없음") : bSwitching ? TEXT("전환 중") : TEXT("정렬 필요")); return false;
+	}
 	return RequestSwitch(Viewpoint);
 }
 
 bool UVBoRVehicleAlignmentComponent::ReturnToBase() { return RequestSwitch(nullptr); }
 
+FString UVBoRVehicleAlignmentComponent::SwitchRejection(const UVBoRViewpointComponent* Viewpoint, bool bReturnBase) const
+{
+	if (!bReturnBase && !IsValid(Viewpoint)) { return TEXT("Seat not found"); }
+	if (bSwitching) { return TEXT("View transition in progress"); }
+	if (!bHasSaved || !AlignmentPawn || !BaseEye || State != EVBoRAlignmentState::Applied) { return TEXT("Saved alignment required"); }
+	return FString();
+}
+
+FString UVBoRVehicleAlignmentComponent::ReapplyRejection() const
+{
+	if (bSwitching) { return TEXT("View transition in progress"); }
+	if (!IsBaseViewpoint()) { return TEXT("Return to the driver seat first"); }
+	return FString();
+}
+
+bool UVBoRVehicleAlignmentComponent::RequestReapply()
+{
+	if (!ReapplyRejection().IsEmpty()) { return false; }
+	bReapplying = true; bSwitching = true; bMoved = false; SwitchElapsed = 0;
+	if (AlignmentPawn)
+	{ if (APlayerController* PC = Cast<APlayerController>(AlignmentPawn->GetController()))
+		{ if (PC->PlayerCameraManager) { PC->PlayerCameraManager->StartCameraFade(0, 1, FadeSeconds, FLinearColor::Black, false, true); } } }
+	return true;
+}
+
+FString UVBoRVehicleAlignmentComponent::EnglishReason() const
+{
+	if (Reason.StartsWith(TEXT("저장값 없음"))) { return TEXT("Save the Buck alignment in P0-c"); }
+	if (Reason.StartsWith(TEXT("재중심"))) { return TEXT("Recenter detected; check the setup alignment"); }
+	if (Reason.StartsWith(TEXT("Pawn"))) { return TEXT("Check Pawn, eye point and WorldToMeters"); }
+	return Reason;
+}
+
+FString UVBoRVehicleAlignmentComponent::SeatName() const
+{
+	if (bSwitching) { return TEXT("Switching…"); }
+	if (!CurrentViewpoint) { return TEXT("Driver"); }
+	return CurrentViewpoint->ComponentHasTag(TEXT("Car.PassengerView")) ? TEXT("Passenger") : TEXT("Rear");
+}
+
 bool UVBoRVehicleAlignmentComponent::RequestSwitch(UVBoRViewpointComponent* Viewpoint)
 {
 	++SwitchRequests;
-	if (bSwitching || !bHasSaved || !AlignmentPawn || !BaseEye || State != EVBoRAlignmentState::Applied)
+	if (!SwitchRejection(Viewpoint, Viewpoint == nullptr).IsEmpty())
 	{
 		++SwitchDiscards;
 		UE_LOG(LogP3Flow, Log, TEXT("시점 버림 — %s"), bSwitching ? TEXT("전환 중") : TEXT("정렬 필요")); return false;
@@ -112,7 +165,7 @@ bool UVBoRVehicleAlignmentComponent::RequestSwitch(UVBoRViewpointComponent* View
 void UVBoRVehicleAlignmentComponent::AdvanceSwitch(double DeltaSeconds)
 {
 	if (!bSwitching) { return; }
-	if (State != EVBoRAlignmentState::Applied)
+	if (!bReapplying && State != EVBoRAlignmentState::Applied)
 	{
 		bSwitching = false; ++SwitchDiscards;
 		if (APlayerController* PC = Cast<APlayerController>(AlignmentPawn->GetController()))
@@ -122,19 +175,30 @@ void UVBoRVehicleAlignmentComponent::AdvanceSwitch(double DeltaSeconds)
 	SwitchElapsed += FMath::Max(0.0, DeltaSeconds);
 	if (!bMoved && SwitchElapsed >= FadeSeconds)
 	{
-		// 매번 Stage 저장값에서 직접 계산함 (전환 오차 누적 방지, P3 E11)
-		const FTransform Eye = PendingViewpoint ? PendingViewpoint->GetComponentTransform() : BaseEye->GetComponentTransform();
-		AlignmentPawn->SetActorTransform(FVBoRBuckAlignment::CalculatePawn(Saved.Capture, Eye), false, nullptr, ETeleportType::TeleportPhysics);
-		CurrentViewpoint = PendingViewpoint; bMoved = true;
+		if (bReapplying)
+		{
+			// 설치 저장값만 다시 읽음. InitializeAlignment 의 전환 초기화 뒤 암전 상태 복구 (P5i D8)
+			LoadSetupAlignment(); bReapplying = true; bSwitching = true;
+		}
+		else
+		{
+			// 매번 Stage 저장값에서 직접 계산함 (전환 오차 누적 방지, P3 E11)
+			const FTransform Eye = PendingViewpoint ? PendingViewpoint->GetComponentTransform() : BaseEye->GetComponentTransform();
+			AlignmentPawn->SetActorTransform(FVBoRBuckAlignment::CalculatePawn(Saved.Capture, Eye), false, nullptr, ETeleportType::TeleportPhysics);
+			CurrentViewpoint = PendingViewpoint;
+		}
+		bMoved = true;
 		SwitchElapsed = FadeSeconds;
 		OnPawnMoved.Broadcast();
-		if (APlayerController* PC = Cast<APlayerController>(AlignmentPawn->GetController()))
+		if (APlayerController* PC = AlignmentPawn ? Cast<APlayerController>(AlignmentPawn->GetController()) : nullptr)
 		{ if (PC->PlayerCameraManager) { PC->PlayerCameraManager->StartCameraFade(1, 0, FadeSeconds, FLinearColor::Black, false, false); } }
 		return;
 	}
 	if (bMoved && SwitchElapsed >= 2 * FadeSeconds)
 	{
-		bSwitching = false; ++SwitchCompletions;
+		bSwitching = false;
+		if (bReapplying) { bReapplying = false; ++ReapplyCompletions; return; }
+		++SwitchCompletions;
 		UE_LOG(LogP3Flow, Log, TEXT("시점 완료 %s requests=%d complete=%d discarded=%d"), CurrentViewpoint ? *CurrentViewpoint->GetName() : TEXT("기준"), SwitchRequests, SwitchCompletions, SwitchDiscards);
 	}
 }

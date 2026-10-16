@@ -165,14 +165,14 @@ bool FP5gOperatorTest::RunTest(const FString&)
 	TestTrue(TEXT("End record contains origin and summary"),E.Runner->LastRecord.Contains(TEXT("05")) && E.Runner->LastRecord.Contains(TEXT("요약")));
 	TestEqual(TEXT("End counted separately"),E.Runner->EndCount,1); TestEqual(TEXT("Skip unchanged"),E.Runner->SkipCount,0);
 	const FString Text = E.Runner->GetOperatorText();
-	for (const TCHAR* Word : {TEXT("자유모드"),TEXT("1"),TEXT("2"),TEXT("Home"),TEXT("F5"),TEXT("F6")}) { TestTrue(TEXT("Operator keys advertised"),Text.Contains(Word)); }
+	for (const TCHAR* Word : {TEXT("자유모드"),TEXT("1"),TEXT("2"),TEXT("Home"),TEXT("R"),TEXT("F6")}) { TestTrue(TEXT("Operator keys advertised"),Text.Contains(Word)); }
 	E.Key(EKeys::One); E.FinishSwitch(); TestTrue(TEXT("Operator passenger"),E.Car->Alignment->IsAtViewpoint(E.Car->PassengerView));
 	E.Key(EKeys::Two); E.FinishSwitch(); TestTrue(TEXT("Operator rear"),E.Car->Alignment->IsAtViewpoint(E.Car->RearView));
 	E.Key(EKeys::Home); E.FinishSwitch(); TestTrue(TEXT("Operator base"),E.Car->Alignment->IsBaseViewpoint());
 	TestTrue(TEXT("Operator source retained"),E.Runner->LastViewRequest.Contains(TEXT("진행자")));
 	E.Key(EKeys::Two); E.FinishSwitch();
 	auto& Door = const_cast<FVBoRDoorMotion&>(E.Car->Door->GetMotion()); Door.AngleDeg = 55; Door.bLocked = false;
-	E.Key(EKeys::F5); E.FinishSwitch();
+	E.Key(EKeys::R); E.FinishSwitch();
 	TestTrue(TEXT("F5 restores evaluation and base"),E.Runner->IsRunning() && !E.Runner->IsFreeMode() && !E.Runner->IsFinished() && E.Car->Alignment->IsBaseViewpoint());
 	TestEqual(TEXT("First step restored"),E.Runner->GetStepIndex(),0); TestEqual(TEXT("Retry counted"),E.Runner->RetryCount,1);
 	TestTrue(TEXT("Door reset unchanged"),Door.bLocked && Door.AngleDeg == 0);
@@ -221,7 +221,7 @@ bool FP5gReloadTest::RunTest(const FString&)
 	TestTrue(TEXT("Buttons hidden during reload"),FP5gTestAccess::Button(E.Runner,0)->IsHidden() && FP5gTestAccess::Button(E.Runner,1)->IsHidden());
 	const int32 Discards = E.Runner->TransitionDiscards;
 	E.Command(EVBoRFlowCommand::Passenger,EVBoRCommandSource::Participant);
-	for (FKey Key : {EKeys::F6,EKeys::One,EKeys::Two,EKeys::Home,EKeys::F5,EKeys::F1}) { E.Key(Key); }
+	for (FKey Key : {EKeys::F6,EKeys::One,EKeys::Two,EKeys::Home,EKeys::R,EKeys::I}) { E.Key(Key); }
 	TestEqual(TEXT("All reload-fade inputs discarded"),E.Runner->TransitionDiscards,Discards+7);
 	E.Runner->ProcessFlow(0.29); TestEqual(TEXT("No travel before 0.3s"),E.Runner->ReloadRequests,0);
 	E.Runner->ProcessFlow(0.02); TestEqual(TEXT("Travel once after black"),E.Runner->ReloadRequests,1);

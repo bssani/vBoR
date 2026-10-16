@@ -404,7 +404,7 @@ bool FP3PanelTextTest::RunTest(const FString&)
 	TestTrue(TEXT("Step key always visible"), E.Runner->GetOperatorText().Contains(TEXT("Space")));
 	TestFalse(TEXT("Full operator diagnostics default off"), E.Runner->GetOperatorText().Contains(TEXT("버림")));
 	bool bF1Bound = false;
-	for (const auto& Binding : E.Runner->InputComponent->KeyBindings) { bF1Bound |= Binding.Chord.Key == EKeys::F1; }
+	for (const auto& Binding : E.Runner->InputComponent->KeyBindings) { bF1Bound |= Binding.Chord.Key == EKeys::I; }
 	TestTrue(TEXT("F1 is bound"), bF1Bound);
 	FP3FlowTestAccess::Toggle(E.Runner); TestTrue(TEXT("F1 reveals diagnostics"), E.Runner->GetOperatorText().Contains(TEXT("버림")));
 	FP3FlowTestAccess::Toggle(E.Runner); TestFalse(TEXT("Second F1 hides diagnostics"), E.Runner->GetOperatorText().Contains(TEXT("버림")));
