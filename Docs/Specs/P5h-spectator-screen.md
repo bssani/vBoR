@@ -4,10 +4,10 @@
 |---|---|
 | 단계 | P5 자유모드·리허설(운영). 시험 T-08과 리허설 |
 | 결정 근거 | **사용자 요청(2026-10-16):** TV에 연결해 사람들이 관전하므로 진행 상황을 보인다 — 지금 할 미션, 자유모드일 때는 자유모드 표시, **영어로**. **사용자 문답(2026-10-16):** 화면 = 참가자 시야 + 아래 띠. 띠 내용 = 진행 막대(몇 단계 중 몇) + **지금 조작하는 부품 이름**(예: 콘솔 박스를 조작하면 "Console Box"). 좌석·진행자 조작 표시·경과 시간은 넣지 않는다. **사용자 관찰(2026-10-16): TV에서는 VR에서 보이는 것보다 잘려 보인다. 비율을 4:3으로 맞춰야 VR에서 보는 범위가 보인다**(D3). 방식은 사용자의 다른 프로젝트 AI_Driving의 관전 UI(`C:\Git\AI_Driving\Source\AI_Driving\VR\VRSpectatorUISubsystem.*`)를 따른다 |
-| 베이스 브랜치 | P5g 머지 뒤 `main`(자유모드 상태·`End`를 씀) |
+| 베이스 브랜치 | `main` @ P5g 머지(PR #21, `84be709`) 뒤 이 명세 갱신 커밋 |
 | 작업 브랜치 | `codex/P5h-spectator-screen` |
 | 리뷰 파일 | `Docs/Reviews/P5h-spectator-screen.md` (첫 리뷰 때 생김) |
-| 상태 | 명세 — P5g 머지 대기 |
+| 상태 | 명세 — 구현 전 |
 
 ## 0. 결정
 
@@ -148,7 +148,7 @@ N은 그 시나리오의 단계 수(P3 기본 14)다. 원본 ID(01, 07…)는 �
 
 ## 8. 확인한 API 근거
 
-경로: `Source/vBoR/` 아래(`main` @ P5g 명세 `560f42f`), 엔진은 `C:/Program Files/Epic Games/UE_5.7/Engine/Source/` 아래, AI_Driving은 `C:/Git/AI_Driving/` 아래.
+경로: `Source/vBoR/` 아래(`main` @ P5g 머지 `84be709`), 엔진은 `C:/Program Files/Epic Games/UE_5.7/Engine/Source/` 아래, AI_Driving은 `C:/Git/AI_Driving/` 아래.
 
 | 쓸 것 | 위치 | 쓰임 |
 |---|---|---|
@@ -158,7 +158,7 @@ N은 그 시나리오의 단계 수(P3 기본 14)다. 원본 ID(01, 07…)는 �
 | 눈 영상을 영역 비율로 자름 | 엔진 `Engine/Plugins/Runtime/XRBase/Source/XRBase/Private/DefaultSpectatorScreenController.cpp:268-275`(겹침 모드), `:343-349`(기본 모드) | D3 |
 | 실측된 구현 | AI_Driving `Source/AI_Driving/VR/VRSpectatorUISubsystem.h:28-114`, `.cpp:43-233`, `README.md:104-112`·`:131-133` | D1 |
 | 모듈 | `vBoR.Build.cs:13`(UMG·Slate·SlateCore·HeadMountedDisplay 이미 있음) | D1 |
-| 러너 상태 | `Interaction/VBoRScenarioRunner.h:38`(`Scenario`), `:50-56`(읽기 함수) | D4 |
+| 러너 상태 | `Interaction/VBoRScenarioRunner.h:38`(`Scenario`), `:51-58`(읽기 함수 — `IsFreeMode()` `:54`. 자유모드이면서 `IsFinished()` 참 = 완료로 들어옴, 거짓 = `End`) | D4 |
 | 단계 구조체·기본 단계 | `Interaction/VBoRScenarioAsset.h:13-25`, `Interaction/VBoRScenarioAsset.cpp:3-26` | D5 |
 | 부품 상태 | §0-2 표의 줄 | D6 |
 | 근사 차 부품 | `P3Probe/P3VehicleMock.h`(공개 부품 프로퍼티) | D6 |
@@ -168,4 +168,5 @@ N은 그 시나리오의 단계 수(P3 기본 14)다. 원본 ID(01, 07…)는 �
 | 날짜 | 개정 | 내용 |
 |---|---|---|
 | 2026-10-16 | 처음 | 작성(사용자 요청·문답: 시야 + 아래 띠, 진행 막대, 조작 중인 부품 이름, 영어) |
+| 2026-10-16 | 베이스 갱신 | P5g 머지(`84be709`) 뒤 러너 줄 번호 맞춤, 자유모드 진입 방식 읽는 법(D4) |
 | 2026-10-16 | 구현 전 개정 | 사용자 관찰(TV가 VR보다 잘려 보임, 4:3이면 맞음): D3 시야를 4:3 영역에 두고 띠는 그 아래로(시야를 가리지 않음), 창 크기 바뀌면 다시 계산. E15·E16 추가 |
