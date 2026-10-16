@@ -7,6 +7,8 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Framework/Application/SlateApplication.h"
+#include "Brushes/SlateRoundedBoxBrush.h"
+#include "Brushes/SlateNoResource.h"
 #include "IHeadMountedDisplay.h"
 #include "ISpectatorScreenController.h"
 #include "IXRTrackingSystem.h"
@@ -14,9 +16,9 @@
 #include "Slate/SceneViewport.h"
 #include "Slate/WidgetRenderer.h"
 #include "Styling/CoreStyle.h"
+#include "Styling/SlateTypes.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
-#include "Widgets/Layout/SConstraintCanvas.h"
 #include "Widgets/Notifications/SProgressBar.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/SWindow.h"
@@ -63,12 +65,12 @@ bool UVBoRSpectatorSubsystem::TryStart()
 	for (TActorIterator<AVBoRScenarioRunner> It(GetWorld()); It; ++It) { Runner = *It; break; }
 	if (!Runner.IsValid()) { return false; }
 	ScreenLayout = FVBoRSpectatorLayout();
-	if (!ScreenLayout.Update(SpectatorWindowSize(GetWorld()),EyeAspect,BandHeight)) { return false; }
+	if (!ScreenLayout.Update(SpectatorWindowSize(GetWorld()),EyeAspect,MinPanelWidth)) { return false; }
 	SlateWidget = MakeWidget();
 	WidgetRenderer = new FWidgetRenderer(true);
-	RenderTarget = FWidgetRenderer::CreateTargetFor(DrawSize,TF_Bilinear,false);
+	RenderTarget = FWidgetRenderer::CreateTargetFor(FVector2D(ScreenLayout.PanelPixels),TF_Bilinear,false);
 	if (!RenderTarget) { Stop(); return false; }
-	RenderTarget->ClearColor = FLinearColor::Transparent;
+	RenderTarget->ClearColor = BackgroundColor;
 	Screen->SetSpectatorScreenModeTexturePlusEyeLayout(ScreenLayout.Layout);
 	Screen->SetSpectatorScreenTexture(RenderTarget);
 	Screen->SetSpectatorScreenMode(ESpectatorScreenMode::TexturePlusEye);
@@ -86,7 +88,6 @@ void UVBoRSpectatorSubsystem::SampleParts(double NowSeconds)
 		if (Part && Part->IsSpectatorInteracting()) { ActiveNames.AddUnique(Part->GetSpectatorName().ToString()); }
 	}
 	Names.Sample(ActiveNames,NowSeconds,NameHoldSeconds);
-	PartLine = Names.Line(InteractingPrefix.ToString());
 }
 
 void UVBoRSpectatorSubsystem::Tick(float DeltaTime)
@@ -113,66 +114,115 @@ void UVBoRSpectatorSubsystem::Tick(float DeltaTime)
 	if (RedrawCountdown > 0) { return; }
 	const float Interval = 1.f / FMath::Max(1.f,RedrawsPerSecond);
 	RedrawCountdown = Interval;
-	if (ScreenLayout.Update(SpectatorWindowSize(GetWorld()),EyeAspect,BandHeight))
-	{ Screen->SetSpectatorScreenModeTexturePlusEyeLayout(ScreenLayout.Layout); }
-	WidgetRenderer->DrawWidget(RenderTarget,SlateWidget.ToSharedRef(),DrawSize,Interval);
+	const FIntPoint WindowSize = SpectatorWindowSize(GetWorld());
+	if (WindowSize.X <= 0 || WindowSize.Y <= 0) { return; }
+	if (ScreenLayout.Update(WindowSize,EyeAspect,MinPanelWidth))
+	{
+		Screen->SetSpectatorScreenModeTexturePlusEyeLayout(ScreenLayout.Layout);
+		if (RenderTarget->SizeX != ScreenLayout.PanelPixels.X || RenderTarget->SizeY != ScreenLayout.PanelPixels.Y)
+		{ RenderTarget->ResizeTarget(ScreenLayout.PanelPixels.X,ScreenLayout.PanelPixels.Y); }
+	}
+	// target 은 칸의 px, Slate 배치는 1080 기준으로 유지 (P5k D2)
+	WidgetRenderer->DrawWidget(RenderTarget,SlateWidget.ToSharedRef(),ScreenLayout.DrawScale,FVector2D(ScreenLayout.PanelPixels),Interval);
 }
 
 TSharedRef<SWidget> UVBoRSpectatorSubsystem::MakeWidget()
 {
-	return SNew(SConstraintCanvas)
-	+ SConstraintCanvas::Slot().Offset_Lambda([this] {
-		const float Height = FMath::Clamp(BandHeight,0.01f,0.99f);
-		return FMargin(0,DrawSize.Y*(1-Height),DrawSize.X,DrawSize.Y*Height); })
+	static const FSlateRoundedBoxBrush Rounded(FLinearColor::White,4.f);
+	static const FProgressBarStyle ProgressStyle = FProgressBarStyle()
+		.SetBackgroundImage(FSlateNoResource()).SetFillImage(Rounded);
+	const auto HeadingFont = [this] {
+		FSlateFontInfo Font = FCoreStyle::GetDefaultFontStyle("Regular",HeadingFontSize);
+		Font.LetterSpacing = 80; return Font;
+	};
+	const auto Interacting = SNew(SVerticalBox)
+		.Visibility_Lambda([this] { return Names.RecentNames().IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible; })
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			SNew(STextBlock).Text_Lambda([this] { return InteractingPrefix; }).Font_Lambda(HeadingFont)
+			.ColorAndOpacity_Lambda([this] { return FSlateColor(SecondaryTextColor); })
+		];
+	for (int32 Index = 0; Index < 2; ++Index)
+	{
+		Interacting->AddSlot().AutoHeight().Padding(0,8,0,0)
+		[
+			SNew(STextBlock).Text_Lambda([this,Index] {
+				const auto Recent = Names.RecentNames();
+				return Recent.IsValidIndex(Index) ? FText::FromString(Recent[Index]) : FText::GetEmpty(); })
+			.Visibility_Lambda([this,Index] { return Names.RecentNames().IsValidIndex(Index) ? EVisibility::Visible : EVisibility::Collapsed; })
+			.Font_Lambda([this] { return FCoreStyle::GetDefaultFontStyle("Regular",PartFontSize); })
+			.ColorAndOpacity_Lambda([this] { return FSlateColor(TextColor); })
+			.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
+		];
+	}
+	return SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
+	.BorderBackgroundColor_Lambda([this] { return BackgroundColor; }).Padding(0)
 	[
-		SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
-		.BorderBackgroundColor_Lambda([this] { return BackgroundColor; }).Padding(FMargin(32,12))
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth()
+		[
+			SNew(SBox).WidthOverride(2)
+			[
+				SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).Padding(0)
+				.BorderBackgroundColor_Lambda([this] { return LineColor; })
+			]
+		]
+		+ SHorizontalBox::Slot().FillWidth(1).Padding(32,40)
 		[
 			SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight()
 			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth()
-				[
-					SNew(STextBlock).Text_Lambda([this] { return CurrentBanner.Label; })
-					.Font_Lambda([this] { return FCoreStyle::GetDefaultFontStyle("Bold",LabelFontSize); })
-					.ColorAndOpacity_Lambda([this] { return FSlateColor(AccentColor); })
-				]
-				+ SHorizontalBox::Slot().FillWidth(1).Padding(24,0,0,0).VAlign(VAlign_Center)
-				[
-					SNew(STextBlock).Text_Lambda([this] { return FText::FromString(PartLine); })
-					.AutoWrapText(false).OverflowPolicy(ETextOverflowPolicy::Ellipsis).Justification(ETextJustify::Right)
-					.Visibility_Lambda([this] { return PartLine.IsEmpty() ? EVisibility::Hidden : EVisibility::Visible; })
-					.Font_Lambda([this] { return FCoreStyle::GetDefaultFontStyle("Regular",PartFontSize); })
-					.ColorAndOpacity_Lambda([this] { return FSlateColor(TextColor); })
-				]
+				SNew(STextBlock).Text_Lambda([this] { return CurrentBanner.Label; })
+				.Font_Lambda([this] { return FCoreStyle::GetDefaultFontStyle("Bold",LabelFontSize); })
+				.ColorAndOpacity_Lambda([this] { return FSlateColor(AccentColor); })
+				// 명시한 폭으로 첫 prepass 부터 줄바꿈 높이를 계산함 (P5k D3·Q1)
+				.WrapTextAt_Lambda([this] { return FMath::Max(1.0,ScreenLayout.DesignSize().X-66); })
 			]
-			// 미션 폭을 전부 쓰고 한 줄로 제한함 (긴 에셋 문구가 막대를 덮지 않게, P5h R1-2)
-			+ SVerticalBox::Slot().AutoHeight()
+			+ SVerticalBox::Slot().FillHeight(1).Padding(0,24,0,0)
 			[
 				SNew(STextBlock).Text_Lambda([this] { return CurrentBanner.Mission; })
-				.AutoWrapText(false).OverflowPolicy(ETextOverflowPolicy::Ellipsis)
 				.Font_Lambda([this] { return FCoreStyle::GetDefaultFontStyle("Regular",MissionFontSize); })
 				.ColorAndOpacity_Lambda([this] { return FSlateColor(TextColor); })
+				.WrapTextAt_Lambda([this] { return FMath::Max(1.0,ScreenLayout.DesignSize().X-66); })
+				.OverflowPolicy(ETextOverflowPolicy::Ellipsis).Clipping(EWidgetClipping::ClipToBounds)
 			]
-			+ SVerticalBox::Slot().AutoHeight().Padding(0,4,0,0)
+			+ SVerticalBox::Slot().AutoHeight()
 			[
-				SNew(SHorizontalBox).Visibility_Lambda([this] { return CurrentBanner.bShowProgress ? EVisibility::Visible : EVisibility::Hidden; })
-				+ SHorizontalBox::Slot().FillWidth(1).VAlign(VAlign_Center)
+				SNew(SVerticalBox).Visibility_Lambda([this] { return CurrentBanner.bShowProgress ? EVisibility::Visible : EVisibility::Collapsed; })
+				+ SVerticalBox::Slot().AutoHeight()
 				[
-					SNew(SBox).HeightOverride(10)
+					SNew(STextBlock).Text(FText::FromString(TEXT("PROGRESS"))).Font_Lambda(HeadingFont)
+					.ColorAndOpacity_Lambda([this] { return FSlateColor(SecondaryTextColor); })
+				]
+				+ SVerticalBox::Slot().AutoHeight().Padding(0,12,0,0)
+				[
+					SNew(SBox).HeightOverride(12)
 					[
-						SNew(SProgressBar).Percent_Lambda([this] { return TOptional<float>(CurrentBanner.Progress()); })
-						.FillColorAndOpacity_Lambda([this] { return FSlateColor(AccentColor); })
+						SNew(SBorder).BorderImage(&Rounded).Padding(0)
+						.BorderBackgroundColor_Lambda([this] { return ProgressBackgroundColor; })
+						[
+							SNew(SProgressBar).Style(&ProgressStyle).BarFillStyle(EProgressBarFillStyle::Scale)
+							.Percent_Lambda([this] { return TOptional<float>(CurrentBanner.Progress()); })
+							.FillColorAndOpacity_Lambda([this] { return FSlateColor(AccentColor); })
+						]
 					]
 				]
-				+ SHorizontalBox::Slot().AutoWidth().Padding(20,0,0,0)
+				+ SVerticalBox::Slot().AutoHeight().Padding(0,12,0,0)
 				[
-					SNew(STextBlock).Text_Lambda([this] { return FText::FromString(FString::Printf(TEXT("%d / %d"),CurrentBanner.Completed,CurrentBanner.Total)); })
-					.Font(FCoreStyle::GetDefaultFontStyle("Regular",24))
-					.ColorAndOpacity_Lambda([this] { return FSlateColor(TextColor); })
+					SNew(STextBlock).Text_Lambda([this] { return FText::FromString(FString::Printf(TEXT("%d of %d complete"),CurrentBanner.Completed,CurrentBanner.Total)); })
+					.Font_Lambda([this] { return FCoreStyle::GetDefaultFontStyle("Regular",ProgressFontSize); })
+					.ColorAndOpacity_Lambda([this] { return FSlateColor(SecondaryTextColor); })
 				]
 			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(0,32,0,0)
+			[
+				SNew(SBox).HeightOverride(2)
+				[
+					SNew(SBorder).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush")).Padding(0)
+					.BorderBackgroundColor_Lambda([this] { return LineColor; })
+				]
+			]
+			+ SVerticalBox::Slot().AutoHeight().Padding(0,32,0,0)[Interacting]
 		]
 	];
 }

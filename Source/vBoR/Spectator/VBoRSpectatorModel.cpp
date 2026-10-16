@@ -70,17 +70,29 @@ FString FVBoRSpectatorNames::Line(const FString& Prefix) const
 	return Result;
 }
 
-bool FVBoRSpectatorLayout::Update(FIntPoint WindowSize, float EyeAspect, float BandHeight)
+TArray<FString> FVBoRSpectatorNames::RecentNames() const
+{
+	TArray<FString> Result;
+	for (int32 Index = 0; Index < FMath::Min(2, Entries.Num()); ++Index) { Result.Add(Entries[Index].Name); }
+	return Result;
+}
+
+bool FVBoRSpectatorLayout::Update(FIntPoint WindowSize, float EyeAspect, float MinPanelWidth)
 {
 	if (WindowSize.X <= 0 || WindowSize.Y <= 0) { return false; }
 	EyeAspect = FMath::IsFinite(EyeAspect) ? FMath::Max(0.01f, EyeAspect) : 4.f / 3;
-	BandHeight = FMath::IsFinite(BandHeight) ? FMath::Clamp(BandHeight, 0.01f, 0.99f) : 0.22f;
-	if (WindowSize == LastSize && EyeAspect == LastAspect && BandHeight == LastBand) { return false; }
-	LastSize = WindowSize; LastAspect = EyeAspect; LastBand = BandHeight;
-	double Height = 1.0 - BandHeight;
-	double Width = Height * EyeAspect / (static_cast<double>(WindowSize.X) / WindowSize.Y);
-	if (Width > 1) { Height /= Width; Width = 1; }
-	Layout = FSpectatorScreenModeTexturePlusEyeLayout(FVector2D((1 - Width) / 2, 0), FVector2D((1 + Width) / 2, Height),
-		FVector2D::ZeroVector, FVector2D(1,1), true, true, true);
+	MinPanelWidth = FMath::IsFinite(MinPanelWidth) ? FMath::Max(0.01f, MinPanelWidth) : 0.37f;
+	if (WindowSize == LastSize && EyeAspect == LastAspect && MinPanelWidth == LastPanelWidth) { return false; }
+	LastSize = WindowSize; LastAspect = EyeAspect; LastPanelWidth = MinPanelWidth;
+
+	const double Aspect = static_cast<double>(WindowSize.X) / WindowSize.Y;
+	// 극도로 좁은 창에서도 시야·칸 영역이 뒤집히지 않게 제한 (P5k D1)
+	const double Panel = FMath::Min(static_cast<double>(MinPanelWidth), Aspect * 0.99);
+	const double Height = FMath::Min(1.0, (Aspect - Panel) / EyeAspect);
+	const double Width = Height * EyeAspect / Aspect;
+	Layout = FSpectatorScreenModeTexturePlusEyeLayout(FVector2D(0,(1-Height)/2), FVector2D(Width,(1+Height)/2),
+		FVector2D(Width,0), FVector2D(1,1), true, true, false);
+	PanelPixels = FIntPoint(FMath::Max(1,FMath::RoundToInt((1-Width)*WindowSize.X)),WindowSize.Y);
+	DrawScale = WindowSize.Y / 1080.f;
 	return true;
 }
