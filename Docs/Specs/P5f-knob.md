@@ -7,14 +7,14 @@
 | 베이스 브랜치 | `main` @ P5e 머지(PR #19, `074a3b1`) 뒤 이 명세 커밋 |
 | 작업 브랜치 | `codex/P5f-knob` |
 | 리뷰 파일 | `Docs/Reviews/P5f-knob.md` (첫 리뷰 때 생김) |
-| 상태 | 명세 — 구현 전 |
+| 상태 | 구현 1회차(`a9bb9d7`) 리뷰함 — R1-1 반영 대기 |
 
 ## 0. 결정
 
 | # | 결정 | 내용 |
 |---|---|---|
 | D1 | **새 부모 `AVBoRKnob`** (계획서 §5 010의 `AVBoRAxisPart`를 바꿈) | `Source/vBoR/Interaction/`에 두고 ISDK·MetaXR에만 의존한다. 구성: 원점(Actor) → **축 피벗**(노브 축 = 피벗 로컬 +Z, 윗면 쪽) → 회전 컴포넌트(+Z 둘레) → 메시(`MeshRestFromRoot`로 원래 world 자리, U-09·P2b D3) + **회전 표시**(돌면 보이게, 휠의 12시 표시처럼 `VBoRSteeringWheel.cpp:50-52`) + 잡는 상자. 이동은 없다. **1축 부품을 쓰지 않는 이유:** 1축 부품은 ISDK 회전 변환기로 돈다(`VBoRAxisPart.h:58`). 이 변환기는 피벗→잡은 점 벡터의 방향 변화로 각을 낸다(ISDK `Private/Interaction/Grabbable/IsdkOneGrabRotateTransformer.cpp:42`, `:63`, `:74`). 노브를 손으로 감싸 쥐면 손바닥 잡기 점이 노브 축 위(윗면 위)에 놓인다. 그래서 벡터가 0에 가까워 돌지 않거나(`:65` "Too close to the pivot"), 손 떨림이 큰 각으로 나온다. 그리고 1축 부품 각도는 170°까지다(`VBoRAxisPart.h:92`). 1축 부품 코드는 바꾸지 않는다 |
-| D2 | **끝없이 이어 붙인 각도** | 각도(deg), 쉬는 자세 = 0. **+는 윗면에서 볼 때 시계 방향**이다(= 피벗 +Z 둘레 음의 회전, 음량을 올리는 방향). 한계는 없다(사용자 문답). frame마다 변화량을 더해 쌓으므로 180°·360°를 넘어도 부호가 뒤집히지 않는다(조사 기록 "각도 wrap"). 한계 옵션은 만들지 않는다(요구 없음) |
+| D2 | **끝없이 이어 붙인 각도** | 각도(deg), 쉬는 자세 = 0. **+는 윗면에서 볼 때 시계 방향**이다(음량을 올리는 방향). UE에서는 피벗 +Z 둘레 **양의** 회전이다. Actor의 오른쪽이 +Y이고(엔진 `Runtime/Engine/Classes/GameFramework/Actor.h:1602`), +Z 양의 회전이 +X를 +Y 쪽(앞 → 오른쪽)으로 돌리기 때문이다. 휠도 같은 규칙이다(P5d 리뷰 1회차 D2). 처음 판은 이것을 "음의 회전"으로 잘못 적었다(리뷰 R1-1). 한계는 없다(사용자 문답). frame마다 변화량을 더해 쌓으므로 180°·360°를 넘어도 부호가 뒤집히지 않는다(조사 기록 "각도 wrap"). 한계 옵션은 만들지 않는다(요구 없음) |
 | D3 | **잡기: 손바닥으로 감싸 쥔 손의 비틀림만 따라 돈다** | 손바닥만 받는다(`SetGrabInputMethodAllowed`, ISDK `Public/Interaction/IsdkGrabbableComponent.h:146` — Pinch 끔, 사용자 문답). 한 손만(`SingleGrabFirstRetained`, ISDK가 두 번째 손을 막음 `Private/Interaction/IsdkGrabberComponent.cpp:653`). **계산:** 손바닥 잡기 자세(`GetPalmGrabTransform`, `Public/Interaction/IsdkGrabberComponent.h:167-168`)를 피벗 기준으로 바꾼다(룸미러 `VBoRTwoAxisPart.cpp:103`처럼). 그 회전의 frame 간 변화에서 노브 축(+Z) 둘레 비틀림 각만 뽑아 더한다(`FQuat::GetTwistAngle`, 엔진 `Runtime/Core/Public/Math/Quat.h:465`, 구현 `Runtime/Core/Private/Math/UnrealMath.cpp:816-820` — 라디안, [−π, π], 오른손 규칙). 기울임(축에 수직인 회전)과 손 이동은 버린다. 한 frame 비틀림이 30°를 넘으면 튐으로 보고 기준만 옮긴다(룸미러 D3과 같음). 손목을 다 비튼 뒤 더 돌리려면 놓고 다시 잡는다 |
 | D4 | **단계(딸깍)** | 단계 각도 `StepDeg`(프로퍼티, 예 15° — 한 바퀴 24단계. 0이면 단계 없음)마다 단계 번호가 ±1 바뀐다. 번호도 끝이 없다(정수). 경계에 히스테리시스 `StepHysteresisDeg`(예 3°)를 둔다(경계에서 떨면 딸깍이 반복되지 않게). 번호 i에서 각도 ≥ (i + ½)·S + H이면 i+1, 각도 ≤ (i − ½)·S − H이면 i−1이다(예: 0→1은 10.5°, 1→0은 4.5°). 한 frame에 여러 경계를 넘으면 경계마다 하나씩 알린다. **알림(딸깍 소리 + `OnKnobStep(Direction ±1)`)은 대기열에 넣고 `Tick`에서 낸다**(놓기는 ISDK 포인터 처리 안에서 올 수 있다 — P5b R1-1, 1축 부품 `VBoRAxisPart.cpp:359-366`). 소리는 1축 부품 걸림과 같은 소리다(`VBoRAxisPart.cpp:155-157`) |
 | D5 | **놓으면 지금 단계 각도에 맞춘다** | 단계가 있으면 각도를 번호 × S로 바로 맞춘다. 번호는 그대로라서 알림은 없다. 실제 딸깍 노브가 걸림에 앉는 것을 흉내 낸 것이다. 단계가 없으면(S = 0) 그 자리에 머문다. 가운데로 돌아가는 자동 복귀와 누르기는 없다(INT-010) |
@@ -143,3 +143,4 @@
 | 날짜 | 개정 | 내용 |
 |---|---|---|
 | 2026-10-16 | 처음 | 작성(사용자 문답: 끝없이 + 딸깍, 손바닥 감싸 쥐기만) |
+| 2026-10-16 | 리뷰 1회차 R1-1 | D2: 위에서 볼 때 시계 방향은 UE에서 피벗 +Z 둘레 양의 회전(처음 판은 음의 회전으로 잘못 적음 — 오른손 좌표계로 계산) |
