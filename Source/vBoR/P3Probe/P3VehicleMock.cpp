@@ -93,12 +93,14 @@ void AP3VehicleMock::BeginPlay()
 	RearKeyTable = CreateKeyTable(RearKeyTableCm, TEXT("Car.RearKey.Unlock"), TEXT("Car.RearKey.Lock"));
 	Door = GetWorld()->SpawnActorDeferred<AVBoRHingedDoor>(AVBoRHingedDoor::StaticClass(), FTransform(FRotator(0,180,0).Quaternion(), GetActorTransform().TransformPosition(DoorHingeCm)), this);
 	const FTransform DoorWorld(FRotator(0,GetActorRotation().Yaw+180,0), GetActorTransform().TransformPosition(DoorHingeCm));
-	Door->Tags.Add(TEXT("Car.DriverDoor")); Door->FinishSpawning(DoorWorld); Door->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+	Door->Tags.Add(TEXT("Car.DriverDoor")); Door->SpectatorName = FText::FromString(TEXT("Driver Door"));
+	Door->FinishSpawning(DoorWorld); Door->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	// Actor 원점은 차 원점, 메시·축만 부품 자리로 옮김 (차 원점 피벗 흉내, P2b D3)
 	OutsideAxisHandle = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
 	OutsideAxisHandle->AxisPivot->SetRelativeLocation(OutsideHandlePivotCm);
 	OutsideAxisHandle->MeshRestFromRoot = FTransform(FQuat::Identity, OutsideHandlePivotCm - FVector(0,0,2), FVector(0.18,0.04,0.04));
 	OutsideAxisHandle->Axis = EAxis::X; OutsideAxisHandle->bReverse = true;
+	OutsideAxisHandle->SpectatorName = FText::FromString(TEXT("Driver Door"));
 	OutsideAxisHandle->FinishSpawning(GetActorTransform());
 	OutsideAxisHandle->AttachToComponent(Door->HingePivot, FAttachmentTransformRules::KeepWorldTransform);
 	Door->SetAxisHandle(0, OutsideAxisHandle);
@@ -107,6 +109,7 @@ void AP3VehicleMock::BeginPlay()
 	InsideAxisHandle->AxisPivot->SetRelativeLocation(InsideHandlePivotCm);
 	InsideAxisHandle->MeshRestFromRoot = FTransform(FQuat::Identity, InsideHandlePivotCm - FVector(0,0,2), FVector(0.18,0.04,0.04));
 	InsideAxisHandle->Axis = EAxis::X;
+	InsideAxisHandle->SpectatorName = FText::FromString(TEXT("Driver Door"));
 	InsideAxisHandle->FinishSpawning(GetActorTransform());
 	InsideAxisHandle->AttachToComponent(Door->HingePivot, FAttachmentTransformRules::KeepWorldTransform);
 	Door->SetAxisHandle(1, InsideAxisHandle);
@@ -124,6 +127,7 @@ void AP3VehicleMock::BeginPlay()
 	ConsoleLid->bUseLatch = true;
 	ConsoleLid->bAllowPalmOpening = false;
 	ConsoleLid->bUseInsideGrabArea = false;
+	ConsoleLid->SpectatorName = FText::FromString(TEXT("Console Box"));
 	ConsoleLid->FinishSpawning(GetActorTransform());
 	ConsoleLid->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	// +X 차 +Z·+Y 차 -X·+Z 차 -Y. 아래 경첩에서 앉은 쪽으로 내려옴 (근사 cm, P5a D2·D6)
@@ -138,8 +142,10 @@ void AP3VehicleMock::BeginPlay()
 	GloveboxHandle->MeshRestFromRoot = FTransform(FQuat::Identity, GloveboxHandlePivotCm - FVector(0,0,GloveboxHandleSizeCm.Z/2), GloveboxHandleSizeCm/100);
 	GloveboxHandle->Axis = EAxis::Y; GloveboxHandle->MaxAngleDeg = GloveboxHandleMaxAngleDeg;
 	GloveboxHandle->Movement = EVBoRAxisMovement::Rotate; GloveboxHandle->Release = EVBoRAxisRelease::Return;
+	GloveboxHandle->SpectatorName = FText::FromString(TEXT("Glovebox"));
 	GloveboxHandle->FinishSpawning(GetActorTransform());
 	Glovebox->OutsideAxisHandle = GloveboxHandle;
+	Glovebox->SpectatorName = FText::FromString(TEXT("Glovebox"));
 	Glovebox->FinishSpawning(GetActorTransform());
 	Glovebox->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	GloveboxHandle->AttachToComponent(Glovebox->HingePivot, FAttachmentTransformRules::KeepWorldTransform);
@@ -150,12 +156,14 @@ void AP3VehicleMock::BeginPlay()
 	GearLever->Axis = EAxis::X; GearLever->Release = EVBoRAxisRelease::Detent;
 	GearLever->DetentAnglesDeg = GearDetentAnglesDeg; GearLever->DetentStartIndex = 1;
 	GearLever->DetentUpThresholdDeg = GearUpThresholdDeg; GearLever->DetentDownThresholdDeg = GearDownThresholdDeg;
+	GearLever->SpectatorName = FText::FromString(TEXT("Gear Lever"));
 	GearLever->FinishSpawning(GetActorTransform()); GearLever->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	// 버튼 +Z 면을 레버 끝 +Y 로 놓음. 잡기·단계와 연결하지 않음 (P5b D8)
 	const FTransform ButtonFromPivot(FRotationMatrix::MakeFromZ(FVector::YAxisVector).ToQuat(), FVector(0,GearSizeCm.Y,0));
 	const FTransform ButtonWorld = ButtonFromPivot * GearLever->AxisPivot->GetComponentTransform();
 	GearButton = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), ButtonWorld, this);
 	GearButton->ButtonMesh->SetRelativeScale3D(GearButtonSizeCm/100); GearButton->HitAreaScale = 1;
+	GearButton->SpectatorName = FText::FromString(TEXT("Gear Button"));
 	GearButton->FinishSpawning(ButtonWorld); GearButton->AttachToComponent(GearLever->AxisPivot, FAttachmentTransformRules::KeepWorldTransform);
 	// 왼쪽 -Y 레버는 회전 부호를 뒤집음 (값 + 일 때 끝이 위로, 근사 cm·deg, P5c D7)
 	TurnSignalLever = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
@@ -165,6 +173,7 @@ void AP3VehicleMock::BeginPlay()
 	TurnSignalLever->DetentAnglesDeg = TurnSignalDetentAnglesDeg; TurnSignalLever->DetentStartIndex = 1;
 	TurnSignalLever->DetentUpThresholdDeg = TurnSignalUpThresholdDeg; TurnSignalLever->DetentDownThresholdDeg = TurnSignalDownThresholdDeg;
 	TurnSignalLever->DetentNudgeDeg = TurnSignalNudgeDeg;
+	TurnSignalLever->SpectatorName = FText::FromString(TEXT("Turn Signal Lever"));
 	TurnSignalLever->FinishSpawning(GetActorTransform()); TurnSignalLever->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	// 판은 에디터·기존 시험 기준으로 남김 (차 원점 피벗, 근사 cm·deg, P5d D8)
 	SteeringWheel = GetWorld()->SpawnActorDeferred<AVBoRSteeringWheel>(AVBoRSteeringWheel::StaticClass(),GetActorTransform(),this);
@@ -175,6 +184,7 @@ void AP3VehicleMock::BeginPlay()
 		SteeringWheel->MarkerRestFromPivot.SetLocation(FVector(-SteeringThicknessCm/2-0.1,0,SteeringDiameterCm/2-1.5));
 		SteeringWheel->LimitAngleDeg = SteeringLimitDeg;
 		SteeringWheel->MinGrabRadiusCm = SteeringMinGrabRadiusCm; SteeringWheel->MaxGrabRadiusCm = SteeringMaxGrabRadiusCm;
+		SteeringWheel->SpectatorName = FText::FromString(TEXT("Steering Wheel"));
 		SteeringWheel->FinishSpawning(GetActorTransform()); SteeringWheel->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform);
 		Plates[12]->SetHiddenInGame(true);
 	}
@@ -183,6 +193,7 @@ void AP3VehicleMock::BeginPlay()
 	{
 		RearviewMirror->Pivot->SetRelativeLocation(MirrorPivotCm);
 		RearviewMirror->MeshRestFromRoot = FTransform(FQuat::Identity,MirrorCenterCm,MirrorSizeCm/100);
+		RearviewMirror->SpectatorName = FText::FromString(TEXT("Rearview Mirror"));
 		RearviewMirror->FinishSpawning(GetActorTransform()); RearviewMirror->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform);
 	}
 	// Actor 원점은 차 원점, +Z 가 노브 윗면임 (근사 지름·높이 cm, P5f D8·U-09)
@@ -192,11 +203,13 @@ void AP3VehicleMock::BeginPlay()
 		ConsoleKnob->Pivot->SetRelativeLocation(KnobPivotCm);
 		ConsoleKnob->MeshRestFromRoot = FTransform(FQuat::Identity,KnobPivotCm+FVector(0,0,KnobHeightCm/2),FVector(KnobDiameterCm,KnobDiameterCm,KnobHeightCm)/100);
 		ConsoleKnob->MarkerRestFromPivot.SetLocation(FVector(KnobDiameterCm/2-0.8,0,KnobHeightCm+0.15));
+		ConsoleKnob->SpectatorName = FText::FromString(TEXT("Console Knob"));
 		ConsoleKnob->FinishSpawning(GetActorTransform()); ConsoleKnob->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform);
 	}
 	ReachButton = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), FTransform::Identity, this);
 	ReachButton->Tags.Add(TEXT("Car.ReachButton")); ReachButton->HitAreaScale = 1;
 	ReachButton->ButtonMesh->SetRelativeScale3D(FVector(0.04,0.04,0.01));
+	ReachButton->SpectatorName = FText::FromString(TEXT("Button"));
 	ReachButton->FinishSpawning(FTransform(GetActorRotation(), GetActorTransform().TransformPosition(ReachButtonCm))); ReachButton->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	PlaceReachButton();
 	UMaterialInterface* ColorMaterial = LoadObject<UMaterialInterface>(nullptr, IsdkContentAssetPaths::Materials::GrabbableDefault);
@@ -216,6 +229,7 @@ AVBoRKeyTable* AP3VehicleMock::CreateKeyTable(FVector PositionCm, const TCHAR* U
 	Table->FinishSpawning(TableWorld); Table->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	if (Table->Key)
 	{
+		Table->Key->SpectatorName = FText::FromString(TEXT("Key"));
 		Table->Key->UnlockButton->Tags.Add(UnlockTag); Table->Key->LockButton->Tags.Add(LockTag);
 		Table->Key->OnUnlockPressed.AddDynamic(this, &AP3VehicleMock::KeyUnlockPressed);
 		Table->Key->OnLockPressed.AddDynamic(this, &AP3VehicleMock::KeyLockPressed);
