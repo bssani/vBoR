@@ -18,6 +18,7 @@ class AVBoRAxisPart;
 class AVBoRKeyTable;
 class AVBoRSteeringWheel;
 class AVBoRTwoAxisPart;
+class AVBoRKnob;
 
 UCLASS(Blueprintable)
 class VBOR_API AP3VehicleMock : public AActor
@@ -88,6 +89,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 룸미러", meta=(Units="cm", ClampMin="0.1")) FVector MirrorSizeCm = FVector(2,25,7);
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRTwoAxisPart> RearviewMirror;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<UStaticMeshComponent> MirrorSupport;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 노브", meta=(Units="cm")) FVector KnobPivotCm = FVector(10,0,59.5);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 노브", meta=(Units="cm", ClampMin="0.1")) float KnobDiameterCm = 6;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 노브", meta=(Units="cm", ClampMin="0.1")) float KnobHeightCm = 2.5;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 노브", meta=(Units="cm")) FVector KnobSupportCenterCm = FVector(10,0,58.5);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 노브", meta=(Units="cm", ClampMin="0.1")) FVector KnobSupportSizeCm = FVector(20,16,2);
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRKnob> ConsoleKnob;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<UStaticMeshComponent> KnobSupport;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRPokeButton> ReachButton;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector FrontKeyTableCm = FVector(330,-90,0);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector RearKeyTableCm = FVector(-330,-90,0);
@@ -105,6 +113,7 @@ private:
 	friend struct FP5cTestAccess;
 	friend struct FP5dTestAccess;
 	friend struct FP5eTestAccess;
+	friend struct FP5fTestAccess;
 	void PlaceReachButton();
 	AVBoRKeyTable* CreateKeyTable(FVector PositionCm, const TCHAR* UnlockTag, const TCHAR* LockTag);
 	UFUNCTION() void KeyUnlockPressed(AVBoRKeyFob* Key);
