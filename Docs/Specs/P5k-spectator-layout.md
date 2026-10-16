@@ -4,11 +4,11 @@
 |---|---|
 | 단계 | P5 자유모드·리허설(운영). 시험 T-08과 리허설 |
 | 결정 근거 | **사용자 요청(2026-10-16):** TV에 꽉 차게 보이고, UI는 시야를 최대한 가리지 않게. P5h 배치(4:3 시야 + 아래 띠)는 양옆에 빈 공간이 생긴다. **사용자 문답(2026-10-16):** 세 안(시야 높이 전체 + 오른쪽 칸 / 가운데 + 양옆 두 칸 / 16:9 꽉 채움 + 반투명 띠) 중 **시야 높이 전체 + 오른쪽 칸**. 16:9로 꽉 채우면 VR 시야 위아래가 잘린다(P5h D3 — 처음 사용자 관찰). **P5i에서 옮김:** TV 띠 색을 진행자 창과 같은 팔레트로(사용자 2차 문답 "TV 띠도 같은 색", CX Toolkit 어두운 테마) |
-| 베이스 브랜치 | P5i 머지 뒤 `main` |
+| 베이스 브랜치 | `main` @ P5i 머지(PR #23, `d81e857`) 뒤 이 명세 갱신 커밋 |
 | 작업 브랜치 | `codex/P5k-spectator-layout` |
 | 리뷰 파일 | `Docs/Reviews/P5k-spectator-layout.md` (첫 리뷰 때 생김) |
 | 디자인 | `Docs/Design/P5i-operator-panel/TvBand.dc.html` — 960 × 540(1080의 절반)으로 그렸다. **값은 모두 두 배로 읽는다** |
-| 상태 | 명세 — P5i 머지 대기 |
+| 상태 | 명세 — 구현 전 |
 
 ## 0. 결정
 
@@ -89,7 +89,7 @@
 
 ## 8. 확인한 API 근거
 
-경로: `Source/vBoR/` 아래(`main` @ `8da29d6`, P5i 구현 전 — P5i가 `Spectator/`를 고치지 않으므로 줄 번호가 그대로일 것), 엔진은 `C:/Program Files/Epic Games/UE_5.7/Engine/Source/` 아래.
+경로: `Source/vBoR/` 아래(`main` @ `d81e857`. P5i는 `Spectator/`와 `P5hSpectatorTests.cpp`를 고치지 않았다 — `8da29d6`과 차이 없음을 확인함), 엔진은 `C:/Program Files/Epic Games/UE_5.7/Engine/Source/` 아래.
 
 | 쓸 것 | 위치 | 쓰임 |
 |---|---|---|
@@ -107,3 +107,4 @@
 | 날짜 | 개정 | 내용 |
 |---|---|---|
 | 2026-10-16 | 처음 | 작성(사용자 요청·문답: TV 꽉 채우기, UI가 시야를 가리지 않게 — 시야 높이 전체 + 오른쪽 칸). P5i D10(TV 띠 색)을 옮겨 옴 |
+| 2026-10-16 | P5i 머지 뒤 | 베이스를 `d81e857`로. 줄 번호는 그대로(P5i가 `Spectator/`·P5h 시험을 고치지 않음). 진행자 창(`Interaction/VBoRScenarioOperator.cpp`)이 `VBoRSpectator::MissionText`를 쓰므로 그 함수 모양은 바꾸지 않는다(D6) |
