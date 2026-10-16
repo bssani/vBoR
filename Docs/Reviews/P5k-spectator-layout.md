@@ -87,3 +87,28 @@ Q1 반영함 (feat(p5k): revise spectator side panel): 꼬리표→미션 24 px,
 - 최종 전체 재실행: Saved/Logs/P5kFinalAllAutomationRetry.log — 321개 발견·321개 완료, 321/321 Success, 실패 0 (P5h 15/15·P5k 4/4), engine/process exit 0. nullrhi, OculusInteractionSamples·McpAutomationBridge·UnrealAgent 비활성. 워크플로 §2.5의 샘플 InfoCard CDO·XR 확장 잡음은 시험 실패와 구분.
 - 시작·종료 시 UnrealEditor/UnrealEditor-Cmd 프로세스 0개. GUI 에디터·MCP·Blueprint·레벨·설정 수정 없음.
 - Quest 3 Link/VR Preview L_P3_Flow + TV 명세 §7-1–5, 계획서 T-08 및 리허설: not-tested. 실제 RHI의 target resize·TV 화면 비율·몇 m 거리 가독성·헤드셋에 UI가 안 보이는지 사용자 확인 필요. Slate 배치·계산·headless 자동화가 기기/화면 동작 증거를 대신하지 않음.
+
+## 리뷰 1회차 (2026-10-16, Claude — `d7a59ad`)
+
+**결과: 통과. 열린 항목 없음.** 명세 D1–D5와 Q1 답(D3 개정)대로 들어갔다. 헤드셋 경로·문구 규칙·부품 수집은 그대로다(D6). 고친 기존 시험은 §3이 허용한 P5h E15–E18뿐이다. E10은 시험 도우미가 지운 `PartLine` 대신 `Names.Line`을 읽게 바꿨고 단언은 그대로다. 진행자 창(P5i)과 `MissionText`는 건드리지 않았다.
+
+**재현(에디터 닫힘 확인 뒤, 바뀐 C++ 5개 시각 갱신):**
+- non-unity(`-DisableUnity -Module=vBoR`) `Result: Succeeded`. vBoR 경고·오류 0. 로그 `Saved/Logs/P5kReview-NonUnity.log`.
+- unity `Result: Succeeded`. 경고·오류 0. 로그 `P5kReview-Unity.log`.
+- `vBoR.*` **321/321**(P5h 15, P5k 4, P5i 26), `TEST COMPLETE. EXIT CODE: 0`. P5h·P5k 시험 구간 경고·오류 0. 로그 `P5kReview-Full.log`.
+
+**Codex 토큰:** 6.09M(캐시 94%, 13:40–14:06 UTC 약 25분. 질문 Q1으로 멈춘 것과 재개를 한 대화에서 함). 빌드·전체 시험을 두 번 넘게 했다. 시험 실패 2건(E17 fixture, E2E3 float 허용치), 시험 컴파일 오류(C2666), `P0Buck.E8Persistence` 재실행 때문이고, 보고 ③에 이유와 로그가 있다. 실제 실패를 고친 재실행이라 규칙 안이다.
+
+**확인한 것:**
+- **D1 배치:** `VBoRSpectatorModel.cpp:80-97`의 식을 네 창 비율에 넣어 E1 기대값과 같은지 손으로 계산했다(16:9 시야 x 0–0.75, 16:10 0.76875·y 0.03875, 4:3 0.7225·y 0.13875, 21:9 0.571429). `bUseAlpha` 거짓(칸 불투명), `bClearBlack` 참. 극단적으로 좁은 창에서 칸 폭을 창 비율의 0.99로 막는 것은 명세 네 비율에 영향이 없다.
+- **D2 텍스처:** 텍스처 영역 = 칸. 렌더 타깃은 칸 픽셀 크기로 만든다. 크기가 바뀔 때만 `ResizeTarget`(`VBoRSpectatorSubsystem.cpp:120-124`), 최소화(0)는 그 앞에서 돌아간다. `DrawWidget`의 배율은 창 높이 / 1080(`:126`). 그래서 Slate 배치는 늘 1080 높이 기준이다(`DesignSize`).
+- **D3 칸 배치:** 여백 40·32, 꼬리표 → 미션 24, 진행 묶음 12, 막대 12·모서리 4, 구분선·조작 중 묶음 위 각 32, 이름 사이 8, 왼쪽 선 2, 글꼴 40·36·16·19·27 pt, 자간 80. 꼬리표·미션의 줄바꿈 폭은 칸 폭 − 66(좌우 여백 64 + 선 2). E17이 가장 좁은 칸(4:3, 400 px)에서 24 px·8 px 간격과 칸 높이 안에 들어가는지 잰다.
+- **D4 색:** 6색 모두 sRGB hex → `FromSRGBColor`, 새 프로퍼티 셋은 `Config`(E18).
+- **D5 이름:** `RecentNames`가 최근 것부터 최대 둘. `Line`은 남김(P5h E7–E10).
+
+### 참고 (반영할 것 없음 — TV 확인 때 볼 것)
+
+- **넘치는 미션의 말줄임 모양.** 미션은 `ETextOverflowPolicy::Ellipsis`다(`VBoRSpectatorSubsystem.cpp:187`). 여러 줄 글이 세로로 넘치면, Slate는 반쯤 보이는 마지막 줄까지 그리고 그 줄에 말줄임을 붙인다(엔진 `Runtime/Slate/Private/Framework/Text/SlateTextLayout.cpp:118-128`·`:156-159`). 그래서 맨 아래 줄이 글자 중간에서 잘린 채 보인다. `MultilineEllipsis`(엔진 `Runtime/SlateCore/Public/Styling/SlateTypes.h:86-87`, 처리 `SlateTextLayout.cpp:103-113`)는 잘린 줄을 통째로 빼고 앞 줄에 말줄임을 붙인다.
+  - 4:3 창의 400 px 칸에서 기본 36 pt면 약 11줄이 들어간다(코드로 어림잡은 것). 원본 19개 기본 문구는 E17에서 들어감을 확인했다. 그래서 이 경우는 사용자가 아주 긴 영어 문구를 에셋에 넣었을 때만 생긴다.
+  - TV 확인(명세 §7-3)에서 글꼴을 키우다 이 모양이 보이면, 그 한 단어를 바꾼다.
+- **TV 칸 색이 진행자 창과 같은지 나란히 본다.** 그리는 경로는 P5h부터 그대로다(`FWidgetRenderer(true)` + `CreateTargetFor(..., false)` — 엔진 `Runtime/UMG/Private/Slate/WidgetRenderer.cpp:85-93`에서 `SRGB`·선형 감마 설정). 자동화(`-nullrhi`)로는 실제 화면 색을 볼 수 없다. 칸이 진행자 창보다 눈에 띄게 밝거나 어두우면, 이 감마 조합을 먼저 본다.
