@@ -179,3 +179,23 @@
 - GUI: 실제 OS 창의 Alt+F4·작업 표시줄 닫힘 후 ShowOperatorWindow 재생성, 자리·크기 보존, 최소화 복구, Play 종료와 레벨 재열기를 확인할 것. 이번 자동화는 native 창 없이 닫힘 처리 함수와 Slate widget만 시험함. 실제 GUI not-tested.
 - Quest 3 Link/VR Preview: L_P3_Flow에서 O의 진행 중·자유모드·시작 전 재적용 암전 동작, 버튼 상태의 즉시 갱신, 기존 정렬 재적용·좌석/흐름 키 일치를 확인할 것. 계획서 T-01·T-04·T-05·T-08·T-09 및 명세 §7은 not-tested. 합성 시험으로 기기·운영 동작을 통과 처리하지 않음.
 - 시작·종료 시 UnrealEditor/UnrealEditor-Cmd 프로세스 없음 확인. 작업 트리는 이 리뷰 범위의 파일만 변경함.
+
+## 리뷰 2회차 (2026-10-16, Claude — `9fbe959`)
+
+**결과: 통과. 열린 항목 없음.** R1-1–R1-3이 모두 제안대로 들어갔다. 제품 동작은 바뀌지 않았고, 이번 커밋에서 바뀐 기존 시험 단언은 P5i 새 시험 E20 기대값 하나(5 → 4, 리뷰가 지시함)뿐이다.
+
+**재현(에디터 닫힘 확인 뒤, 바뀐 C++ 5개 시각 갱신):**
+- non-unity(`-DisableUnity -Module=vBoR`) `Result: Succeeded`, 18개 작업(`VBoRScenarioOperator.cpp`·`VBoROperatorPanel.cpp`·`P5iOperatorPanelTests.cpp` 포함). vBoR 경고·오류 0. 로그 `Saved/Logs/P5iReview2-NonUnity.log`.
+- unity `Result: Succeeded`, `Module.vBoR.2–6.cpp` 다시 컴파일. 경고·오류 0. 로그 `P5iReview2-Unity.log`.
+- `vBoR.*` **317/317**(P5i 26개 포함), `TEST COMPLETE. EXIT CODE: 0`. 로그 `P5iReview2-Full.log`.
+
+**Codex 토큰:** 반영 대화 2.62M(캐시 95%, 약 12분, 08:05–08:16 UTC). 뒤 확인 대화 0.33M(1분). 빌드 non-unity·unity 각 한 번, 전체 시험 한 번. 규칙 안이다.
+
+**항목별 확인:**
+- **R1-1:** 창을 만들 때 닫힘 콜백을 건다(`Interaction/VBoRScenarioOperator.cpp:274-275`). 콜백은 러너를 `TWeakObjectPtr`로 잡는다. 처리 함수(`:290-296`)는 자기 창일 때만 자리·크기를 기억하고 포인터를 비운다. `EndPlay`의 `CloseOperatorWindow`(`:282-288`)도 이 함수를 먼저 거친 뒤 파괴를 요청한다. 그래서 다음 frame에 오는 콜백은 `OperatorWindow != Window`에서 돌아가고, 같은 창을 두 번 처리하지 않는다. 밖에서 닫은 뒤에는 `ShowOperatorWindow`가 새로 만든다(D1, P5j D3). 시험 `R1ExternalWindowClose`(`P5iOperatorPanelTests.cpp:375`)가 밖 닫힘·뒤이은 `EndPlay`·늦게 온 옛 창 콜백을 본다. 실제 OS 창의 Alt+F4는 자동화로 못 보므로 VR §7(P5j §7-3)에 남는다.
+- **R1-2:** O의 전환 중 검사를 자유모드·태그 검사·이미 시작 다음, 받기 바로 앞으로 옮겼다(`VBoRScenarioOperator.cpp:93-101`). 옛 `Dispatch`(`main` `VBoRScenarioRunner.cpp:347-353`)의 순서와 같아졌다. 시험 `R1IgnoreDuringTransitions`(`:398`)가 세 경우(진행 중 암전 — 센 값·기록·단계 그대로, 자유모드 암전 — 규칙 버림 +1, 시작 전 다시 적용 암전 — 흐림·전환 버림 +1, 뒤이어 1단계 시작)를 본다.
+- **R1-3:** 패널은 `Construct`와 `Tick`에서 스냅숏을 한 번 만든다(`Interaction/VBoROperatorPanel.cpp:62`·`:114`). attribute lambda는 스냅숏만 읽는다. 스냅숏(`VBoRScenarioOperator.cpp:233-254`)은 버튼마다 시점을 한 번 찾아 판정·꼬리표에 같이 쓴다. 운전석과 좌석이 아닌 명령은 월드를 돌지 않는다(`:50`). 판정은 여전히 `EvaluateCommand` 하나다 — 시점을 인자로 받는 overload가 같은 본문을 쓴다(D3). 시험 `R1OneSnapshotPerFrame`(`:431`)이 8가지 상태에서 `Tick` + `SlatePrepass` 한 번에 순회가 정확히 2번인지, 스냅숏의 판정·이유·기록·모양·꼬리표가 바로 부른 값과 같은지, 실제 버튼 켜짐이 스냅숏을 따르는지 본다.
+
+**참고(반영할 것 없음):**
+- 스냅숏은 `Tick`에서 만들고, Slate는 한 frame 안에서 prepass(글자 크기)를 paint(Tick) 앞에 한다. 그래서 글자 크기는 한 frame 늦게 따라온다. 진행자가 보기에는 차이가 없다(D6 초당 10회 이상은 그대로). 누르는 순간에는 `Dispatch`가 다시 판정하므로 한 frame 늦은 켜짐 표시로 잘못된 명령이 들어가지 않는다.
+- 1회차 참고(창이 뜰 때 초점을 가져감, E1·E7의 한계, 태그 검사 실패 때 `Alignment check`)는 그대로다. VR 확인 때 본다.
