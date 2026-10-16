@@ -341,4 +341,86 @@ bool FP5eCleanup::RunTest(const FString&)
 	FP5eWorld W; auto* Car=W.World->SpawnActor<AP3VehicleMock>(); W.Play(); auto* Part=Car->RearviewMirror.Get(); auto* Support=Car->MirrorSupport.Get();
 	if (!TestNotNull(TEXT("Mirror exists"),Part)) { return false; } Car->Destroy(); TestTrue(TEXT("Mirror destroyed"),Part->IsActorBeingDestroyed()); TestFalse(TEXT("Support unregistered"),Support->IsRegistered()); return true;
 }
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5eSplitPoints,"vBoR.P5e.E20SplitPointsStayStill",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5eSplitPoints::RunTest(const FString&)
+{
+	for (int32 HandIndex : {0,1})
+	{
+		FVBoRTwoAxisMotion Motion; FVBoRDoorHand Hands[2];
+		P5ePoint(Hands[HandIndex],FVector(-5,0,2.5)); Hands[HandIndex].Points[2]=FVector(-5,0,-2.5); Motion.AdvancePush(Hands);
+		Hands[HandIndex].Points[1].X=-3.5; Hands[HandIndex].Points[2].X=-3.5; Motion.AdvancePush(Hands);
+		TestEqual(TEXT("Split points start one push"),Motion.PushHand,HandIndex);
+		TestTrue(TEXT("First push changes pitch"),FMath::Abs(Motion.PitchDeg)>1);
+		const double Yaw=Motion.YawDeg, Pitch=Motion.PitchDeg;
+		for (int32 Frame=0; Frame<8; ++Frame)
+		{
+			Motion.AdvancePush(Hands);
+			TestTrue(TEXT("Split points preserve yaw and pitch"),FMath::IsNearlyEqual(Motion.YawDeg,Yaw,0.001) && FMath::IsNearlyEqual(Motion.PitchDeg,Pitch,0.001));
+		}
+	} return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5eOpenHandPoints,"vBoR.P5e.E20OpenHandStaysStill",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5eOpenHandPoints::RunTest(const FString&)
+{
+	FVBoRTwoAxisMotion Motion; FVBoRDoorHand Hands[2]; Hands[0].bTracked=true;
+	const FVector Points[] = {FVector(-5,7,0),FVector(-5,-1.2,2.6),FVector(-5,-2.2,1.5),FVector(-5,-2.2,-1.5),FVector(-5,-1.2,-2.6)};
+	for (int32 PointIndex=0; PointIndex<5; ++PointIndex) { Hands[0].Points[PointIndex]=Points[PointIndex]; } Motion.AdvancePush(Hands);
+	for (FVector& Point : Hands[0].Points) { Point.X=-3.5; } Motion.AdvancePush(Hands);
+	TestEqual(TEXT("Open hand starts push"),Motion.PushHand,0); TestTrue(TEXT("Open hand turns mirror"),FMath::Abs(Motion.YawDeg)>1);
+	const double Yaw=Motion.YawDeg, Pitch=Motion.PitchDeg;
+	for (int32 Frame=0; Frame<8; ++Frame)
+	{
+		Motion.AdvancePush(Hands);
+		TestTrue(TEXT("Stationary open hand preserves both angles"),FMath::IsNearlyEqual(Motion.YawDeg,Yaw,0.001) && FMath::IsNearlyEqual(Motion.PitchDeg,Pitch,0.001));
+	} return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5ePushPointRetention,"vBoR.P5e.E20OtherPointCannotSteal",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5ePushPointRetention::RunTest(const FString&)
+{
+	FVBoRTwoAxisMotion Motion; FVBoRDoorHand Hands[2];
+	P5ePoint(Hands[0],FVector(-5,10,0)); Hands[0].Points[2]=FVector(-5,-10,0); Motion.AdvancePush(Hands);
+	Hands[0].Points[1].X=-3.5; Motion.AdvancePush(Hands);
+	const double Yaw=Motion.YawDeg, Pitch=Motion.PitchDeg;
+	Hands[0].Points[2]=Motion.Rotation().RotateVector(FVector(-2,-10,0));
+	for (int32 Frame=0; Frame<8; ++Frame)
+	{
+		Motion.AdvancePush(Hands);
+		TestTrue(TEXT("Deeper opposite point cannot change angles"),FMath::IsNearlyEqual(Motion.YawDeg,Yaw,0.001) && FMath::IsNearlyEqual(Motion.PitchDeg,Pitch,0.001));
+	}
+	Hands[0].Points[1]=Motion.Rotation().RotateVector(FVector(-8,10,0));
+	for (int32 Frame=0; Frame<8; ++Frame)
+	{
+		Motion.AdvancePush(Hands); TestEqual(TEXT("Remaining point cannot restart push"),Motion.PushHand,INDEX_NONE);
+		TestTrue(TEXT("Withdrawal preserves angles"),FMath::IsNearlyEqual(Motion.YawDeg,Yaw,0.001) && FMath::IsNearlyEqual(Motion.PitchDeg,Pitch,0.001));
+	} return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5ePushPointLifecycle,"vBoR.P5e.E20PushPointLifecycle",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5ePushPointLifecycle::RunTest(const FString&)
+{
+	for (int32 EndMode : {0,1,2,3,4,5})
+	{
+		FVBoRTwoAxisMotion Motion; FVBoRDoorHand Hands[2];
+		P5ePoint(Hands[0],FVector(-5,10,0)); Hands[0].Points[2]=FVector(-5,-10,0); Motion.AdvancePush(Hands);
+		Hands[0].Points[1].X=-3.5; Hands[0].Points[2].X=-3.8; Motion.AdvancePush(Hands);
+		TestEqual(TEXT("Deepest initial point selected"),Motion.PushPoint,1);
+		const FQuat Before=Motion.Rotation();
+		if (EndMode==0) { Motion.ClearPush(); }
+		else if (EndMode==1) { Hands[0].bTracked=false; Motion.AdvancePush(Hands); }
+		else if (EndMode==2) { Motion.BeginGrab(0,FQuat::Identity); }
+		else
+		{
+			const FVector InvalidPoint=EndMode==3?FVector(-3.5,20,0):(EndMode==4?FVector(0,10,0):FVector(-3.5,0,0));
+			Hands[0].Points[1]=Before.RotateVector(InvalidPoint); Motion.AdvancePush(Hands);
+		}
+		TestEqual(TEXT("End clears hand"),Motion.PushHand,INDEX_NONE); TestEqual(TEXT("End clears point"),Motion.PushPoint,INDEX_NONE);
+		TestTrue(TEXT("End never switches to remaining point"),Motion.Rotation().Equals(Before,0.001));
+		if (EndMode==2) { Motion.ReleaseGrab(); }
+		P5ePoint(Hands[0],Before.RotateVector(FVector(-5,10,0))); Hands[0].Points[2]=Before.RotateVector(FVector(-5,-10,0)); Motion.AdvancePush(Hands);
+		Hands[0].Points[2]=Before.RotateVector(FVector(-3.5,-10,0)); Motion.AdvancePush(Hands);
+		TestEqual(TEXT("Fresh crossing can select a different point"),Motion.PushPoint,2);
+	} return true;
+}
 #endif

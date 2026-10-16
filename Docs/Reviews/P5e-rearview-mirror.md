@@ -58,7 +58,7 @@
 
 ## 항목
 
-### R1-1 한 손의 점이 피벗 양쪽으로 갈리면, 손을 멈춰도 거울이 frame마다 뒤집힘 — 열림
+### R1-1 한 손의 점이 피벗 양쪽으로 갈리면, 손을 멈춰도 거울이 frame마다 뒤집힘 — 반영함 (fix(p5e): retain the initial mirror push point)
 
 **문제**
 - 밀기를 잇는 중에는 같은 손의 다섯 점이 모두 앞쪽 crossing 검사 없이 들어온다. `Continuing`이 점이 아니라 손 단위이기 때문이다(`VBoRTwoAxisMotion.cpp:43`, `:55`, `:57`). 그리고 frame마다 그중 가장 깊은 점을 다시 고르고(`:60`), 그 점이 앞면 위에 오도록 돌린다(`:86-88`).
@@ -85,6 +85,15 @@
 - 검지로 오른쪽 가장자리를 미는 중에, 같은 손의 다른 점이 왼쪽에서 더 깊이 들어온다. 각도가 바뀌지 않는다.
 - 고른 점만 앞으로 빼고 다른 점은 면 안에 남긴다. 밀기가 끝나고(`PushHand` 없음), 남은 점으로 다시 시작하지 않는다.
 - 기존 E9–E14는 그대로 통과한다.
+
+### R1-1 Codex 반영 결과 (2026-10-16)
+
+- `PushPoint`로 시작 때 고른 점을 유지함. 같은 손의 다른 점은 이어지는 밀기에서 제외함.
+- 조건 이탈·추적 손실·`ClearPush`·잡기 전환에서 손과 점 번호를 함께 지움. 직전 손 점은 기존 crossing 규칙대로 보존해 남은 점이 밀기를 다시 시작하지 못하게 함.
+- E20 시험 4개 추가: 양손 각각의 위·아래 두 점, 편 손 다섯 점, 반대쪽 깊은 점 가로채기·선택 점만 빼기, 초기화/추적 손실/잡기/사각형/깊이/가운데 제외 조건별 해제·다른 점 재선택. 기존 단언 변경 없음.
+- 최종 non-unity(`-DisableUnity -Module=vBoR`)·unity 각각 한 번 성공, vBoR 컴파일·링크 경고/오류 0. 로컬 도구 StructUtils 폐기 예정 의존 안내 각 2줄은 별도임.
+- 최종 전체 시험 한 번: 255개 발견·완료·Success, Fail 0. P5e 23/23, E20 4/4, `TEST COMPLETE. EXIT CODE: 0`, 프로세스 exit 0. 기존 251개 통과.
+- 로그: `Saved/Logs/P5eR1NonUnityBuild.log`, `P5eR1UnityBuild.log`, `P5eR1AllAutomation.log`(자동화 원본 `vBoR.log` 복사본). Quest 3·VR Preview·에디터 Details·T-08은 `not-tested`. 질문 없음.
 
 ## 질문
 

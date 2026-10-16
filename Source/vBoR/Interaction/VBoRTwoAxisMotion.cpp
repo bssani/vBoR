@@ -33,10 +33,10 @@ void FVBoRTwoAxisMotion::AdvanceGrab(bool bTracked, const FQuat& Wrist)
 
 void FVBoRTwoAxisMotion::ClearPush()
 {
-	PushHand = INDEX_NONE; Previous[0] = Previous[1] = FVBoRDoorHand(); PreviousRotation = Rotation();
+	PushHand = PushPoint = INDEX_NONE; Previous[0] = Previous[1] = FVBoRDoorHand(); PreviousRotation = Rotation();
 }
 
-bool FVBoRTwoAxisMotion::FindPush(int32 Hand, const FVBoRDoorHand& Input, FVector& Point, double& Depth) const
+bool FVBoRTwoAxisMotion::FindPush(int32 Hand, const FVBoRDoorHand& Input, FVector& Point, double& Depth, int32& PointIndex) const
 {
 	if (!Input.bTracked) { return false; }
 	const FQuat Inverse = Rotation().Inverse();
@@ -49,6 +49,7 @@ bool FVBoRTwoAxisMotion::FindPush(int32 Hand, const FVBoRDoorHand& Input, FVecto
 	};
 	for (int32 I=0; I<5; ++I)
 	{
+		if (Continuing && I != PushPoint) { continue; }
 		const FVector P = Inverse.RotateVector(Input.Points[I]);
 		if (P.ContainsNaN() || !Inside(P)) { continue; }
 		const double D = P.X-FaceMinCm.X;
@@ -57,7 +58,7 @@ bool FVBoRTwoAxisMotion::FindPush(int32 Hand, const FVBoRDoorHand& Input, FVecto
 		if (!Continuing && (!Previous[Hand].bTracked || Prev.ContainsNaN() || !Inside(Prev) || Prev.X > FaceMinCm.X+FrontToleranceCm)) { continue; }
 		const FVector Center = (FaceMinCm+FaceMaxCm)/2;
 		if (FMath::Square(P.Y-Center.Y)+FMath::Square(P.Z-Center.Z) < FMath::Square(CenterExclusionCm)) { continue; }
-		if (D > Depth) { Depth = D; Point = Input.Points[I]; Found = true; }
+		if (D > Depth) { Depth = D; Point = Input.Points[I]; PointIndex = I; Found = true; }
 	}
 	return Found;
 }
@@ -67,13 +68,13 @@ void FVBoRTwoAxisMotion::AdvancePush(const FVBoRDoorHand (&Hands)[2])
 	if (GrabHand != INDEX_NONE) { ClearPush(); return; }
 	FVector Point = FVector::ZeroVector; double Depth = 0;
 	const FQuat Before = Rotation();
-	bool Found = PushHand != INDEX_NONE && FindPush(PushHand,Hands[PushHand],Point,Depth);
+	bool Found = PushHand != INDEX_NONE && FindPush(PushHand,Hands[PushHand],Point,Depth,PushPoint);
 	if (!Found)
 	{
-		PushHand = INDEX_NONE;
+		PushHand = PushPoint = INDEX_NONE;
 		for (int32 Hand=0; Hand<2; ++Hand)
 		{
-			if (FindPush(Hand,Hands[Hand],Point,Depth)) { PushHand = Hand; Found = true; break; }
+			if (FindPush(Hand,Hands[Hand],Point,Depth,PushPoint)) { PushHand = Hand; Found = true; break; }
 		}
 	}
 	if (Found && Depth > 1.e-6)
