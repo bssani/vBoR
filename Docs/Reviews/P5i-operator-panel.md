@@ -1,4 +1,4 @@
-# P5i 진행자 창 — 구현 전 질문
+# P5i 진행자 창 — 리뷰
 
 ## 질문
 
@@ -68,3 +68,68 @@
 - Saved/Logs/P5iAllAutomationRetry.log: 발견 314, 완료 314, Success 314/Fail 0, engine/process exit 0. P5i 23개와 기존 P3/P5g/P5h 포함. 샘플과 McpAutomationBridge/UnrealAgent를 모두 끄고 실행. 기존 샘플 InfoCard CDO 등 알려진 시작 잡음은 Workflow §2.5대로 분리.
 - 에디터/GUI: 명세 §7의 L_P3_Flow VR Preview에서 별도 창 디자인·스크롤·최소화/복구·종료·레벨 재열기 자리 유지, 확장 모니터 배치, 125%/150% DPI, 창 focus 뒤 키 12개, R/I 디버그 표시 충돌 없음 확인 필요. 실제 Blueprint/레벨 편집 없음. GUI 확인 not-tested.
 - Quest 3 Link: 운전석 A 암전·같은 설치 위치, 의자 옆 30 cm에서 재적용해도 체격 기준 유지, 동승석·2열 버튼 비활성, NeedsCheck/저장 없음 결과 확인. 계획서 T-01·T-04·T-05·T-08·T-09와 명세 §7은 not-tested. 자동화는 기기/운영 검증을 대신하지 않음.
+
+## 리뷰 1회차 (2026-10-16, Claude — `93faf72`)
+
+**결과: 열림 3건(R1-1–R1-3).** 확정 제약·명세 범위는 지켰다. 다시 적용은 저장값과 차의 eye point만 쓴다(`VBoRVehicleAlignmentComponent.cpp:56-78`, E19가 머리 30 cm 이동으로 확인). 버튼과 키는 같은 `QueueLive` 명령이다. `Spectator/`·`Config/`·`Content/`·`Plugins/`는 바뀌지 않았다. 남은 것은 창 수명 하나(R1-1), 옛 `Dispatch` 동작이 바뀐 곳 하나(R1-2), 창이 매 frame 하는 일의 양(R1-3)이다.
+
+**재현(에디터 닫힘 확인 뒤, 바뀐 C++ 11개 시각 갱신):**
+- non-unity(`-DisableUnity -Module=vBoR`) `Result: Succeeded`. 바뀐 `.cpp` 7개를 포함해 21개 작업. vBoR 경고·오류 0. 로그 `Saved/Logs/P5iReview-NonUnity.log`.
+- unity `Result: Succeeded`. `Module.vBoR.2–6.cpp` 다시 컴파일. 경고·오류 0. 로그 `P5iReview-Unity.log`.
+- `vBoR.*` **314/314**(P5i 23개 포함), `TEST COMPLETE. EXIT CODE: 0`. P5i 시험 구간 경고·오류 0. 로그 `P5iReview-Full.log`.
+
+**Codex 토큰:** 구현 대화 5.51M(캐시 97%, 약 16분, 2026-10-16 07:35–07:51 UTC). 질문 Q1 대화 0.60M. 하위 에이전트 없음(보고). 빌드는 non-unity 실패(include 경로) → 복구 → unity, 전체 시험 2번(첫 번째는 `P0Buck.E8Persistence` OS error 5 — HANDOFF가 지시한 재실행). 규칙 안이다.
+
+### R1-1 — 창을 Alt+F4·작업 표시줄로 닫으면 `ShowOperatorWindow`가 다시 만들지 않음
+
+- 상태: **열림**
+- **문제:** `Interaction/VBoRScenarioOperator.cpp:224`는 `OperatorWindow` 포인터가 비어 있을 때만 창을 만든다. 창이 밖에서 닫혀도 이 포인터는 비지 않는다.
+  - 닫기 버튼을 없앤 것(`:228` `HasCloseButton(false)`)은 Slate 테두리의 버튼만 숨긴다. 엔진은 Alt+F4를 막지 않는다(엔진 `Runtime/ApplicationCore/Private/Windows/WindowsApplication.cpp:2286-2289` "Allow alt+f4 to close the window"). `SC_CLOSE`는 `WM_CLOSE`로 넘어가고(`:2941-2948`), Slate는 그 창을 없앤다(`Runtime/Slate/Private/Framework/Application/SlateApplication.cpp:7239-7260` → `RequestDestroyWindow`). 작업 표시줄 오른쪽 클릭 "창 닫기"도 같은 `SC_CLOSE`다.
+  - 그 뒤 `ShowOperatorWindow`는 만들기를 건너뛴다. `IsWindowMinimized`는 죽은 native 창에서 거짓이고(엔진 `Runtime/SlateCore/Private/Widgets/SWindow.cpp:1504-1512`), `BringToFront`(`:236`)는 아무것도 하지 않는다.
+  - **영향:** D1 "없으면 만들고"를 지키지 못한다. 진행 중에 실수로 닫으면 레벨을 다시 열 때까지 버튼 창이 없다. P5j 툴바 버튼은 이 함수만 부르므로(P5j D3, §7-3 "Alt+F4로 닫은 뒤 누르면 다시 뜨는지") P5j도 동작하지 않는다. 닫힌 자리도 기억되지 않는다.
+- **제안:**
+  - 창을 만들 때 `SWindow::SetOnWindowClosed`(엔진 `Runtime/SlateCore/Public/Widgets/SWindow.h:712`)에 닫힘 처리를 건다. 처리: 자리·크기를 기억하고 `OperatorWindow`를 비운다.
+  - `CloseOperatorWindow`(`:239-245`)도 같은 처리를 거치게 하면 자리 기억이 한 곳이 된다.
+  - 창은 다음 frame에 지워지므로 콜백이 러너 `EndPlay` 뒤에 올 수 있다. 러너는 `TWeakObjectPtr`로 잡고, 러너가 없으면 아무것도 하지 않는다.
+  - 다른 방법: `ShowOperatorWindow`에서 `FSlateApplication::GetTopLevelWindows()`(엔진 `Runtime/Slate/Public/Framework/Application/SlateApplication.h:1648`)에 그 창이 없으면 새로 만든다.
+  - 닫기 자체를 막는 `SetRequestDestroyWindowOverride`(`SWindow.h:721`)는 쓰지 않는다. P5j §7-3이 닫은 뒤 다시 여는 것을 시험한다.
+- **확인할 시험:** 실제 창 없이 닫힘 처리 함수를 바로 부른다.
+  - 시험용 접근으로 `OperatorWindow`에 `AddWindow`하지 않은 `SNew(SWindow)`를 넣고 처리 함수를 부른다 → `HasOperatorWindow()`가 거짓, 자리 기억이 그 창의 자리·크기.
+  - 그 뒤 `EndPlay`(`CloseOperatorWindow`)가 아무 일도 하지 않는다(창을 두 번 지우거나 자리를 덮어쓰지 않음).
+
+### R1-2 — `Start without alignment`(O)의 전환 중 검사를 앞으로 옮겨 기존 센 값이 바뀜
+
+- 상태: **열림**
+- **문제:** `Interaction/VBoRScenarioOperator.cpp:79`는 O를 볼 때 시점 전환 중인지를 맨 먼저 본다. 옛 `Dispatch`(`main`의 `VBoRScenarioRunner.cpp:347-353`)는 O를 전환 검사(`:381`)보다 먼저 처리했다. 자유모드면 규칙 버림, 이미 시작했으면 기록·센 값 없이 무시했다. 그래서 두 경우가 달라졌다.
+  - 진행 중 좌석 암전 때 O: 지금은 `TransitionDiscards` +1, 기록 `명령 버림 — 전환 중`. 전에는 아무것도 세지 않았다.
+  - 자유모드 좌석 암전 때 O: 지금은 `TransitionDiscards`. 전에는 `RuleDiscards`.
+  - **영향:** D3 "`Dispatch`의 동작·센 값·기록은 그대로다"와 §3을 어긴다. 같은 동작인데 창의 버림 수와 기록이 P5i 전과 다르게 나온다. 기존 시험이 이 조합을 보지 않아 314개가 통과했다. 새로 필요한 것은 "시작 전 다시 적용 암전 중에 O를 버림"(E5) 하나뿐이다. 이 상황은 P5i 전에는 없었다.
+- **제안:** 전환 중 검사를 자유모드·태그 검사 실패·이미 시작 다음, 받기 바로 앞(`:84` 앞)으로 옮긴다. 그러면 전환 버림은 시작 전 다시 적용 암전에서만 나고, 나머지는 옛 순서와 같다. E20의 기대값 5에는 진행 중 암전의 O가 들어 있다. 옛 동작대로면 4이므로 고친다(새 시험이라 바꿔도 된다).
+- **확인할 시험:**
+  - 진행 중 동승석 암전 중 O → `TransitionDiscards`·`RuleDiscards`가 그대로, 단계 그대로.
+  - 자유모드 좌석 암전 중 O → `RuleDiscards` +1.
+  - 시작 전 다시 적용 암전 중 O → 흐림, `TransitionDiscards` +1, 흐름이 시작하지 않음. 암전이 끝나 `Applied`가 되면 1단계가 시작됨(E16과 같은 경로).
+
+### R1-3 — 진행자 창이 매 frame 월드 전체를 약 18번 훑음
+
+- 상태: **열림**
+- **문제:** 창의 lambda가 판정 함수를 frame마다 따로 부르고, 좌석 판정은 부를 때마다 월드의 모든 Actor와 component를 돈다. 아래 수는 코드를 읽어 센 것이다(측정 아님).
+  - `CommandViewpoint`(`Interaction/VBoRScenarioOperator.cpp:41-57`)는 `TActorIterator`로 모든 Actor를 돌고, Actor마다 `GetComponents`를 두 번 해 배열 두 개를 만든다.
+  - 좌석 버튼 하나에 frame마다 판정 4번: `Tick`의 모양(`Interaction/VBoROperatorPanel.cpp:63`), 이름·키 글자색(`:89`·`:95`, 둘 다 `GetOperatorStyle`), 켜짐(`:82`). `GetOperatorStyle`(`VBoRScenarioOperator.cpp:206-213`)은 동승석·2열에서 꼬리표(`:202`)로 `CommandViewpoint`를 한 번 더 부른다. 운전석 판정(`:96`)도 쓰지 않는 `Car.RearView`를 찾느라 월드를 돈다.
+  - 합하면 좌석 버튼을 받을 수 있는 동안 frame마다 약 18번(운전석 4 + 동승석 7 + 2열 7). 상태 문구도 lambda마다(약 12번) `GetOperatorStatus`를 새로 만든다.
+  - **영향:** VR(90 Hz) 동안 game thread가 UI 때문에 Actor·component 수의 약 18배를 frame마다 돈다. 실제 차량 데이터가 들어와 component가 늘면 같이 커진다. 관전 화면(P5h)은 같은 순회를 frame마다 한 번 한다(`Spectator/VBoRSpectatorSubsystem.cpp:83`).
+- **제안:**
+  - 판정은 frame마다 한 번만 한다. 예: 패널 `Tick`에서 상태, 버튼 12개의 판정·모양·꼬리표를 한 번 계산해 멤버에 두고, lambda는 그 값만 읽는다. D6(초당 10회 이상)은 그대로 지켜진다. 판정 함수는 여전히 `EvaluateCommand` 하나다(D3).
+  - 운전석 판정에서는 시점을 찾지 않는다(`ReturnBase`는 `SwitchRejection`이 시점을 보지 않음).
+  - 동승석·2열 시점을 `InitializeFlow`에서 한 번 찾아 두는 방법도 있다. 다만 `Dispatch`가 누를 때 찾던 동작이 바뀌므로, 고른다면 보고 ③에 적는다.
+- **확인할 시험:** 시험용 계수로 `CommandViewpoint`(또는 월드 순회) 횟수를 세어, 패널 한 frame(`Tick` + `SlatePrepass`)에 좌석 수 이하인지 본다. 같은 frame에 스냅숏 판정이 버튼마다 `EvaluateOperatorButton`과 같은지 본다(E7을 넓힘).
+
+### 참고 (반영할 것 없음)
+
+- **창이 뜰 때 초점을 가져간다.** `SWindow` 기본 활성화 정책은 `Always`이고(엔진 `SWindow.h:265`, Windows에서 `WindowsWindow.cpp:718-729`), `:236`이 `BringToFront(true)`도 부른다. Play 시작과 F6마다 키보드 초점이 진행자 창으로 간다.
+  - `L_P3_Flow`에는 러너 키뿐이고 모두 창이 받으므로(D5) 지금 막히는 키는 없다. 리프트게이트 PageUp·PageDown은 P1 시험대에만 있다.
+  - 사용자가 Blueprint로 붙일 키(웰컴 라이트 등, U-10)는 진행자 창에 초점이 있으면 들어가지 않는다. VR 확인(명세 §7-4) 때 보고, 불편하면 처음 뜰 때 활성화하지 않게 바꾼다(`FocusWhenFirstShown`·`ActivationPolicy`, `SWindow.h:327`·`:333`).
+- **P5g 시험 입력 키 변경**(`P5gFreeModeTests.cpp:175` F5 → R, `:224` F5·F1 → R·I): §3 예외 목록에 없었지만, F1·F5 연결을 없애면 반드시 바꿔야 하는 입력이다. 명세가 빠뜨린 것이다(Claude). 받아들인다. 단언·센 값은 그대로임을 확인했다. 명세 §3에 더했다.
+- **E7**은 판정 함수와, 그 함수로 만든 결과 문구를 비교한다. `Dispatch`가 판정을 그대로 쓰므로 일치는 구조상 당연하다. 옛 `Dispatch` 동작이 남았는지는 기존 시험 291개가 그대로 통과한 것으로 본다. R1-2는 그 시험들이 보지 않던 틈이다.
+- **E1**의 두 번째 단언(`GIsAutomationTesting`)은 `-nullrhi`에서 `CanEverRender`가 이미 거짓이라 그 분기만 따로 보지 못한다. 자동화로 대신할 방법이 없어 받아들인다.
+- **"Waiting for"**는 태그 검사 실패로 시작하지 못할 때도 `Alignment check`로 나온다(`VBoRScenarioOperator.cpp:185`). 고치지 않아도 된다. 그때는 VR 안 진행자 줄이 태그 문제를 보인다.
