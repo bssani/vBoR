@@ -25,6 +25,12 @@ public:
 	UFUNCTION(BlueprintPure, Category="정렬") bool IsBaseViewpoint() const { return CurrentViewpoint == nullptr && !bSwitching; }
 	bool IsSwitching() const { return bSwitching; }
 	bool IsAtViewpoint(const UVBoRViewpointComponent* Viewpoint) const { return !bSwitching && CurrentViewpoint == Viewpoint; }
+	FString SwitchRejection(const UVBoRViewpointComponent* Viewpoint, bool bReturnBase = false) const;
+	FString ReapplyRejection() const;
+	bool RequestReapply();
+	FString EnglishReason() const;
+	FString SeatName() const;
+	int32 ReapplyCompletions = 0;
 	FString Describe() const;
 	bool ReadWorldHead(FTransform& OutHead) const;
 	FString DescribeHead(bool bTracked, const FVector& WorldHead) const;
@@ -40,14 +46,17 @@ public:
 protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	virtual FString SavedAlignmentPath() const;
 private:
 	UPROPERTY() TObjectPtr<APawn> AlignmentPawn;
 	UPROPERTY() TObjectPtr<UVBoRViewpointComponent> CurrentViewpoint;
 	UPROPERTY() TObjectPtr<UVBoRViewpointComponent> PendingViewpoint;
 	FVBoRBuckSavedAlignment Saved;
 	bool bHasSaved = false, bSwitching = false, bMoved = false;
+	bool bReapplying = false;
 	double SwitchElapsed = 0;
 	FDelegateHandle RecenterHandle;
 	void HandleRecenter();
 	bool RequestSwitch(UVBoRViewpointComponent* Viewpoint);
+	void LoadSetupAlignment();
 };
