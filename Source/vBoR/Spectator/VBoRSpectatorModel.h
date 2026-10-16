@@ -35,6 +35,7 @@ struct FVBoRSpectatorNames
 {
 	void Sample(const TArray<FString>& ActiveNames, double NowSeconds, double HoldSeconds);
 	FString Line(const FString& Prefix) const;
+	TArray<FString> RecentNames() const;
 private:
 	struct FEntry
 	{
@@ -50,9 +51,12 @@ private:
 // 창 크기와 비율이 같으면 엔진 배치를 다시 넣지 않음 (P5h E15·E16)
 struct FVBoRSpectatorLayout
 {
-	bool Update(FIntPoint WindowSize, float EyeAspect, float BandHeight);
+	bool Update(FIntPoint WindowSize, float EyeAspect, float MinPanelWidth);
 	FSpectatorScreenModeTexturePlusEyeLayout Layout;
+	FIntPoint PanelPixels = FIntPoint::ZeroValue;
+	float DrawScale = 1;
+	FVector2D DesignSize() const { return FVector2D(PanelPixels) / DrawScale; }
 private:
 	FIntPoint LastSize = FIntPoint::ZeroValue;
-	float LastAspect = 0, LastBand = 0;
+	float LastAspect = 0, LastPanelWidth = 0;
 };
