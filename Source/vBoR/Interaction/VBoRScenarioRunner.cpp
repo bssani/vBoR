@@ -4,6 +4,7 @@
 #include "VBoRViewpointComponent.h"
 #include "VBoRHingedDoor.h"
 #include "VBoRPokeButton.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/ArrowComponent.h"
 #include "Components/InputComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -73,6 +74,7 @@ namespace
 AVBoRScenarioRunner::AVBoRScenarioRunner()
 {
 	ButtonDistanceCm = 45; ButtonBelowCm = 30; ConfirmLockSeconds = 0.6; SeatedPanelSeconds = 1.0;
+	FreeModeInstruction = FText::FromString(TEXT("자유모드 — 차를 자유롭게 살펴보고 조작해 보세요. 좌석은 아래 버튼으로 바꿉니다"));
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("FlowOrigin")));
 	PrimaryActorTick.bCanEverTick = true; PrimaryActorTick.TickGroup = TG_PostUpdateWork;
 	Panel = CreateDefaultSubobject<UWidgetComponent>(TEXT("KoreanGuidance")); Panel->SetupAttachment(RootComponent);
@@ -129,6 +131,8 @@ void AVBoRScenarioRunner::BeginPlay()
 		InputComponent->BindKey(EKeys::Two, IE_Pressed, this, &AVBoRScenarioRunner::KeyRear);
 		InputComponent->BindKey(EKeys::Home, IE_Pressed, this, &AVBoRScenarioRunner::KeyReturn);
 		InputComponent->BindKey(EKeys::F5, IE_Pressed, this, &AVBoRScenarioRunner::KeyRestart);
+		InputComponent->BindKey(EKeys::End, IE_Pressed, this, &AVBoRScenarioRunner::KeyFreeMode);
+		InputComponent->BindKey(EKeys::F6, IE_Pressed, this, &AVBoRScenarioRunner::KeyReloadLevel);
 		InputComponent->BindKey(EKeys::O, IE_Pressed, this, &AVBoRScenarioRunner::KeyIgnore);
 		InputComponent->BindKey(EKeys::F1, IE_Pressed, this, &AVBoRScenarioRunner::KeyOperatorInfo);
 	}
@@ -152,6 +156,7 @@ void AVBoRScenarioRunner::EndPlay(const EEndPlayReason::Type EndPlayReason)
 bool AVBoRScenarioRunner::InitializeFlow()
 {
 	bInitialized = true; bRunning = false; bFinished = false; ValidationProblems.Reset(); Targets.Reset(); Markers.Reset();
+	bFreeMode = false; bReloadPending = false; bReloadRequested = false; ReloadRemaining = 0;
 	for (const auto& Entry : ButtonCounts)
 	{ if (Entry.Key.IsValid()) { Entry.Key->OnButtonPressed.RemoveDynamic(this, &AVBoRScenarioRunner::HandleTargetPoke); } }
 	ButtonCounts.Reset();
@@ -245,8 +250,7 @@ void AVBoRScenarioRunner::EnterStep(int32 Index)
 	if (Index == 0) { bStartHeadPending = true; }
 	if (!CurrentStep())
 	{
-		bRunning = false; bFinished = true;
-		Record(FString::Printf(TEXT("안내 완료 | 요약 이전 %d 재시도 %d 건너뛰기 %d | 버림 지난단계 %d 권한 %d 규칙 %d 전환 %d"), PreviousCount, RetryCount, SkipCount, StaleDiscards, PermissionDiscards, RuleDiscards, TransitionDiscards));
+		EnterFreeMode(true); return;
 	}
 	else
 	{
@@ -254,6 +258,17 @@ void AVBoRScenarioRunner::EnterStep(int32 Index)
 		Record(FString::Printf(TEXT("단계 시작 %s %d/%d generation=%llu | 이전 %d 재시도 %d 건너뛰기 %d"), *CurrentStep()->StepId.ToString(), Index + 1, Scenario->Steps.Num(), Generation, PreviousCount, RetryCount, SkipCount));
 	}
 	PlacePanel(); UpdateMarker();
+}
+
+void AVBoRScenarioRunner::EnterFreeMode(bool bCompleted)
+{
+	const FString Reason = bCompleted ? FString(TEXT("안내 완료"))
+		: FString::Printf(TEXT("진행자 End, 단계 %s 에서"), *CurrentStep()->StepId.ToString());
+	bRunning = false; bFreeMode = true; bFinished = bCompleted; StepIndex = INDEX_NONE; ++Generation;
+	if (!bCompleted) { ++EndCount; }
+	PlacePanel(); UpdateMarker();
+	Record(FString::Printf(TEXT("자유모드 시작 — %s | 요약 이전 %d 재시도 %d 건너뛰기 %d End %d | 버림 지난단계 %d 권한 %d 규칙 %d 전환 %d 잠금 %d"),
+		*Reason, PreviousCount, RetryCount, SkipCount, EndCount, StaleDiscards, PermissionDiscards, RuleDiscards, TransitionDiscards, ConfirmLockDiscards));
 }
 
 void AVBoRScenarioRunner::CompleteStep(const TCHAR* Who)
@@ -267,7 +282,9 @@ void AVBoRScenarioRunner::QueueCommand(const FVBoRFlowCommand& Command)
 {
 	FVBoRFlowCommand Queued = Command;
 	// 처리 frame 의 dt 가 길어도 잠금 중 받은 입력은 살리지 않음 (R1-1)
-	Queued.bConfirmLocked = Command.Action == EVBoRFlowCommand::Confirm && (ConfirmLockRemaining > 0 || bPanelPlacementPending);
+	const bool bSeat = bFreeMode && Command.Source == EVBoRCommandSource::Participant &&
+		(Command.Action == EVBoRFlowCommand::Passenger || Command.Action == EVBoRFlowCommand::Rear || Command.Action == EVBoRFlowCommand::ReturnBase);
+	Queued.bConfirmLocked = (Command.Action == EVBoRFlowCommand::Confirm || bSeat) && (ConfirmLockRemaining > 0 || bPanelPlacementPending);
 	PendingCommands.Add(Queued);
 }
 
@@ -291,6 +308,17 @@ void AVBoRScenarioRunner::Tick(float DeltaSeconds)
 
 void AVBoRScenarioRunner::ProcessFlow(double DeltaSeconds)
 {
+	// 요청 frame 이전의 dt 를 새 암전에 넣지 않음 (P5g D8, s)
+	if (bReloadPending && !bReloadRequested)
+	{
+		ReloadRemaining = FMath::Max(0.0, ReloadRemaining - FMath::Max(0.0, DeltaSeconds));
+		if (ReloadRemaining <= 0)
+		{
+			bReloadRequested = true;
+			Record(TEXT("진행자 레벨 다시 열기 요청 — 암전 완료"));
+			RequestLevelReload(FName(*UGameplayStatics::GetCurrentLevelName(this)));
+		}
+	}
 	const uint64 Before = Generation;
 	StepElapsed += FMath::Max(0.0, DeltaSeconds);
 	// 같은 Tick 앞에서 Pawn 을 옮겼으면 이동 전 dt 로 새 잠금을 줄이지 않음 (R1-7)
@@ -309,20 +337,31 @@ void AVBoRScenarioRunner::ProcessFlow(double DeltaSeconds)
 
 void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 {
-	if (Command.Token.StepIndex != StepIndex || Command.Token.Generation != Generation || (bFinished && Command.Action != EVBoRFlowCommand::Restart))
+	if (bReloadPending) { ++TransitionDiscards; Record(TEXT("명령 버림 — 레벨 다시 열기 암전 중")); return; }
+	if (Command.Token.StepIndex != StepIndex || Command.Token.Generation != Generation)
 	{ ++StaleDiscards; Record(TEXT("명령 버림 — 지난 단계 또는 안내 완료")); return; }
 	const bool bOperator = Command.Source == EVBoRCommandSource::Operator;
-	if (!bOperator && Command.Action != EVBoRFlowCommand::Confirm && Command.Action != EVBoRFlowCommand::Viewpoint && Command.Action != EVBoRFlowCommand::ReturnBase)
+	if (!bOperator && Command.Action != EVBoRFlowCommand::Confirm && Command.Action != EVBoRFlowCommand::Viewpoint && Command.Action != EVBoRFlowCommand::ReturnBase &&
+		!(bFreeMode && (Command.Action == EVBoRFlowCommand::Passenger || Command.Action == EVBoRFlowCommand::Rear)))
 	{ ++PermissionDiscards; Record(TEXT("명령 버림 — 확인 권한 없음")); return; }
 	if (Command.Action == EVBoRFlowCommand::IgnoreAlignment)
 	{
+		if (bFreeMode) { ++RuleDiscards; Record(TEXT("명령 버림 — 자유모드에는 단계 없음")); return; }
 		if (!bRunning && !ValidationProblems.IsEmpty()) { Record(TEXT("명령 버림 — 태그 검사 실패는 무시할 수 없음")); return; }
 		if (!bRunning) { bAlignmentIgnored = true; Record(TEXT("진행자 정렬 무시하고 시작")); bRunning = true; EnterStep(0); }
 		return;
 	}
-	if (!bRunning && Command.Action != EVBoRFlowCommand::Restart) { ++RuleDiscards; Record(TEXT("명령 버림 — 시작 전")); return; }
+	if (!bRunning && !bFreeMode && Command.Action != EVBoRFlowCommand::Restart) { ++RuleDiscards; Record(TEXT("명령 버림 — 시작 전")); return; }
+	if (bFreeMode && (Command.Action == EVBoRFlowCommand::Confirm || Command.Action == EVBoRFlowCommand::Next ||
+		Command.Action == EVBoRFlowCommand::Previous || Command.Action == EVBoRFlowCommand::EnterFreeMode || Command.Action == EVBoRFlowCommand::Viewpoint))
+	{ ++RuleDiscards; Record(TEXT("명령 버림 — 자유모드에는 단계 없음")); return; }
+	if (Command.Action == EVBoRFlowCommand::ReloadLevel && !bFreeMode)
+	{ ++RuleDiscards; Record(TEXT("명령 버림 — 레벨 다시 열기는 자유모드에서만")); return; }
 	if (Command.Action == EVBoRFlowCommand::Viewpoint || Command.Action == EVBoRFlowCommand::Passenger || Command.Action == EVBoRFlowCommand::Rear || Command.Action == EVBoRFlowCommand::ReturnBase)
 	{
+		if (bFreeMode && !bOperator && (!Alignment || !Alignment->IsSwitching()) &&
+			(Command.bConfirmLocked || ConfirmLockRemaining > 0 || bPanelPlacementPending))
+		{ ++ConfirmLockDiscards; Record(TEXT("좌석 명령 버림 — 패널 다시 놓기 잠금")); return; }
 		bool bAccepted = false;
 		if (Alignment)
 		{
@@ -342,6 +381,16 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 	if (Alignment && Alignment->IsSwitching()) { ++TransitionDiscards; Record(TEXT("명령 버림 — 전환 중")); return; }
 	switch (Command.Action)
 	{
+	case EVBoRFlowCommand::EnterFreeMode:
+		EnterFreeMode(false); break;
+	case EVBoRFlowCommand::ReloadLevel:
+	{
+		bReloadPending = true; bReloadRequested = false;
+		ReloadRemaining = Alignment ? FMath::Max(0.01f, Alignment->FadeSeconds) : 0.3;
+		if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+		{ if (PC->PlayerCameraManager) { PC->PlayerCameraManager->StartCameraFade(0, 1, ReloadRemaining, FLinearColor::Black, false, true); } }
+		Record(TEXT("진행자 레벨 다시 열기 — 암전 시작")); break;
+	}
 	case EVBoRFlowCommand::Confirm:
 	{
 		const auto* Step = CurrentStep();
@@ -370,11 +419,17 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 			for (auto* Door : Doors) { Door->ResetDoor(); }
 		}
 		Record(TEXT("진행자 처음부터 — 문 닫힘·잠김, 기준 복귀"));
+		bFreeMode = false;
 		if (!Alignment->IsBaseViewpoint()) { bRestartPending = Alignment->ReturnToBase(); bRunning = false; ++Generation; }
 		else { bRunning = true; bFinished = false; EnterStep(0); }
 		break;
 	default: break;
 	}
+}
+
+void AVBoRScenarioRunner::RequestLevelReload(FName LevelName)
+{
+	UGameplayStatics::OpenLevel(this, LevelName);
 }
 
 void AVBoRScenarioRunner::PlacePanel()
@@ -437,6 +492,7 @@ FText AVBoRScenarioRunner::GetInstructionText() const { return CurrentStep() ? C
 
 FString AVBoRScenarioRunner::GetPanelText() const
 {
+	if (bFreeMode) { return (bFinished ? FString(TEXT("안내 완료\n")) : FString()) + FreeModeInstruction.ToString(); }
 	if (bFinished) { return TEXT("안내 완료"); }
 	if (!bRunning) { return TEXT("준비 중입니다"); }
 	if (const auto* Step = CurrentStep())
@@ -454,7 +510,8 @@ FString AVBoRScenarioRunner::GetPanelText() const
 FString AVBoRScenarioRunner::GetOperatorText() const
 {
 	FString Text;
-	if (!bRunning && !bFinished)
+	if (bFreeMode) { Text = TEXT("자유모드 | 1 동승석 · 2 2열 · Home 운전석 · F5 처음부터 · F6 레벨 다시 열기"); }
+	else if (!bRunning && !bFinished)
 	{ Text = ValidationProblems.IsEmpty() ? TEXT("정렬 필요 — P0-c 레벨에서 C로 저장 (O: 무시)") : ValidationProblems; }
 	else if (bRunning && CurrentStep())
 	{
@@ -468,6 +525,7 @@ FString AVBoRScenarioRunner::GetOperatorText() const
 	Text += TEXT("\n") + (Alignment ? Alignment->Describe() : FString(TEXT("정렬 컴포넌트 없음")));
 	Text += FString::Printf(TEXT(" | 정렬 무시 %s\n이전 %d 재시도 %d 건너뛰기 %d | 버림 단계 %d 권한 %d 규칙 %d 전환 %d 잠금 %d"), bAlignmentIgnored ? TEXT("예") : TEXT("아니오"), PreviousCount, RetryCount, SkipCount, StaleDiscards, PermissionDiscards, RuleDiscards, TransitionDiscards, ConfirmLockDiscards);
 	Text += TEXT("\n") + LastViewRequest + TEXT("\n") + LastCompletion;
+	if (bFreeMode) { Text += FString::Printf(TEXT("\n진행자 End %d"), EndCount); }
 	if (Approach) { Text += FString::Printf(TEXT("\n접근 %d (%.1f s) 이탈 %d (%.1f s) near=%d"), Approach->Approaches, Approach->LastApproachSeconds, Approach->Departures, Approach->LastDepartureSeconds, Approach->IsParticipantNear()); }
 	if (Seat) { Text += FString::Printf(TEXT(" | 좌석 %.2f s 보류 %d"), Seat->DwellSeconds, Seat->TrackingPauses); }
 	return Text;
@@ -498,11 +556,30 @@ void AVBoRScenarioRunner::RefreshPanel()
 	const bool bNeedsView = Step && Step->Rule == EVBoRStepRule::Viewpoint && !RuleSatisfied();
 	PanelAction = bNeedsView ? EVBoRFlowCommand::Viewpoint : EVBoRFlowCommand::ReturnBase;
 	SetP3ButtonVisible(ActionButton, !bPanelPlacementPending && bRunning && Alignment && !Alignment->IsSwitching() && (bAway || bNeedsView));
+	TArray<FString> SeatLabels;
+	if (bFreeMode)
+	{
+		TArray<EVBoRFlowCommand> Seats;
+		if (bAway) { Seats.Add(EVBoRFlowCommand::ReturnBase); SeatLabels.Add(TEXT("운전석")); }
+		for (const auto Action : {EVBoRFlowCommand::Passenger, EVBoRFlowCommand::Rear})
+		{
+			FString Problems;
+			auto* View = P3Component<UVBoRViewpointComponent>(FindP3Tag(GetWorld(), Action == EVBoRFlowCommand::Passenger ? FName(TEXT("Car.PassengerView")) : FName(TEXT("Car.RearView")), Problems));
+			if (View && (!Alignment || !Alignment->IsAtViewpoint(View)))
+			{ Seats.Add(Action); SeatLabels.Add(Action == EVBoRFlowCommand::Passenger ? TEXT("동승석") : TEXT("2열")); }
+		}
+		const bool bVisible = !bPanelPlacementPending && !bReloadPending && Alignment && !Alignment->IsSwitching() && Seats.Num() == 2;
+		for (int32 I = 0; I < 2; ++I)
+		{
+			if (Seats.IsValidIndex(I)) { FreeSeatActions[I] = Seats[I]; }
+			SetP3ButtonVisible(I == 0 ? ConfirmButton.Get() : ActionButton.Get(), bVisible);
+		}
+	}
 	for (int32 I = 0; I < 2; ++I)
 	{
 		AVBoRPokeButton* Button = I == 0 ? ConfirmButton.Get() : ActionButton.Get();
 		ButtonLabels[I]->SetHiddenInGame(!Button || Button->IsHidden());
-		if (ButtonLabelTexts.IsValidIndex(I)) { ButtonLabelTexts[I]->SetText(FText::FromString(I == 0 ? FString(TEXT("확인")) : ActionLabel())); }
+		if (ButtonLabelTexts.IsValidIndex(I)) { ButtonLabelTexts[I]->SetText(FText::FromString(bFreeMode && SeatLabels.IsValidIndex(I) ? SeatLabels[I] : I == 0 ? FString(TEXT("확인")) : ActionLabel())); }
 	}
 }
 
@@ -524,8 +601,8 @@ void AVBoRScenarioRunner::UpdateMarker()
 }
 
 void AVBoRScenarioRunner::Record(const FString& Text) { LastRecord = Text; UE_LOG(LogP3Flow, Log, TEXT("%s"), *Text); }
-void AVBoRScenarioRunner::HandleConfirmPoke(const FIsdkInteractionPointerEvent&) { QueueLive(EVBoRFlowCommand::Confirm, EVBoRCommandSource::Participant); }
-void AVBoRScenarioRunner::HandleActionPoke(const FIsdkInteractionPointerEvent&) { QueueLive(PanelAction, EVBoRCommandSource::Participant); }
+void AVBoRScenarioRunner::HandleConfirmPoke(const FIsdkInteractionPointerEvent&) { QueueLive(bFreeMode ? FreeSeatActions[0] : EVBoRFlowCommand::Confirm, EVBoRCommandSource::Participant); }
+void AVBoRScenarioRunner::HandleActionPoke(const FIsdkInteractionPointerEvent&) { QueueLive(bFreeMode ? FreeSeatActions[1] : PanelAction, EVBoRCommandSource::Participant); }
 void AVBoRScenarioRunner::HandleTargetPoke(const FIsdkInteractionPointerEvent& Event)
 {
 	if (UObject* Object = Event.Interactable.GetObject())
@@ -541,9 +618,12 @@ void AVBoRScenarioRunner::KeyPassenger() { QueueLive(EVBoRFlowCommand::Passenger
 void AVBoRScenarioRunner::KeyRear() { QueueLive(EVBoRFlowCommand::Rear, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyReturn() { QueueLive(EVBoRFlowCommand::ReturnBase, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyRestart() { QueueLive(EVBoRFlowCommand::Restart, EVBoRCommandSource::Operator); }
+void AVBoRScenarioRunner::KeyFreeMode() { QueueLive(EVBoRFlowCommand::EnterFreeMode, EVBoRCommandSource::Operator); }
+void AVBoRScenarioRunner::KeyReloadLevel() { QueueLive(EVBoRFlowCommand::ReloadLevel, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyIgnore() { QueueLive(EVBoRFlowCommand::IgnoreAlignment, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyOperatorInfo()
 {
+	if (bReloadPending) { ++TransitionDiscards; Record(TEXT("명령 버림 — 레벨 다시 열기 암전 중")); return; }
 	bOperatorInfo = !bOperatorInfo; HeadLogElapsed = 0;
 	Record(bOperatorInfo ? TEXT("진행자 정보 켬 (F1)\n") + GetOperatorText() : TEXT("진행자 정보 끔 (F1)")); RefreshPanel();
 }
