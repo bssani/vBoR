@@ -17,6 +17,7 @@
 #include "IsdkRuntimeSettings.h"
 #include "IsdkFunctionLibrary.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include <limits>
 
 struct FP5eTestAccess
 {
@@ -43,7 +44,7 @@ namespace
 	FQuat P5eRotation(double Yaw, double Pitch)
 	{ return FQuat(FVector::ZAxisVector,FMath::DegreesToRadians(Yaw))*FQuat(FVector::YAxisVector,FMath::DegreesToRadians(-Pitch)); }
 	void P5eMove(AP5eTrackedPart* Part, double Yaw, double Pitch)
-	{ Part->Wrist.SetRotation(P5eRotation(Yaw,Pitch)); Part->Tick(0.016f); }
+	{ Part->Wrist.SetLocation(P5eRotation(Yaw,Pitch).RotateVector(FVector(-20,0,0))); Part->Tick(0.016f); }
 	void P5ePoint(FVBoRDoorHand& Hand, FVector Point)
 	{
 		Hand = FVBoRDoorHand(); Hand.bTracked = true;
@@ -63,7 +64,11 @@ namespace
 		FP5eWarnings() { GLog->FlushThreadedLogs(); GLog->AddOutputDevice(this); }
 		~FP5eWarnings() { GLog->RemoveOutputDevice(this); }
 		virtual void Serialize(const TCHAR* Message, ELogVerbosity::Type Verbosity, const FName& Category) override
-		{ if (Category == TEXT("LogTwoAxisPart") && Verbosity == ELogVerbosity::Warning) { ++Count; } }
+		{
+			// 기대 경고는 UE 자동화가 Verbose 로 낮춘 뒤 전달함 (P5l E13)
+			if (Category == TEXT("LogTwoAxisPart") && FString(Message).Contains(TEXT("Missing mesh or invalid two-axis settings")) &&
+				(Verbosity == ELogVerbosity::Warning || Verbosity == ELogVerbosity::Verbose)) { ++Count; }
+		}
 	};
 }
 
@@ -76,15 +81,19 @@ bool FP5eRest::RunTest(const FString&)
 	TestTrue(TEXT("No reflection boundary"),Part->GetDebugText().Contains(TEXT("반사 없음")) && Part->GetDebugText().Contains(TEXT("not-tested"))); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5eYaw,"vBoR.P5e.E2WristYawAnywhere",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5eYaw,"vBoR.P5e.E2GrabPointYaw",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP5eYaw::RunTest(const FString&)
 {
-	for (double Y : {0.0,12.5})
+	for (double Y : {0.0,12.0})
 	{
 		for (int32 Sign : {-1,1})
 		{
 			FP5eWorld W; auto* Part=W.Part(); W.Play(); Part->Wrist.SetLocation(FVector(-4,Y,0)); FP5eTestAccess::Select(Part);
-			P5eMove(Part,Sign*10,0); TestTrue(TEXT("Same yaw at center and edge"),FMath::IsNearlyEqual(Part->GetYawDeg(),Sign*10.f,0.001f));
+			Part->Wrist.AddToTranslation(Y==0 ? FVector(0,Sign,0) : FVector(-Sign,0,0)); Part->Tick(0.016f);
+			const double Expected=Y==0 ? -Sign*5.614497 : (Sign>0 ? 4.184916 : -4.398705);
+			TestTrue(TEXT("Center damped, edge full lever"),FMath::IsNearlyEqual(static_cast<double>(Part->GetYawDeg()),Expected,0.05));
+			const FVector Normal=-Part->PitchAxis->GetForwardVector();
+			TestTrue(TEXT("Normal direction against actual right vector"),FVector::DotProduct(Normal,Part->GetActorRightVector())*(Y==0 ? Sign : -Sign)>0);
 			TestTrue(TEXT("No pitch"),FMath::IsNearlyZero(Part->GetPitchDeg(),0.001f));
 		}
 	} return true;
@@ -128,18 +137,18 @@ bool FP5eRelease::RunTest(const FString&)
 	TestTrue(TEXT("Yaw stays"),FMath::IsNearlyEqual(Part->GetYawDeg(),10.f,0.001f)); TestTrue(TEXT("Pitch stays"),FMath::IsNearlyEqual(Part->GetPitchDeg(),8.f,0.001f)); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5eIgnored,"vBoR.P5e.E6TranslationRollAndJump",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5eIgnored,"vBoR.P5e.E6WristIgnoredAndDistanceJump",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP5eIgnored::RunTest(const FString&)
 {
 	FP5eWorld W; auto* Part=W.Part(); W.Play(); FP5eTestAccess::Select(Part);
-	Part->Wrist.SetLocation(FVector(100,200,300)); Part->Tick(0.016f); TestEqual(TEXT("Translation ignored"),Part->GetYawDeg(),0.f);
-	Part->Wrist.SetRotation(FQuat(FVector::XAxisVector,FMath::DegreesToRadians(20.0))); Part->Tick(0.016f);
-	TestEqual(TEXT("Roll ignored yaw"),Part->GetYawDeg(),0.f); TestEqual(TEXT("Roll ignored pitch"),Part->GetPitchDeg(),0.f);
-	P5eMove(Part,60,0); TestEqual(TEXT("Jump ignored"),Part->GetYawDeg(),0.f); P5eMove(Part,65,0);
-	TestTrue(TEXT("Rebased after jump"),FMath::IsNearlyEqual(Part->GetYawDeg(),5.f,0.001f));
-	const FQuat NormalRoll = FQuat(FP5eTestAccess::Motion(Part).Rotation().RotateVector(-FVector::XAxisVector),FMath::DegreesToRadians(12.0));
-	Part->Wrist.SetRotation(NormalRoll*Part->Wrist.GetRotation()); Part->Tick(0.016f);
-	TestTrue(TEXT("Roll about turned normal ignored"),FMath::IsNearlyEqual(Part->GetYawDeg(),5.f,0.001f)); return true;
+	for (const FVector Axis : {FVector::XAxisVector,FVector::YAxisVector,FVector::ZAxisVector})
+	{
+		Part->Wrist.SetRotation(FQuat(Axis,FMath::DegreesToRadians(20.0))); Part->Tick(0.016f);
+		TestEqual(TEXT("Wrist ignored yaw"),Part->GetYawDeg(),0.f); TestEqual(TEXT("Wrist ignored pitch"),Part->GetPitchDeg(),0.f);
+	}
+	Part->Wrist.AddToTranslation(FVector(0,6,0)); Part->Tick(0.016f); TestEqual(TEXT("6 cm jump ignored"),Part->GetYawDeg(),0.f);
+	Part->Wrist.AddToTranslation(FVector(0,4,0)); Part->Tick(0.016f);
+	TestTrue(TEXT("4 cm accepted from new baseline"),FMath::IsNearlyEqual(static_cast<double>(Part->GetYawDeg()),-9.865807,0.001)); return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5eInputs,"vBoR.P5e.E7PalmPinchSingleHand",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -153,7 +162,7 @@ bool FP5eInputs::RunTest(const FString&)
 	TestEqual(TEXT("One grab point"),Part->GrabComponent->GetSingleGrabTransformerObject()->MaxGrabPoints(),1);
 	TestTrue(TEXT("First accepted"),FP5eTestAccess::Select(Part)); TestFalse(TEXT("Other hand rejected"),FP5eTestAccess::Select(Part,1));
 	TestEqual(TEXT("First remains owner"),FP5eTestAccess::Motion(Part).GrabHand,0); P5eMove(Part,10,8);
-	TestTrue(TEXT("Single wrist drives both axes"),FMath::IsNearlyEqual(Part->GetYawDeg(),10.f,0.001f) && FMath::IsNearlyEqual(Part->GetPitchDeg(),8.f,0.001f)); return true;
+	TestTrue(TEXT("Single grab point drives both axes"),FMath::IsNearlyEqual(Part->GetYawDeg(),10.f,0.001f) && FMath::IsNearlyEqual(Part->GetPitchDeg(),8.f,0.001f)); return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5eSDKInputs,"vBoR.P5e.E7RealSDKPalmAndPinch",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -192,7 +201,7 @@ bool FP5eTracking::RunTest(const FString&)
 		Part->bTracked=false; Part->Tick(0.016f); FP5eTestAccess::Pointer(Part,Grabber,Type); P5eMove(Part,20,0);
 		TestTrue(TEXT("Paused"),FP5eTestAccess::Motion(Part).bPaused); TestEqual(TEXT("Ownership retained"),FP5eTestAccess::Motion(Part).GrabHand,0);
 		Part->bTracked=true; Part->Tick(0.016f); TestEqual(TEXT("Recovery no motion"),Part->GetYawDeg(),0.f);
-		TestTrue(TEXT("Discard recorded"),FMath::IsNearlyEqual(FP5eTestAccess::Motion(Part).RecoveryDiscardDeg,20.0,0.001)); P5eMove(Part,25,0);
+		TestTrue(TEXT("Discard recorded in cm"),FMath::IsNearlyEqual(FP5eTestAccess::Motion(Part).RecoveryDiscardCm,2*20*FMath::Sin(FMath::DegreesToRadians(10.0)),0.001)); P5eMove(Part,25,0);
 		TestTrue(TEXT("New motion only"),FMath::IsNearlyEqual(Part->GetYawDeg(),5.f,0.001f)); FP5eTestAccess::Pointer(Part,Grabber,Type);
 		TestEqual(TEXT("Retains until actual open"),FP5eTestAccess::Motion(Part).GrabHand,0);
 		Part->bClosed=false; Part->Tick(0.016f); TestEqual(TEXT("Open releases"),FP5eTestAccess::Motion(Part).GrabHand,INDEX_NONE);
@@ -246,7 +255,7 @@ bool FP5eModes::RunTest(const FString&)
 	FP5eWorld W; auto* Part=W.Part(); W.Play(); FP5eTestAccess::Select(Part); P5ePoint(Part->Hands[1],FVector(-5,10,0)); Part->Tick(0.016f);
 	P5ePoint(Part->Hands[1],FVector(-2,10,0)); Part->Tick(0.016f); TestEqual(TEXT("Grab excludes other push"),Part->GetYawDeg(),0.f);
 	FP5eTestAccess::Release(Part); Part->Hands[1].bTracked=false; P5ePush(Part); const float Before=Part->GetYawDeg();
-	Part->Wrist.SetRotation(P5eRotation(20,8)); FP5eTestAccess::Select(Part); Part->Tick(0.016f);
+	Part->Wrist.SetLocation(P5eRotation(20,8).RotateVector(FVector(-20,0,0))); FP5eTestAccess::Select(Part); Part->Tick(0.016f);
 	TestTrue(TEXT("Push to grab no jump"),FMath::IsNearlyEqual(Part->GetYawDeg(),Before,0.001f)); TestEqual(TEXT("Push cleared"),FP5eTestAccess::Motion(Part).PushHand,INDEX_NONE);
 	P5eMove(Part,25,8); TestTrue(TEXT("Subsequent grab follows"),FMath::IsNearlyEqual(Part->GetYawDeg(),Before+5,0.001f)); return true;
 }
@@ -409,7 +418,7 @@ bool FP5ePushPointLifecycle::RunTest(const FString&)
 		const FQuat Before=Motion.Rotation();
 		if (EndMode==0) { Motion.ClearPush(); }
 		else if (EndMode==1) { Hands[0].bTracked=false; Motion.AdvancePush(Hands); }
-		else if (EndMode==2) { Motion.BeginGrab(0,FQuat::Identity); }
+		else if (EndMode==2) { Motion.BeginGrab(0,FVector(-4,0,0)); }
 		else
 		{
 			const FVector InvalidPoint=EndMode==3?FVector(-3.5,20,0):(EndMode==4?FVector(0,10,0):FVector(-3.5,0,0));
@@ -422,5 +431,169 @@ bool FP5ePushPointLifecycle::RunTest(const FString&)
 		Hands[0].Points[2]=Before.RotateVector(FVector(-3.5,-10,0)); Motion.AdvancePush(Hands);
 		TestEqual(TEXT("Fresh crossing can select a different point"),Motion.PushPoint,2);
 	} return true;
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5lGrab,"vBoR.P5l.E1E2CenterFollowsHand",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5lGrab::RunTest(const FString&)
+{
+	for (bool Vertical : {false,true})
+	{
+		for (int32 Sign : {-1,1})
+		{
+			FP5eWorld W; auto* Part=W.Part(); Part->SetActorRotation(FRotator(0,37,0)); W.Play();
+			Part->Wrist.SetLocation(FVector(-4,0,0)); FP5eTestAccess::Select(Part);
+			Part->Wrist.AddToTranslation(Vertical ? FVector(0,0,Sign) : FVector(0,Sign,0)); Part->Tick(0.016f);
+			TestTrue(TEXT("1 cm gives damped 5.61 deg"),FMath::IsNearlyEqual(static_cast<double>(Vertical?Part->GetPitchDeg():Part->GetYawDeg()),-Sign*5.614497,0.05));
+			TestTrue(TEXT("Other axis stays zero"),FMath::IsNearlyZero(Vertical?Part->GetYawDeg():Part->GetPitchDeg(),0.001f));
+			const FVector Direction=Vertical ? Part->GetActorUpVector() : Part->GetActorRightVector();
+			TestTrue(TEXT("Actual normal follows world hand direction"),FVector::DotProduct(-Part->PitchAxis->GetForwardVector(),Direction)*Sign>0);
+		}
+	} return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5lSDK,"vBoR.P5l.E7SDKPalmPinchPosition",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5lSDK::RunTest(const FString&)
+{
+	for (bool Pinch : {false,true})
+	{
+		FP5eWorld W; auto* Part=W.Part(); Part->Wrist.SetLocation(FVector(-4,0,0));
+		auto* Owner=W.World->SpawnActor<AActor>(); auto* Grabber=NewObject<UIsdkGrabberComponent>(Owner); Owner->SetRootComponent(Grabber);
+		Grabber->InteractorTags.AddTag(IsdkGameplayTags::TAG_Isdk_Type_Device_Left); Grabber->SetWorldLocation(FVector(1000));
+		Grabber->SetGrabDetectionTypeAllowed(EIsdkGrabDetectorType::DistanceGrab,false); Grabber->SetGrabDetectionTypeAllowed(EIsdkGrabDetectorType::RayGrab,false);
+		Grabber->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm,true); Grabber->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch,true);
+		Grabber->RegisterComponent(); W.Play(); Grabber->Activate(true);
+		Grabber->SetWorldLocation(Part->GrabBox->GetComponentLocation()); Grabber->TickComponent(0.016f,LEVELTICK_All,nullptr);
+		if (Pinch) { Grabber->PinchGrab(); } else { Grabber->PalmGrab(); }
+		TestTrue(TEXT("Actual SDK selection"),Grabber->GetGrabbedComponent()==Part->Grabbable);
+		TestEqual(TEXT("Actual SDK method captured"),FP5eTestAccess::Pinch(Part),Pinch);
+		Part->Wrist.AddToTranslation(FVector(0,0,1)); Part->Tick(0.016f);
+		TestTrue(TEXT("Both SDK methods follow position"),FMath::IsNearlyEqual(Part->GetPitchDeg(),-5.614497f,0.05f));
+		TestTrue(TEXT("SDK normal looks up"),FVector::DotProduct(-Part->PitchAxis->GetForwardVector(),Part->GetActorUpVector())>0);
+		if (Pinch) { Grabber->PinchRelease(); } else { Grabber->PalmRelease(); }
+	} return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5lTracking,"vBoR.P5l.E8RecoveryCentimeters",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5lTracking::RunTest(const FString&)
+{
+	FP5eWorld W; auto* Part=W.Part(); W.Play(); Part->Wrist.SetLocation(FVector(-4,0,0)); FP5eTestAccess::Select(Part);
+	Part->bTracked=false; Part->Tick(0.016f); Part->Wrist.AddToTranslation(FVector(0,0,3)); Part->Tick(0.016f);
+	TestEqual(TEXT("Lost tracking stays still"),Part->GetPitchDeg(),0.f); Part->bTracked=true; Part->Tick(0.016f);
+	TestEqual(TEXT("Recovery stays still"),Part->GetPitchDeg(),0.f); TestEqual(TEXT("3 cm discarded"),FP5eTestAccess::Motion(Part).RecoveryDiscardCm,3.0);
+	TestTrue(TEXT("Debug uses cm"),Part->GetDebugText().Contains(TEXT("discarded=3.000 cm")));
+	Part->Wrist.AddToTranslation(FVector(0,0,1)); Part->Tick(0.016f);
+	TestTrue(TEXT("Only new 1 cm used, previous lever 5 cm"),FMath::IsNearlyEqual(Part->GetPitchDeg(),-4.065051f,0.001f)); return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5lRearPush,"vBoR.P5l.E9RearEdgeStopWithdraw",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5lRearPush::RunTest(const FString&)
+{
+	for (bool Vertical : {false,true})
+	{
+		FP5eWorld W; auto* Part=W.Part(); W.Play(); const FVector Edge(0,Vertical?0:10,Vertical?3.5:0);
+		P5ePoint(Part->Hands[0],Edge+FVector(-1,0,0)); Part->Tick(0.016f);
+		P5ePoint(Part->Hands[0],Edge+FVector(-2.5,0,0)); Part->Tick(0.016f);
+		const FQuat Before=FP5eTestAccess::Motion(Part).Rotation();
+		TestTrue(TEXT("Rear edge moves toward driver"),Before.RotateVector(Edge+FVector(-2,0,0)).X<-2);
+		TestTrue(TEXT("Rear finger stays on back plane"),FMath::IsNearlyEqual(Before.UnrotateVector(Part->Hands[0].Points[1]).X,-2.0,0.001));
+		for (int32 I=0; I<5; ++I) { Part->Tick(0.016f); }
+		TestTrue(TEXT("Rear stopped finger stays still"),FP5eTestAccess::Motion(Part).Rotation().Equals(Before,0.001));
+		P5ePoint(Part->Hands[0],Before.RotateVector(Edge+FVector(1,0,0))); Part->Tick(0.016f);
+		TestTrue(TEXT("Rear withdrawal never pulls"),FP5eTestAccess::Motion(Part).Rotation().Equals(Before,0.001));
+		TestEqual(TEXT("Rear push ended"),FP5eTestAccess::Motion(Part).PushHand,INDEX_NONE);
+	} return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5lRejectRear,"vBoR.P5l.E10RejectRearCrossings",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5lRejectRear::RunTest(const FString&)
+{
+	const FVector Before[] = {FVector(-1,0,0),FVector(-1,20,0),FVector(-1,10,0),FVector(-2.5,20,0),FVector(-2,10,0)};
+	const FVector After[] = {FVector(-2.5,0,0),FVector(-2.5,20,0),FVector(-6,10,0),FVector(-2.5,10,0),FVector(-5,10,0)};
+	for (int32 I=0; I<UE_ARRAY_COUNT(Before); ++I)
+	{
+		FVBoRTwoAxisMotion Motion; FVBoRDoorHand Hands[2]; P5ePoint(Hands[0],Before[I]); Motion.AdvancePush(Hands);
+		P5ePoint(Hands[0],After[I]); Motion.AdvancePush(Hands);
+		TestEqual(TEXT("Invalid rear yaw"),Motion.YawDeg,0.0); TestEqual(TEXT("Invalid rear pitch"),Motion.PitchDeg,0.0);
+		TestEqual(TEXT("Invalid rear no push"),Motion.PushHand,INDEX_NONE);
+	} return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5lFaceOwner,"vBoR.P5l.E11FirstHandPointAndFace",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5lFaceOwner::RunTest(const FString&)
+{
+	for (bool RearFirst : {false,true})
+	{
+		FVBoRTwoAxisMotion Motion; FVBoRDoorHand Hands[2];
+		const double Outside=RearFirst?-1:-5, Inside=RearFirst?-2.5:-3.5;
+		P5ePoint(Hands[0],FVector(Outside,10,0)); Motion.AdvancePush(Hands);
+		Hands[0].Points[1].X=Inside; Motion.AdvancePush(Hands); const FQuat Rotation=Motion.Rotation();
+		TestEqual(TEXT("First hand starts"),Motion.PushHand,0); TestEqual(TEXT("First face retained"),Motion.PushFace,RearFirst?1:0);
+		Hands[0].Points[2]=Rotation.RotateVector(FVector(RearFirst?-5:-1,-10,0));
+		P5ePoint(Hands[1],Hands[0].Points[2]); Motion.AdvancePush(Hands);
+		Hands[0].Points[2]=Rotation.RotateVector(FVector(RearFirst?-3.5:-2.5,-10,0)); Hands[1].Points[1]=Hands[0].Points[2];
+		Motion.AdvancePush(Hands);
+		TestEqual(TEXT("Other hand cannot steal"),Motion.PushHand,0); TestEqual(TEXT("Other point cannot steal"),Motion.PushPoint,1);
+		TestEqual(TEXT("Other face cannot steal"),Motion.PushFace,RearFirst?1:0);
+		TestTrue(TEXT("Other face leaves rotation unchanged"),Motion.Rotation().Equals(Rotation,0.001));
+	}
+	FVBoRTwoAxisMotion Simultaneous; FVBoRDoorHand Hands[2];
+	P5ePoint(Hands[0],FVector(-5,10,0)); P5ePoint(Hands[1],FVector(-1,-10,0)); Simultaneous.AdvancePush(Hands);
+	Hands[0].Points[1].X=-3.5; Hands[1].Points[1].X=-2.5; Simultaneous.AdvancePush(Hands);
+	TestEqual(TEXT("Simultaneous keeps one hand"),Simultaneous.PushHand,0); TestEqual(TEXT("Simultaneous keeps one face"),Simultaneous.PushFace,0); return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5lRearTracking,"vBoR.P5l.E12RearTrackingAndGrabExclusion",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5lRearTracking::RunTest(const FString&)
+{
+	FVBoRTwoAxisMotion Motion; FVBoRDoorHand Hands[2]; P5ePoint(Hands[0],FVector(-1,10,0)); Motion.AdvancePush(Hands);
+	Hands[0].Points[1].X=-2.5; Motion.AdvancePush(Hands); const FQuat Before=Motion.Rotation();
+	Hands[0].bTracked=false; Motion.AdvancePush(Hands); TestEqual(TEXT("Loss clears face"),Motion.PushFace,INDEX_NONE);
+	P5ePoint(Hands[0],Before.RotateVector(FVector(-2.5,10,0))); Motion.AdvancePush(Hands);
+	TestEqual(TEXT("Recovery no push"),Motion.PushHand,INDEX_NONE); TestTrue(TEXT("Recovery no jump"),Motion.Rotation().Equals(Before,0.001));
+	Motion.BeginGrab(0,FVector(-4,0,0)); P5ePoint(Hands[1],Before.RotateVector(FVector(-1,10,0))); Motion.AdvancePush(Hands);
+	Hands[1].Points[1]=Before.RotateVector(FVector(-2.5,10,0)); Motion.AdvancePush(Hands);
+	TestEqual(TEXT("Grab excludes rear push"),Motion.PushHand,INDEX_NONE); TestTrue(TEXT("Grab excludes rear rotation"),Motion.Rotation().Equals(Before,0.001)); return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5lSettings,"vBoR.P5l.E13PositiveFiniteSettings",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5lSettings::RunTest(const FString&)
+{
+	for (bool Jump : {false,true})
+	{
+		for (float Value : {0.f,-1.f,std::numeric_limits<float>::quiet_NaN()})
+		{
+			FP5eWorld W; auto* Part=W.Part(); if (Jump) { Part->MaxGrabJumpCm=Value; } else { Part->MinLeverCm=Value; }
+			FP5eWarnings Warnings;
+			AddExpectedMessagePlain(TEXT("Missing mesh or invalid two-axis settings; grabbing and pushing disabled"),ELogVerbosity::Warning);
+			W.Play(); Part->Tick(0.016f); Part->Tick(0.016f); GLog->FlushThreadedLogs(); TestEqual(TEXT("One runtime warning"),Warnings.Count,1);
+			TestFalse(TEXT("Invalid Palm disabled"),Part->Grabbable->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm));
+			TestFalse(TEXT("Invalid Pinch disabled"),Part->Grabbable->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch));
+			TestFalse(TEXT("Injected grab rejected"),FP5eTestAccess::Select(Part)); P5ePush(Part);
+			TestEqual(TEXT("Invalid push disabled"),FP5eTestAccess::Motion(Part).PushHand,INDEX_NONE);
+		}
+	} return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5lMaterial,"vBoR.P5l.E14MaterialSurvivesBeginPlay",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5lMaterial::RunTest(const FString&)
+{
+	FP5eWorld W; auto* Part=W.Part(); auto* Grabber=P5ePointer(Part);
+	auto* Base=LoadObject<UMaterialInterface>(nullptr,TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
+	auto* Material=UMaterialInstanceDynamic::Create(Base,Part); Part->PartMesh->SetMaterial(0,Material); W.Play();
+	TestTrue(TEXT("Slot zero survives BeginPlay"),Part->PartMesh->GetMaterial(0)==Material);
+	FP5eTestAccess::Pointer(Part,Grabber,EIsdkPointerEventType::Hover); Part->Tick(0.016f);
+	TestTrue(TEXT("Hover keeps slot zero"),Part->PartMesh->GetMaterial(0)==Material);
+	TestTrue(TEXT("Hover only uses overlay"),Part->PartMesh->GetOverlayMaterial()==FP5eTestAccess::Overlay(Part)); return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5lMockMaterial,"vBoR.P5l.E15MockMirrorColor",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5lMockMaterial::RunTest(const FString&)
+{
+	FP5eWorld W; auto* Car=W.World->SpawnActor<AP3VehicleMock>(); W.Play(); auto* Part=Car->RearviewMirror.Get();
+	if (!TestNotNull(TEXT("Mock mirror"),Part)) { return false; }
+	auto* Material=Cast<UMaterialInstanceDynamic>(Part->PartMesh->GetMaterial(0));
+	if (!TestNotNull(TEXT("Mock creates approximate material"),Material)) { return false; }
+	FLinearColor Color; Material->GetVectorParameterValue(FMaterialParameterInfo(TEXT("ColorParam")),Color);
+	TestTrue(TEXT("Approximate color retained"),Color.Equals(FLinearColor(0.15,0.3,0.4,1)));
+	TestTrue(TEXT("Approximate no reflection label retained"),Part->GetDebugText().Contains(TEXT("Approximate geometry")) && Part->GetDebugText().Contains(TEXT("no reflection"))); return true;
 }
 #endif

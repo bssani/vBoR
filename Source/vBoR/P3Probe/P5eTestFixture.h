@@ -9,7 +9,7 @@ class AP5eTrackedPart : public AVBoRTwoAxisPart
 {
 	GENERATED_BODY()
 public:
-	FTransform Wrist;
+	FTransform Wrist = FTransform(FVector(-20,0,0));
 	FVBoRDoorHand Hands[2];
 	bool bTracked = true, bClosed = true;
 protected:
