@@ -67,6 +67,14 @@ AVBoRCarryObject::AVBoRCarryObject()
 	Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Block);
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(IsdkContentAssetPaths::Engine::BasicShapes::Cube);
 	Mesh->SetStaticMesh(Cube.Object);
+	LandingPreview = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("LandingPreview"));
+	LandingPreview->SetupAttachment(Mesh);
+	// 손의 이동·회전과 독립된 착지 자세를 표시함 (P1c D3)
+	LandingPreview->SetAbsolute(true, true, true);
+	LandingPreview->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	LandingPreview->SetGenerateOverlapEvents(false);
+	LandingPreview->SetCastShadow(false);
+	LandingPreview->SetVisibility(false);
 	Grabbable = CreateDefaultSubobject<UIsdkGrabbableComponent>(TEXT("Grabbable"));
 	Grabbable->SetupAttachment(Mesh);
 	GrabTransformer = CreateDefaultSubobject<UVBoRCarryGrabTransformer>(TEXT("GrabTransformer"));
@@ -95,6 +103,11 @@ void AVBoRCarryObject::ApplyBoxSize()
 
 void AVBoRCarryObject::PreInitializeComponents()
 {
+	if (!FMath::IsFinite(LevelLiftMaxCm) || LevelLiftMaxCm < 0)
+	{
+		UE_LOG(LogVBoRCarry, Warning, TEXT("Invalid LevelLiftMaxCm on '%s'; using 0 cm."), *GetName());
+		LevelLiftMaxCm = 0;
+	}
 	// 자식 설정 반영 뒤 SDK BeginPlay 전에 Palm 만 허용하고 Throwable 을 끔 (P1 D1)
 	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, true);
 	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch, false);
@@ -120,6 +133,7 @@ void AVBoRCarryObject::BeginPlay()
 	Session.SetRestPose(GetActorTransform());
 	UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, IsdkContentAssetPaths::Materials::GrabbableDefault);
 	StateOverlay = Material ? UMaterialInstanceDynamic::Create(Material, this) : nullptr;
+	PreviewMaterial = Material ? UMaterialInstanceDynamic::Create(Material, this) : nullptr;
 	Mesh->SetOverlayMaterial(nullptr);
 	Grabbable->GetInteractionPointerEventDelegate().AddUniqueDynamic(this, &AVBoRCarryObject::HandlePointer);
 	UpdateVisual();
@@ -160,6 +174,9 @@ bool AVBoRCarryObject::HasSimpleCollision() const
 
 bool AVBoRCarryObject::IsPoseClear(const FTransform& Pose) const
 {
+#if WITH_DEV_AUTOMATION_TESTS
+	++PoseClearCalls;
+#endif
 	if (!GetWorld() || Pose.ContainsNaN() || !HasSimpleCollision()) { return false; }
 	// 등록된 Mesh 의 simple collision 을 그대로 씀 (원통 외접 상자 모서리 제거, P1 R3-2)
 	FComponentQueryParams Params(SCENE_QUERY_STAT(VBoRCarryOverlap), this);
@@ -381,6 +398,18 @@ void AVBoRCarryObject::ReleaseCarry(int32 Hand, const FTransform* TrackedPoses)
 	Goal.SetScale3D(GetActorScale3D());
 	bAssisting = bUsePlacementAssist && LoadTarget && FVBoRCarryMotion::CanAssist(GetActorTransform(), Goal, LoadTarget->IsStaticFit(this), AssistDistanceCm, AssistAngleDeg);
 	bDropping = !bAssisting;
+	if (bDropping && !bUsePlacementAssist)
+	{
+		FTransform DropStart;
+		FTransform Landing;
+		bool bLevelBlocked = false;
+		CalculateReleaseDrop(DropStart, Landing, bLevelBlocked);
+		// 검사한 끝 자세로 바로 바꿈 (중간 회전의 관통 방지, P1c D1·D2)
+		if (IsPoseClear(DropStart)) { SetActorTransform(DropStart, false, nullptr, ETeleportType::TeleportPhysics); }
+		LevelResult = !bLevelOnRelease ? TEXT("level off") : bLevelBlocked ? TEXT("level blocked") : TEXT("level");
+		if (bLevelBlocked) { UE_LOG(LogVBoRCarry, Log, TEXT("level blocked on '%s'; retaining tilt for vertical drop."), *GetName()); }
+	}
+	else { LevelResult = TEXT("level off (placement assist)"); }
 	ReleaseResult = bAssisting ? TEXT("assisted seating (in progress)") : TEXT("vertical drop");
 	if (bAssisting) { AssistFrom = GetActorTransform(); AssistGoal = Goal; AssistStartedAt = GetWorld()->GetTimeSeconds(); }
 	OnCarryReleased.Broadcast(this);
@@ -476,6 +505,7 @@ void AVBoRCarryObject::ResetToPose(const FTransform& Pose)
 	bDropping = bAssisting = bSeated = bBlocked = bReleasedOutside = false;
 	Outcome = EVBoRCarryOutcome::None;
 	ReleaseResult = TEXT("none (reset)");
+	LevelResult = TEXT("level idle");
 	FTransform Restored = Pose;
 	Restored.SetScale3D(GetActorScale3D());
 	SetActorTransform(Restored, false, nullptr, ETeleportType::TeleportPhysics);
@@ -517,16 +547,19 @@ FString AVBoRCarryObject::GetMeasurementText() const
 	const double Paused = Session.PausedSeconds + (Session.bPaused ? FMath::Max(0.0, GetWorld()->GetTimeSeconds() - Session.PauseAt) : 0.0);
 	const double Distance = LoadTarget ? FVector::Distance(GetActorLocation(), LoadTarget->GetGoalPose().GetLocation()) : -1;
 	const double Angle = LoadTarget ? FVBoRCarryMotion::AngleDeg(GetActorTransform(), LoadTarget->GetGoalPose()) : -1;
-	return FString::Printf(TEXT("Attempts L=%d R=%d | grabbed L=%d R=%d | holding hand=%s | mode=%s | two-hand=%d / %.3f s\nHeld %.3f s | blocked=%d, %.3f s, max requested/actual gap %.2f cm\nTracking pauses=%d, %.3f s | recovery delta %.2f cm | ignored SDK releases=%d\nRelease: %s | final pose: %s / %s\nTarget pose error %.2f cm / %.2f deg | loading region inside and clear=%d\nPalm only | HandGrab only | throwable=0 | scripted drop %.1f cm/s"),
+	return FString::Printf(TEXT("Attempts L=%d R=%d | grabbed L=%d R=%d | holding hand=%s | mode=%s | two-hand=%d / %.3f s\nHeld %.3f s | blocked=%d, %.3f s, max requested/actual gap %.2f cm\nTracking pauses=%d, %.3f s | recovery delta %.2f cm | ignored SDK releases=%d\nRelease: %s | final pose: %s / %s\nTarget pose error %.2f cm / %.2f deg | loading region inside and clear=%d\nPalm only | HandGrab only | throwable=0 | scripted drop %.1f cm/s\n%s | preview %s"),
 		Attempts[0], Attempts[1], Successes[0], Successes[1], Session.Hand == 0 ? TEXT("Left") : Session.Hand == 1 ? TEXT("Right") : TEXT("none"),
 	Session.IsTwoHanded() ? TEXT("two hands") : Session.Hand != INDEX_NONE ? TEXT("one hand") : TEXT("none"), Session.TwoHandEntries, Session.TwoHandSeconds,
 		Session.HeldSeconds, BlockedCount, BlockedSeconds, MaxRequestedGapCm, Session.PauseCount, Paused, Session.RecoveryDistanceCm,
 		Session.IgnoredReleases, *ReleaseResult, *GetActorLocation().ToString(), *GetActorRotation().ToString(), Distance, Angle,
-		LoadTarget && LoadTarget->IsObjectInside(this), DropSpeedCmPerSecond);
+		LoadTarget && LoadTarget->IsObjectInside(this), DropSpeedCmPerSecond, *LevelResult,
+		LandingPreview->IsVisible() ? (bPreviewInside ? TEXT("inside") : TEXT("outside")) : TEXT("hidden"));
 }
 
 void AVBoRCarryObject::UpdateVisual()
 {
+	// Held 상태가 같아도 그 frame 의 실제 박스 자세로 다시 계산함 (P1c E11)
+	UpdateLandingPreview();
 	const FString State = GetStateText();
 	if (State == LastState) { return; }
 	LastState = State;

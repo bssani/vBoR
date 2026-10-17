@@ -32,5 +32,6 @@ public:
 protected:
 	virtual void BeginPlay() override;
 private:
+	friend class AVBoRCarryObject;
 	bool ContainsPose(const AVBoRCarryObject* Object, const FTransform& Pose, const FTransform& Reference, const FVector& Half) const;
 };
