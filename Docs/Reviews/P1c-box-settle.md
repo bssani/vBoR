@@ -1,0 +1,63 @@
+# P1c 박스 놓기 개정 — 리뷰
+
+명세: [P1c-box-settle.md](../Specs/P1c-box-settle.md) · 브랜치: `codex/P1c-box-settle`
+
+## 리뷰 1회차 (2026-10-18, Claude — `7e92473`)
+
+**결과: 열림 1건(R1-1).** D1–D3의 동작은 명세대로다. 남은 것은 박스를 들고 있는 동안의 frame 비용 하나다.
+- 기존 시험 파일과 단언은 바뀌지 않았다. `bLevelOnRelease`를 끈 기존 시험도 없다(보고 ③). `vBoR.P1Carry.DropToSurface`, `ContactDropOnSlope`는 그대로 통과한다.
+- 들고 있을 때의 접촉·미끄러짐·회전 밀어냄, 안착 보조, 공급·`B`·`R`·바닥 사라짐 코드는 바뀌지 않았다(D4, §3).
+- Codex 보고는 커밋 본문에 있다. 첫 구현이라 리뷰 파일이 없어서 Claude가 이 파일을 만들었다.
+
+**재현(에디터가 닫힌 것을 확인한 뒤, 바뀐 C++ 5개의 시각을 갱신):**
+- non-unity(`-DisableUnity -Module=vBoR`): `Result: Succeeded`, 경고·오류 0. 로그 `Saved/Logs/ReviewP1cNonUnity.log`.
+- unity: `Result: Succeeded`, 경고·오류 0. 로그 `ReviewP1cUnity.log`.
+- `vBoR.*`: 367/367(P1c 8개 포함), `TEST COMPLETE. EXIT CODE: 0`. 로그 `ReviewP1cAll.log`. 끝난 뒤 `UnrealEditor` 프로세스 없음.
+
+**Codex 토큰:** 4.39M(입력 4.37M 중 캐시 4.19M, 약 96%), 2026-10-17 15:10–15:22 UTC로 약 11분. 하위 에이전트는 0이다. 실패를 고치려고 다시 돌린 것은 둘이다. 하나는 non-unity 실패(`AddExpectedMessagePlain` 인자, C2665)다. 다른 하나는 전체 시험 366/367이었다. 일반 Log는 expected message로 세지지 않아서, 직접 세는 방식으로 바꿨다. 규칙 안이다.
+
+**확인한 것:**
+- **D1 세우기**(`Interaction/VBoRCarryLanding.cpp:13-18`): (현재 회전 × 쉬는 회전⁻¹)의 Yaw만 남기고 쉬는 회전을 곱한다. 쉬는 회전이 없으면 Identity를 쓴다.
+  - 쉬는 회전은 `BeginPlay`와 `ResetToPose`에서만 정한다(`VBoRCarryObject.cpp:133`, `:494`). 그래서 기울어진 채 놓였던 박스를 다시 잡아도 기준이 바뀌지 않는다.
+  - `LevelAndYaw`가 확인하는 것: 쉬는 회전이 Roll 90°인 경우, 쉬는 회전이 없는 경우, 낙하 중 모든 Tick의 `IsPoseClear`.
+- **D2 올림**(`:19-46`): +Z로만 찾는다. 처음 빈 높이와 그 직전 막힌 높이 사이를 0.001 cm까지 좁힌다. 못 찾으면 기울인 자세를 그대로 두고, 놓기마다 로그를 1번 남긴다(`VBoRCarryObject.cpp:398-408`).
+  - 세운 자세는 `IsPoseClear`로 다시 확인한 뒤 바로 적용한다. 중간 회전은 없다(§5 재량).
+- **D3 미리 보기**(`:72-93`): 놓기와 같은 `CalculateReleaseDrop`을 쓴다.
+  - sweep은 실제 `Mesh`이고, 시작 관통을 다루는 규칙과 0.005 cm 여유가 `TryMoveToPose`(`VBoRCarryObject.cpp:226-229`)와 같다.
+  - 색은 `IsObjectInside`와 같은 영역 좌표·크기로 `ContainsPose`를 부른 결과다(`VBoRLoadTarget.cpp:69-75`와 같은 꼴). 호출하려고 `friend` 한 줄을 더했고, 판정 코드는 그대로다.
+  - 숨기는 경우: 손에 없음, 추적 보류, 보조 켬, 끔, 첫 닿는 곳 없음, 바닥 사라짐 높이 이하.
+  - 윤곽은 root `Mesh`의 자식이고 절대 변환이라 박스 크기(root scale)와 같다. 충돌·overlap·그림자가 없고, ISDK 잡기 collider는 실제 `Mesh` 그대로다(`PreviewIsolation`).
+- **E7 일치:** 미리 보기 자세와 실제로 놓고 멈춘 자세를 네 시험이 0.01 cm·0.01° 안으로 비교한다. 바닥, 쌓기, 올림, 막힘 대체의 네 경우다.
+
+### R1-1 — 들고 있는 동안 미리 보기가 frame마다 겹침 검사를 최대 150번 넘게 돈다 · 열림
+
+- **문제:**
+  - **위치:** 미리 보기는 박스를 든 동안 매 Tick 놓기 계산 전체를 다시 한다(`VBoRCarryObject.cpp:559` → `VBoRCarryLanding.cpp:72-93`). 그 안의 올림 탐색은 0.1 cm 간격 선형이다(`VBoRCarryLanding.cpp:26`).
+  - **발생 조건:** 세운 자세가 겹치는 동안이다. 트렁크 턱·옆벽·다른 박스 가까이에서 기울여 들고 있을 때가 그렇다. 15 cm 안에 빈자리가 없으면(E5 꼴) 탐색이 끝까지 돈다.
+  - **얼마나 도는가:** 그 frame에 `IsPoseClear`가 154번이다. 탐색 150번에 시작·세움·착지 확인, 그리고 색 판정이 2번 더 부른다(`:69`, `:84`). `IsPoseClear` 1번은 overlap 1번과 겹친 부품마다 sweep 1번이라, 장면 질의로는 300번이 넘는다.
+  - **영향:** 자동화 로그 시각으로 어림잡았다. 막힌 탐색 2번을 하는 `LevelBlocked`가 25 ms, 5 cm 탐색 2번을 하는 `LevelLift`가 19 ms다. 그래서 상자 셋뿐인 시험 월드에서도 `IsPoseClear` 1번이 약 30 µs다. 막힌 동안 frame당 4–5 ms다(어림, 실제 차 충돌 형상에서는 더 늘 수 있다). 90 Hz 한 frame이 11 ms이니, 참가자가 트렁크 입구에서 박스를 맞추는 바로 그때 frame이 떨어질 수 있다.
+  - **두 번째 원인(작음):** 미리 보기를 매 갱신마다 먼저 숨기고(`:74`) 끝에서 다시 보인다(`:92`). 엔진은 보임 값이 바뀔 때마다 렌더 상태를 다시 만들게 표시한다(`Runtime/Engine/Private/Components/SceneComponent.cpp:3561-3568` → `:3547-3549` `MarkRenderStateDirty`, Claude 확인). 그래서 보이는 동안 frame마다 렌더 상태를 다시 만든다.
+  - 원인 일부는 내 명세다. D3이 "계산은 놓기와 같은 함수"라고만 했고, 그 함수가 frame마다 돈다는 점과 비용을 적지 않았다.
+- **제안:**
+  - 탐색 간격을 넓힌다. 예: 1 cm 간격(최대 15번)으로 처음 빈 높이를 찾고, 지금의 이분 축소(0.001 cm)를 그대로 쓴다. 1 cm보다 얇은 빈 틈은 놓친다. 0.1 cm 간격도 0.1 cm보다 얇은 틈은 놓치니 같은 종류의 절충이다. 다른 방법도 좋다. 예: 한도 높이 자세가 비어 있으면 거기서 아래로 sweep 한 번. 그러면 보고 ③에 이유를 적는다.
+  - 색 판정의 `IsPoseClear`(`:84`)는 `CalculateReleaseDrop`이 참을 돌려줄 때 이미 확인한 것(`:69`)이라 뺄 수 있다.
+  - 보임은 결과를 먼저 정하고, 값이 바뀔 때만 `SetVisibility`를 부른다.
+  - D2 결과는 그대로다: 가장 낮은 빈 높이(0.001 cm 안), 실패 때 기울인 채, 어느 Tick에도 겹치지 않음.
+- **확인할 시험:**
+  - E5 배치(`LevelBlocked`)에서 미리 보기 한 번 갱신하는 동안의 `IsPoseClear` 호출 수에 상한을 둔다. 예: ≤ 30. 실제 상한은 고른 방법에 맞게 정하고 보고에 적는다.
+    - 계수기는 자동화 빌드에만 둔다. `UVBoRAxisGrabComponent::CancelCalls`(`VBoRAxisPart.cpp:32-34`, `#if WITH_DEV_AUTOMATION_TESTS`)와 같은 꼴이다.
+  - E4 배치(`LevelLift`)에서 같은 상한과 결과(Z = 85 cm ±0.01)를 본다.
+  - 보이는 상태에서 연속 두 번 갱신하면, 두 번째에는 렌더 상태가 다시 더러워지지 않는다. `UActorComponent::IsRenderStateDirty()`로 본다.
+  - 기존 P1c 8개는 그대로 통과한다.
+
+### 참고 — VR 확인 때 볼 것 (명세 §7에 더함)
+
+1. **올림은 놓는 순간 바로 일어난다.** 턱 위에서 놓으면 박스가 세워지면서 최대 15 cm 위로 튄 뒤 떨어진다(§5에서 고른 "즉시"). 거슬리면 ≤ 0.15 s 돌리기로 바꿀 수 있다.
+2. **`LevelLiftMaxCm`은 15 cm 고정이다**(`VBoRCarryObject.h:97`). 명세 자리값이 "박스 높이의 절반"이었는데, 기본 박스 높이 30 cm의 절반을 상수로 넣었다. 그래서 `BoxSizeCm`을 바꿔도 따라가지 않는다. 박스 크기를 바꿔 쓸 때 같이 맞추면 된다. 지금은 고치지 않는다.
+3. **윤곽 재질은 ISDK 덮개 재질(`GrabbableLit`)을 본 재질로 쓴다.** 트렁크 안에서 깊이가 읽히는지, 박스와 겹쳐 보일 때 헷갈리지 않는지 본다.
+
+## 개정 이력
+
+| 날짜 | 회차 | 내용 |
+|---|---|---|
+| 2026-10-18 | 1회차 | 열림 1건 R1-1(들고 있는 동안 미리 보기의 frame 비용 — 원인 일부는 명세 D3). 참고 셋(즉시 올림, 올림 한도 고정, 윤곽 재질) |
