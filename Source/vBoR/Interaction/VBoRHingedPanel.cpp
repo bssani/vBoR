@@ -5,6 +5,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/AudioComponent.h"
 #include "Engine/StaticMesh.h"
+#include "EngineUtils.h"
 #include "Interaction/IsdkGrabbableComponent.h"
 #include "Interaction/IsdkGrabberComponent.h"
 #include "Interaction/Pointable/IsdkInteractionPointerEvent.h"
@@ -52,6 +53,11 @@ AVBoRHingedPanel::AVBoRHingedPanel()
 	DoorMesh->SetStaticMesh(Cube.Object);
 	DoorMesh->SetRelativeLocation(FVector(55, 0, 52.5));
 	DoorMesh->SetRelativeScale3D(FVector(1.1, 0.1, 1.05));
+	PushFaceBox = CreateDefaultSubobject<UBoxComponent>(TEXT("PushFaceBox"));
+	PushFaceBox->SetupAttachment(HingePivot);
+	PushFaceBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	PushFaceBox->SetGenerateOverlapEvents(false);
+	PushFaceBox->SetHiddenInGame(true);
 	OutsideHandle = CreateDefaultSubobject<UBoxComponent>(TEXT("OutsideHandle"));
 	InsideHandle = CreateDefaultSubobject<UBoxComponent>(TEXT("InsideHandle"));
 	for (UBoxComponent* Handle : {OutsideHandle.Get(), InsideHandle.Get()})
@@ -98,9 +104,14 @@ void AVBoRHingedPanel::SyncSettings()
 		Motion.bLocked = bUseLatch && Motion.AngleDeg <= LatchAngleDeg;
 		Motion.bLatchArmed = false;
 	}
-	if (DoorMesh->GetStaticMesh())
+	if (DoorMesh->GetStaticMesh() || bUsePushFaceBox)
 	{
-		const FBox Bounds = DoorMesh->GetStaticMesh()->GetBoundingBox().TransformBy(DoorMesh->GetRelativeTransform());
+		FBox Bounds = MeshFaceBounds();
+		if (bUsePushFaceBox && PushFaceBox->GetRelativeRotation().IsNearlyZero())
+		{
+			const FVector Extent = PushFaceBox->GetUnscaledBoxExtent() * PushFaceBox->GetRelativeScale3D().GetAbs();
+			Bounds = FBox(PushFaceBox->GetRelativeLocation() - Extent, PushFaceBox->GetRelativeLocation() + Extent);
+		}
 		Motion.FaceMinCm = Bounds.Min; Motion.FaceMaxCm = Bounds.Max;
 		Motion.ThicknessCm = Bounds.GetSize().Y;
 	}
@@ -115,11 +126,170 @@ void AVBoRHingedPanel::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	DoorMesh->SetRelativeTransform(MeshRestFromRoot.GetRelativeTransform(HingePivot->GetRelativeTransform()));
+	if (!bUsePushFaceBox && DoorMesh->GetStaticMesh())
+	{
+		const FBox Bounds = MeshFaceBounds();
+		PushFaceBox->SetRelativeTransform(FTransform(FQuat::Identity, Bounds.GetCenter()));
+		PushFaceBox->SetBoxExtent(Bounds.GetExtent());
+	}
 	SyncSettings();
 }
 
 void AVBoRHingedPanel::SetAxisHandle(int32 Handle, AVBoRAxisPart* Part)
 {
+	if (Handle < 0 || Handle > 1) { return; }
+	AVBoRAxisPart* Previous = Handle == 0 ? OutsideAxisHandle.Get() : InsideAxisHandle.Get();
+	RememberHandleClaims();
+	if (Handle == 0) { OutsideAxisHandle = Part; } else { InsideAxisHandle = Part; }
+	RememberHandleClaims();
+	const FSetupAssessment Setup = EvaluateSetup();
+	for (const FString& Problem : Setup.Problems) { UE_LOG(LogAxisDoor, Warning, TEXT("%s P2e setup: %s"), *GetName(), *Problem); }
+	// 실행 중 새 칸 지정도 양쪽 연결을 막음 (기존 연결 쪽이 먼저 시작한 경우 포함, P2e D5⑤)
+	if (Part && IsHandleShared(Part) && Part->LinkedDoor && Part->LinkedDoor != this)
+	{
+		AVBoRHingedPanel* Other = Part->LinkedDoor;
+		Other->RememberHandleClaims();
+		for (int32 I = 0; I < 2; ++I)
+		{
+			if ((I == 0 ? Other->OutsideAxisHandle : Other->InsideAxisHandle) == Part) { Other->ApplyAxisHandle(I, nullptr); }
+		}
+		UE_LOG(LogAxisDoor, Warning, TEXT("%s P2e setup: shared handle %s; neither panel connects it."), *Other->GetName(), *Part->GetName());
+	}
+	if (Handle == 0) { OutsideAxisHandle = Previous; } else { InsideAxisHandle = Previous; }
+	ApplyAxisHandle(Handle, Part ? Setup.Handles[Handle] : nullptr);
+}
+
+FBox AVBoRHingedPanel::MeshFaceBounds() const
+{
+	return DoorMesh->GetStaticMesh() ? DoorMesh->GetStaticMesh()->GetBoundingBox().TransformBy(DoorMesh->GetRelativeTransform()) : FBox(Motion.FaceMinCm, Motion.FaceMaxCm);
+}
+
+void AVBoRHingedPanel::CollectHandleCandidates(TArray<AVBoRAxisPart*> (&Candidates)[2]) const
+{
+	ForEachAttachedActors([&](AActor* Actor)
+	{
+		AVBoRAxisPart* Part = Cast<AVBoRAxisPart>(Actor);
+		if (Part && Part->DoorHandleSide != EVBoRDoorHandleSide::None)
+		{
+			Candidates[Part->DoorHandleSide == EVBoRDoorHandleSide::Outside ? 0 : 1].AddUnique(Part);
+		}
+		return true;
+	});
+}
+
+TArray<AVBoRAxisPart*> AVBoRHingedPanel::GetHandleClaims() const
+{
+	TArray<AVBoRAxisPart*> Candidates[2]; CollectHandleCandidates(Candidates);
+	TArray<AVBoRAxisPart*> Claims = Candidates[0];
+	for (AVBoRAxisPart* Part : Candidates[1]) { Claims.AddUnique(Part); }
+	for (AVBoRAxisPart* Part : {OutsideAxisHandle.Get(), InsideAxisHandle.Get()}) { if (Part) { Claims.AddUnique(Part); } }
+	for (const TWeakObjectPtr<AVBoRAxisPart>& Claim : InitialHandleClaims) { if (Claim.IsValid()) { Claims.AddUnique(Claim.Get()); } }
+	return Claims;
+}
+
+void AVBoRHingedPanel::RememberHandleClaims()
+{
+	for (AVBoRAxisPart* Part : GetHandleClaims()) { InitialHandleClaims.AddUnique(Part); }
+}
+
+bool AVBoRHingedPanel::IsHandleShared(const AVBoRAxisPart* Part) const
+{
+	if (!GetWorld()) { return false; }
+	for (TActorIterator<AVBoRHingedPanel> It(GetWorld()); It; ++It)
+	{
+		if (*It != this && It->GetHandleClaims().Contains(Part)) { return true; }
+	}
+	return false;
+}
+
+AVBoRHingedPanel::FSetupAssessment AVBoRHingedPanel::EvaluateSetup() const
+{
+	FSetupAssessment Result;
+	TArray<AVBoRAxisPart*> Candidates[2]; CollectHandleCandidates(Candidates);
+	for (AVBoRAxisPart* Claim : GetHandleClaims())
+	{
+		if (IsHandleShared(Claim)) { Result.Problems.AddUnique(FString::Printf(TEXT("shared handle %s; neither panel connects it."), *Claim->GetName())); }
+	}
+	for (int32 I = 0; I < 2; ++I)
+	{
+		const TCHAR* Side = I == 0 ? TEXT("outside") : TEXT("inside");
+		AVBoRAxisPart* Explicit = I == 0 ? OutsideAxisHandle.Get() : InsideAxisHandle.Get();
+		AVBoRAxisPart* Part = Explicit;
+		if (Explicit)
+		{
+			if (Candidates[I].ContainsByPredicate([&](const AVBoRAxisPart* Candidate) { return Candidate != Explicit; }))
+			{
+				Result.Problems.Add(FString::Printf(TEXT("%s slot %s overrides different attached candidates."), Side, *Explicit->GetName()));
+			}
+			if (Explicit->DoorHandleSide == (I == 0 ? EVBoRDoorHandleSide::Inside : EVBoRDoorHandleSide::Outside))
+			{
+				Result.Problems.Add(FString::Printf(TEXT("%s slot %s has the opposite DoorHandleSide; slot wins."), Side, *Explicit->GetName()));
+			}
+		}
+		else
+		{
+			// 반대쪽 칸에 지정한 손잡이는 다시 고르지 않음 (칸이 쪽 값보다 우선, P2e E9)
+			TArray<AVBoRAxisPart*> Available = Candidates[I];
+			Available.Remove(OutsideAxisHandle); Available.Remove(InsideAxisHandle);
+			if (Available.Num() == 1) { Part = Available[0]; }
+			else if (Available.Num() > 1) { Result.Problems.Add(FString::Printf(TEXT("%s has multiple attached candidates; assign the slot explicitly."), Side)); }
+		}
+		if (!Part) { continue; }
+		bool bConnect = true;
+		const bool bUnderHinge = Part->GetRootComponent()->IsAttachedTo(HingePivot);
+		if (Part->IsChildActor() && !bUnderHinge)
+		{
+			Result.Problems.AddUnique(FString::Printf(TEXT("Child Actor %s: move its Child Actor component under HingePivot."), *Part->GetName()));
+			bConnect = false;
+		}
+		if (IsHandleShared(Part))
+		{
+			bConnect = false;
+		}
+		if (bConnect && !bUnderHinge && Motion.AngleDeg > 0)
+		{
+			Result.Problems.AddUnique(FString::Printf(TEXT("%s attaches to an open panel (%.2f deg); current world pose is kept."), *Part->GetName(), Motion.AngleDeg));
+		}
+		if (bConnect) { Result.Handles[I] = Part; }
+	}
+	if (DoorMesh->GetStaticMesh() && DoorMesh->GetStaticMesh()->GetPathName() != TEXT("/Engine/BasicShapes/Cube.Cube") &&
+		MeshRestFromRoot.Equals(GetDefault<AVBoRHingedPanel>()->MeshRestFromRoot))
+	{
+		Result.Problems.Add(TEXT("Non-cube DoorMesh still uses mock MeshRestFromRoot; check CAD car-origin pivot (usually identity)."));
+	}
+	if (!bUsePushFaceBox && MeshFaceBounds().GetSize().Y > PushFaceWarnThicknessCm)
+	{
+		Result.Problems.Add(FString::Printf(TEXT("Mesh face thickness %.2f cm exceeds %.2f cm; check merged protrusions or use PushFaceBox."), MeshFaceBounds().GetSize().Y, PushFaceWarnThicknessCm));
+	}
+	if (bUsePushFaceBox && !PushFaceBox->GetRelativeRotation().IsNearlyZero())
+	{
+		Result.Problems.Add(TEXT("PushFaceBox relative rotation must be zero; using mesh bounds."));
+	}
+	return Result;
+}
+
+void AVBoRHingedPanel::CheckSetup()
+{
+	const FSetupAssessment Setup = EvaluateSetup();
+	SetupReport = Setup.Problems.IsEmpty() ? TEXT("문제 없음") : FString::Join(Setup.Problems, TEXT("\n"));
+	UE_LOG(LogAxisDoor, Log, TEXT("%s setup check:\n%s"), *GetName(), *SetupReport);
+}
+
+void AVBoRHingedPanel::ApplyAxisHandle(int32 Handle, AVBoRAxisPart* Part)
+{
+	AVBoRAxisPart* Previous = Handle == 0 ? OutsideAxisHandle.Get() : InsideAxisHandle.Get();
+	if (Previous && Previous != Part && Previous->LinkedDoor == this)
+	{
+		Previous->LinkedDoor = nullptr; Previous->DoorHandle = INDEX_NONE;
+	}
+	if (Part && !Part->GetRootComponent()->IsAttachedTo(HingePivot))
+	{
+		if (Part->AttachToComponent(HingePivot, FAttachmentTransformRules::KeepWorldTransform))
+		{
+			UE_LOG(LogAxisDoor, Log, TEXT("%s P2e attached handle=%s to HingePivot (world pose kept)"), *GetName(), *Part->GetName());
+		}
+		else { Part = nullptr; }
+	}
 	if (Handle == 0) { OutsideAxisHandle = Part; } else { InsideAxisHandle = Part; }
 	UpdateGrabAreas();
 	if (Part) { Part->ConnectDoor(this, Handle); }
@@ -207,7 +377,10 @@ void AVBoRHingedPanel::BeginPlay()
 	StateOverlay = Material ? UMaterialInstanceDynamic::Create(Material, this) : nullptr;
 	OutsideGrab->GetInteractionPointerEventDelegate().AddUniqueDynamic(this, &AVBoRHingedPanel::HandleOutsidePointer);
 	InsideGrab->GetInteractionPointerEventDelegate().AddUniqueDynamic(this, &AVBoRHingedPanel::HandleInsidePointer);
-	SetAxisHandle(0, OutsideAxisHandle); SetAxisHandle(1, InsideAxisHandle);
+	RememberHandleClaims();
+	const FSetupAssessment Setup = EvaluateSetup();
+	for (const FString& Problem : Setup.Problems) { UE_LOG(LogAxisDoor, Warning, TEXT("%s P2e setup: %s"), *GetName(), *Problem); }
+	ApplyAxisHandle(0, Setup.Handles[0]); ApplyAxisHandle(1, Setup.Handles[1]);
 	if (bUseLatch && !bUseOutsideGrabArea && !bUseInsideGrabArea && !OutsideAxisHandle && !InsideAxisHandle)
 	{
 		UE_LOG(LogAxisDoor, Warning, TEXT("%s: Latched panel has no opening handle or grab area. %s"), *GetName(),
