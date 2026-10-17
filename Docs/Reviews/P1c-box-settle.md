@@ -29,7 +29,7 @@
   - 윤곽은 root `Mesh`의 자식이고 절대 변환이라 박스 크기(root scale)와 같다. 충돌·overlap·그림자가 없고, ISDK 잡기 collider는 실제 `Mesh` 그대로다(`PreviewIsolation`).
 - **E7 일치:** 미리 보기 자세와 실제로 놓고 멈춘 자세를 네 시험이 0.01 cm·0.01° 안으로 비교한다. 바닥, 쌓기, 올림, 막힘 대체의 네 경우다.
 
-### R1-1 — 들고 있는 동안 미리 보기가 frame마다 겹침 검사를 최대 150번 넘게 돈다 · 반영함 (perf: reduce box landing preview queries)
+### R1-1 — 들고 있는 동안 미리 보기가 frame마다 겹침 검사를 최대 150번 넘게 돈다 · 반영함 (`78f3ac1`)
 
 - **문제:**
   - **위치:** 미리 보기는 박스를 든 동안 매 Tick 놓기 계산 전체를 다시 한다(`VBoRCarryObject.cpp:559` → `VBoRCarryLanding.cpp:72-93`). 그 안의 올림 탐색은 0.1 cm 간격 선형이다(`VBoRCarryLanding.cpp:26`).
@@ -70,8 +70,29 @@
 2. **`LevelLiftMaxCm`은 15 cm 고정이다**(`VBoRCarryObject.h:97`). 명세 자리값이 "박스 높이의 절반"이었는데, 기본 박스 높이 30 cm의 절반을 상수로 넣었다. 그래서 `BoxSizeCm`을 바꿔도 따라가지 않는다. 박스 크기를 바꿔 쓸 때 같이 맞추면 된다. 지금은 고치지 않는다.
 3. **윤곽 재질은 ISDK 덮개 재질(`GrabbableLit`)을 본 재질로 쓴다.** 트렁크 안에서 깊이가 읽히는지, 박스와 겹쳐 보일 때 헷갈리지 않는지 본다.
 
+## 리뷰 2회차 (2026-10-18, Claude — `78f3ac1`)
+
+**결과: 통과. 열린 항목 없음.** R1-1이 제안대로 들어갔다. 1회차 뒤 바뀐 것은 R1-1 범위뿐이다(`git diff 2644dd5 78f3ac1`: 탐색·미리 보기 갱신, 자동화 전용 계수기, 시험).
+
+**재현(에디터가 닫힌 것을 확인한 뒤, 바뀐 C++ 4개의 시각을 갱신):**
+- non-unity(`-DisableUnity -Module=vBoR`)·unity: 둘 다 `Result: Succeeded`, 경고·오류 0. 로그 `Saved/Logs/ReviewP1cR2NonUnity.log`, `ReviewP1cR2Unity.log`.
+- `vBoR.*` 첫 실행: 367/368. 실패 하나는 `vBoR.P0Buck.E8Persistence`의 "Repeated replacement 24: candidate replacement failed (OS error 5)"다. P1c와 무관한 기존 간헐 실패(P0-c M1)다. 그 시험만 다시 돌리니 통과했다. 로그 `ReviewP1cR2All.log`, `ReviewP1cR2E8.log`. 나머지 367개(P1c 9개 포함)는 통과했다. 끝난 뒤 `UnrealEditor` 프로세스 없음.
+- 갱신 한 번의 `IsPoseClear` 수는 E4·E5 모두 18번이다(시험 `AddInfo`). 1회차의 154번에서 줄었다.
+
+**Codex 토큰:** 2.34M(캐시 약 94%), 2026-10-17 15:36–15:41 UTC로 약 4분. 하위 에이전트 0, 재실행 0.
+
+**확인한 것:**
+- **탐색**(`Interaction/VBoRCarryLanding.cpp:26`): 1 cm 간격, 최대 15번이다. 처음 빈 높이와 직전 막힌 높이 사이를 0.001 cm까지 좁히는 부분은 그대로다(최대 약 10번).
+  - E4의 Z = 85 cm ±0.01, 모든 Tick의 `IsPoseClear`, E7 미리 보기 일치가 그대로 통과한다.
+- **색 판정**(`:86`): 겹침 검사를 뺐다. `CalculateReleaseDrop`이 참을 돌려줄 때는 착지 겹침을 이미 확인했으므로 결과는 같다.
+- **보임**(`:97`): 보일지를 먼저 정하고, 값이 바뀔 때만 `SetVisibility`를 부른다.
+  - `PreviewRenderState`는 nullrhi에서 빈 단언이 되지 않도록 렌더 상태를 강제로 만든다. 그다음 보임을 바꾸면 dirty가 되는 것을 양성 대조로 먼저 보고, 연속 갱신에서는 dirty가 되지 않는 것을 본다. 시험이 실제로 무엇인가를 잡는다.
+- **계수기**(`VBoRCarryObject.h:217-219`, `.cpp:177-179`): `WITH_DEV_AUTOMATION_TESTS` 안에만 있다. 배포 빌드에는 들어가지 않는다.
+- 상한 28번은 기본 `LevelLiftMaxCm` 15 cm 기준이다. 한도를 키우면 탐색 횟수도 1 cm당 1번씩 는다(보고 ③). 1회차 참고 2(한도가 박스 크기를 따르지 않음)와 함께 VR 때 본다.
+
 ## 개정 이력
 
 | 날짜 | 회차 | 내용 |
 |---|---|---|
 | 2026-10-18 | 1회차 | 열림 1건 R1-1(들고 있는 동안 미리 보기의 frame 비용 — 원인 일부는 명세 D3). 참고 셋(즉시 올림, 올림 한도 고정, 윤곽 재질) |
+| 2026-10-18 | 2회차 | 통과, 열린 항목 없음. R1-1 반영 확인(`78f3ac1`, 갱신당 IsPoseClear 154 → 18번). E8Persistence 간헐 실패 1번(P0-c M1, 다시 돌려 통과) |
