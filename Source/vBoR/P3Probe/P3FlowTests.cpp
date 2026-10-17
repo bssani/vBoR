@@ -3,6 +3,11 @@
 #include "P3VehicleMock.h"
 #include "P3FlowGameMode.h"
 #include "../Interaction/VBoRScenarioRunner.h"
+#include "../Interaction/VBoRFloorRoute.h"
+#include "Components/SplineComponent.h"
+#include "Components/ArrowComponent.h"
+#include "Components/BoxComponent.h"
+#include "EngineUtils.h"
 #include "../Interaction/VBoRParticipantZones.h"
 #include "../Interaction/VBoRVehicleAlignmentComponent.h"
 #include "../Interaction/VBoREyePointComponent.h"
@@ -30,6 +35,8 @@
 #include "Interaction/IsdkGrabberComponent.h"
 #include "../P2Probe/P2dTestFixture.h"
 #include "IsdkFunctionLibrary.h"
+#include "Misc/OutputDevice.h"
+#include "Misc/OutputDeviceRedirector.h"
 
 struct FP3FlowTestAccess
 {
@@ -47,6 +54,16 @@ struct FP3FlowTestAccess
 	static UWidgetComponent* OperatorPanel(AVBoRScenarioRunner* Runner) { return Runner->OperatorPanel; }
 	static TSharedPtr<STextBlock> LabelText(AVBoRScenarioRunner* Runner, int32 I) { return Runner->ButtonLabelTexts[I]; }
 	static const TArray<TObjectPtr<UStaticMeshComponent>>& Plates(AP3VehicleMock* Car) { return Car->Plates; }
+};
+
+struct FP3bTestAccess
+{
+	static const TArray<TObjectPtr<UStaticMeshComponent>>& Pieces(AVBoRFloorRoute* R) { return R->Pieces; }
+	static const TArray<TObjectPtr<UMaterialInstanceDynamic>>& Materials(AVBoRFloorRoute* R) { return R->ArrowMaterials; }
+	static bool Arrived(AVBoRScenarioRunner* R) { return R->bRouteArrived; }
+	static double Dwell(AVBoRScenarioRunner* R) { return R->RouteDwellSeconds; }
+	static UArrowComponent* Arrow(AVBoRScenarioRunner* R) { return R->MarkerArrow; }
+	static const TArray<TObjectPtr<UStaticMeshComponent>>& Ring(AVBoRScenarioRunner* R) { return R->MarkerRing; }
 };
 
 namespace
@@ -68,6 +85,7 @@ namespace
 	public:
 		FP3TrackedHead() : FXRTrackingSystemBase(nullptr) {}
 		FTransform LocalHead;
+		FVector2D PlayArea = FVector2D(10000,10000);
 		bool bTracked = true;
 		virtual FName GetSystemName() const override { return TEXT("P3SyntheticHead"); }
 		virtual int32 GetXRSystemFlags() const override { return 0; }
@@ -78,6 +96,7 @@ namespace
 		virtual float GetWorldToMetersScale() const override { return 100; }
 		virtual void ResetOrientationAndPosition(float) override {}
 		virtual bool IsHeadTrackingAllowed() const override { return true; }
+		virtual FVector2D GetPlayAreaBounds(EHMDTrackingOrigin::Type) const override { return PlayArea; }
 	};
 	struct FP3World
 	{
@@ -115,6 +134,25 @@ namespace
 		{ if (Action == EVBoRFlowCommand::Confirm) { Ready(); } Runner->QueueCommand({Action, Source, Runner->GetToken()}); Runner->ProcessFlow(0); }
 		void FinishSwitch() { Car->Alignment->AdvanceSwitch(Car->Alignment->FadeSeconds); Car->Alignment->AdvanceSwitch(Car->Alignment->FadeSeconds); }
 		FVBoRDoorMotion& DoorMotion() { return const_cast<FVBoRDoorMotion&>(Car->Door->GetMotion()); }
+	};
+	AVBoRFloorRoute* P3bRoute(FP3World& E, const TCHAR* Tag, const TArray<FVector>& Points = {FVector(0,-300,0),FVector(400,-300,0)})
+	{
+		AVBoRFloorRoute* R = E.World->SpawnActorDeferred<AVBoRFloorRoute>(AVBoRFloorRoute::StaticClass(),FTransform::Identity);
+		R->Tags.Add(Tag); R->Spline->SetSplinePoints(Points,ESplineCoordinateSpace::Local);
+		R->FinishSpawning(FTransform::Identity); return R;
+	}
+	FVBoRScenarioStep P3bStep(const TCHAR* Id, const TCHAR* Tag)
+	{
+		auto Step = P3Step(Id); Step.RouteTag = Tag; Step.MarkerTag = TEXT("Car.DriverSeat"); return Step;
+	}
+	struct FP3bRecords : FOutputDevice
+	{
+		TArray<FString> Lines;
+		FP3bRecords() { GLog->AddOutputDevice(this); }
+		~FP3bRecords() { GLog->FlushThreadedLogs(); GLog->RemoveOutputDevice(this); }
+		virtual void Serialize(const TCHAR* Text, ELogVerbosity::Type, const FName& Category) override
+		{ if (Category == TEXT("LogP3Flow")) { Lines.Add(Text); } }
+		int32 Count(const TCHAR* Text) { GLog->FlushThreadedLogs(); return Lines.FilterByPredicate([Text](const FString& Line) { return Line.Contains(Text); }).Num(); }
 	};
 }
 
@@ -456,9 +494,10 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3HeadLogTest, "vBoR.P3Flow.R1TrackedHeadPosit
 bool FP3HeadLogTest::RunTest(const FString&)
 {
 	FP3World E; const FVector Eye = E.Car->DriverEye->GetComponentLocation();
-	E.Head(FTransform(FRotator::ZeroRotator, Eye + FVector(0, -100, 35)));
+	const FVector Start = E.Car->GetActorTransform().TransformPosition(FVector(E.Car->BodySizeCm.X/2 + E.Car->StartOutsideCm,0,150.5));
+	E.Head(FTransform(FRotator::ZeroRotator, Start));
 	E.Steps({P3Step(TEXT("10"), EVBoRStepRule::Seated, TEXT("Car.DriverSeat"))}); E.Runner->ProcessFlow(0);
-	TestTrue(TEXT("Start location in eye coordinates and mm"), E.Runner->LastRecord.Contains(TEXT("시작 위치")) && E.Runner->LastRecord.Contains(TEXT("Y=-1000.00 Z=350.00 mm")));
+	TestTrue(TEXT("Start marker location in eye coordinates and mm"), E.Runner->LastRecord.Contains(TEXT("시작 위치")) && E.Runner->LastRecord.Contains(E.Car->Alignment->DescribeHead(true, Start)));
 	E.Head(FTransform(FRotator::ZeroRotator, Eye)); E.Car->Seat->SampleHead(true, Eye, 1.5); E.Runner->ProcessFlow(0);
 	TestTrue(TEXT("First satisfied seat records near-zero head"), E.Runner->LastRecord.Contains(TEXT("착석 위치")) && E.Runner->LastRecord.Contains(TEXT("X=0.00 Y=0.00 Z=0.00 mm")));
 	const FString SeatRecord = E.Runner->LastRecord; E.Runner->ProcessFlow(0.1); TestEqual(TEXT("Seat location recorded once"), E.Runner->LastRecord, SeatRecord);
@@ -509,7 +548,7 @@ bool FP3RepositionTest::RunTest(const FString&)
 	TestTrue(TEXT("Continuous seat and 90 deg look do not follow head"), E.Runner->Panel->GetComponentLocation().Equals(SeatedPanel));
 	E.Car->Seat->SampleHead(true, Eye + FVector(0, -100, 45), 0.1); E.Runner->ProcessFlow(0);
 	E.Car->Seat->SampleHead(true, Eye, 1); E.Runner->ProcessFlow(0);
-	TestTrue(TEXT("Seat re-entry places once at new yaw"), E.Runner->Panel->GetComponentLocation().Equals(Eye + FVector(0, 70, 0)));
+	TestTrue(TEXT("Seat re-entry places once facing seat front"), E.Runner->Panel->GetComponentLocation().Equals(Eye + FVector(70, 0, 0)));
 	E.Runner->ProcessFlow(0.3); E.Runner->QueueCommand({EVBoRFlowCommand::Confirm, EVBoRCommandSource::Participant, E.Runner->GetToken()}); E.Runner->ProcessFlow(0);
 	TestEqual(TEXT("Reposition confirmation refused at 0.3 s"), E.Runner->GetStepIndex(), 0);
 	E.Runner->ProcessFlow(0.4); E.Runner->QueueCommand({EVBoRFlowCommand::Confirm, EVBoRCommandSource::Participant, E.Runner->GetToken()}); E.Runner->ProcessFlow(0);
@@ -541,6 +580,248 @@ bool FP3RepositionTest::RunTest(const FString&)
 		for (const FVector Target : {E.Runner->Panel->GetComponentLocation(), FP3FlowTestAccess::Confirm(E.Runner)->GetActorLocation(), FP3FlowTestAccess::Action(E.Runner)->GetActorLocation()})
 		{ for (const auto& Plate : FP3FlowTestAccess::Plates(E.Car)) { TestFalse(TEXT("Step-start eye segment clear"), FMath::LineBoxIntersection(Plate->Bounds.GetBox(), Start, Target, Target - Start)); } }
 	}
+	return true;
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3bVisibilityTest, "vBoR.P3b.E1E3E7CurrentRoute", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP3bVisibilityTest::RunTest(const FString&)
+{
+	FP3World E; auto* A = P3bRoute(E,TEXT("Route.A")); auto* B = P3bRoute(E,TEXT("Route.B"));
+	TestTrue(TEXT("Before flow both hidden"), A->IsHidden() && B->IsHidden());
+	E.Steps({P3bStep(TEXT("07"),TEXT("Route.A")),P3bStep(TEXT("08"),TEXT("Route.B")),P3bStep(TEXT("09"),TEXT(""))});
+	TestTrue(TEXT("Only current route visible"), !A->IsHidden() && B->IsHidden() && E.Car->DriverDoorRoute->IsHidden());
+	TestTrue(TEXT("Down arrow above destination"), FP3bTestAccess::Arrow(E.Runner)->GetComponentLocation().Equals(FVector(400,-300,160)) && FP3bTestAccess::Arrow(E.Runner)->GetForwardVector().Equals(-FVector::ZAxisVector,0.01));
+	for (auto& Part : FP3bTestAccess::Ring(E.Runner)) { TestTrue(TEXT("Marker ring hidden during route"), Part->bHiddenInGame); }
+	E.Command(EVBoRFlowCommand::Next); TestTrue(TEXT("Next route only"), A->IsHidden() && !B->IsHidden());
+	E.Command(EVBoRFlowCommand::Previous); TestTrue(TEXT("Previous restores route"), !A->IsHidden() && B->IsHidden());
+	E.Head(FTransform(FRotator::ZeroRotator,FVector(400,-300,160))); E.Runner->ProcessFlow(0.5);
+	TestTrue(TEXT("Arrived route hidden"), A->IsHidden());
+	E.Command(EVBoRFlowCommand::Restart); TestTrue(TEXT("Restart resets arrival"), !A->IsHidden() && !FP3bTestAccess::Arrived(E.Runner));
+	E.Command(EVBoRFlowCommand::Next); E.Command(EVBoRFlowCommand::Next);
+	TestTrue(TEXT("No route step hides all"), A->IsHidden() && B->IsHidden());
+	TestFalse(TEXT("No route uses existing marker"), FP3bTestAccess::Ring(E.Runner)[0]->bHiddenInGame);
+	E.Command(EVBoRFlowCommand::Restart); E.Command(EVBoRFlowCommand::EnterFreeMode);
+	TestTrue(TEXT("Free mode hides routes and marker"), A->IsHidden() && B->IsHidden() && FP3bTestAccess::Arrow(E.Runner)->bHiddenInGame);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3bShapeTest, "vBoR.P3b.E2E3E4RouteGeometryAndPulse", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP3bShapeTest::RunTest(const FString&)
+{
+	FP3World E; auto* R = P3bRoute(E,TEXT("Route.Shape"));
+	const auto& Parts = FP3bTestAccess::Pieces(R); const auto& Materials = FP3bTestAccess::Materials(R);
+	TestEqual(TEXT("Nine arrows from 25 to 329 cm"), Materials.Num(),9);
+	TestEqual(TEXT("Two legs each and 48 ring segments"), Parts.Num(),66);
+	for (int32 I = 0; I < Materials.Num(); ++I)
+	{
+		FBox Bounds(ForceInit);
+		for (int32 J = 0; J < 2; ++J) { Bounds += Parts[I*2+J]->Bounds.GetBox(); }
+		TestTrue(TEXT("Arrow center, width 32, length 22, floor +1 cm"), Bounds.GetCenter().Equals(FVector(25+38*I,-300,1),0.02) && Bounds.GetSize().Equals(FVector(22,32,0.2),0.02));
+		const FVector Tip = Parts[I*2]->GetComponentTransform().TransformPosition(FVector(-50,0,0));
+		const FVector Tail = (Parts[I*2]->GetComponentTransform().TransformPosition(FVector(50,0,0)) + Parts[I*2+1]->GetComponentTransform().TransformPosition(FVector(50,0,0)))*0.5;
+		TestTrue(TEXT("V points along spline within one degree"), FVector::DotProduct((Tip-Tail).GetSafeNormal(),FVector::XAxisVector) >= FMath::Cos(FMath::DegreesToRadians(1.0)));
+		TestEqual(TEXT("Stripe width 8 cm"), Parts[I*2]->GetRelativeScale3D().Y * 100,8.0);
+		TestEqual(TEXT("No collision"), Parts[I*2]->GetCollisionEnabled(),ECollisionEnabled::NoCollision);
+	}
+	for (int32 I = 18; I < Parts.Num(); ++I)
+	{
+		const FTransform T = Parts[I]->GetComponentTransform();
+		for (double X : {-50.0,50.0})
+		{ const FVector P = T.TransformPosition(FVector(X,0,0)); TestTrue(TEXT("Ring centerline radius 30 at +1 cm"), FMath::IsNearlyEqual(FVector::Dist2D(P,FVector(400,-300,0)),30.0,0.01) && FMath::IsNearlyEqual(P.Z,1.0)); }
+		TestEqual(TEXT("Ring stripe 4 cm"), Parts[I]->GetRelativeScale3D().Y * 100,4.0);
+		TestTrue(TEXT("Ring sRGB yellow"), CastChecked<UMaterialInstanceDynamic>(Parts[I]->GetMaterial(0))->K2_GetVectorParameterValue(TEXT("ColorParam")).Equals(FLinearColor::FromSRGBColor(FColor::FromHex(TEXT("e7a91f")))));
+	}
+	R->SetRouteVisible(true); R->Tick(0.79f);
+	const FLinearColor Before = Materials[0]->K2_GetVectorParameterValue(TEXT("ColorParam"));
+	R->Tick(0.14f);
+	TestTrue(TEXT("Pulse advances one arrow after 0.14 s"), Materials[1]->K2_GetVectorParameterValue(TEXT("ColorParam")).Equals(Before,0.001));
+	TestTrue(TEXT("Previous arrow dim at 35 percent"), Materials[0]->K2_GetVectorParameterValue(TEXT("ColorParam")).Equals(FLinearColor(R->ArrowColor.R*0.35,R->ArrowColor.G*0.35,R->ArrowColor.B*0.35,1),0.001));
+	TestTrue(TEXT("Bright sRGB cyan"), Before.Equals(FLinearColor::FromSRGBColor(FColor::FromHex(TEXT("0fa7c4")))));
+	// 곡선에서도 화살표 전방을 따로 계산함 (방향 부호 오류 방지, P3b E2)
+	R = P3bRoute(E,TEXT("Route.Curve"),{FVector(0,-300,0),FVector(100,-250,0),FVector(200,-300,0)});
+	for (int32 I = 0; I < FP3bTestAccess::Materials(R).Num(); ++I)
+	{
+		const auto& P = FP3bTestAccess::Pieces(R); const FVector Tip = P[I*2]->GetComponentTransform().TransformPosition(FVector(-50,0,0));
+		const FVector Tail = (P[I*2]->GetComponentTransform().TransformPosition(FVector(50,0,0))+P[I*2+1]->GetComponentTransform().TransformPosition(FVector(50,0,0)))*0.5;
+		const FVector Direction = R->Spline->GetDirectionAtDistanceAlongSpline(25+38*I,ESplineCoordinateSpace::World).GetSafeNormal2D();
+		TestTrue(TEXT("Curved spline arrow direction"), FVector::DotProduct((Tip-Tail).GetSafeNormal2D(),Direction) > FMath::Cos(FMath::DegreesToRadians(1.0)));
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3bArrivalTest, "vBoR.P3b.E5E6ArrivalAndLock", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP3bArrivalTest::RunTest(const FString&)
+{
+	FP3World E; auto* R = P3bRoute(E,TEXT("Route.Arrival"));
+	E.Steps({P3bStep(TEXT("07"),TEXT("Route.Arrival")),P3Step(TEXT("08"))});
+	E.Head(FTransform(FRotator(0,90,0),FVector(400,-300,160))); E.Runner->ProcessFlow(0.4);
+	TestFalse(TEXT("0.4 s not arrived"), FP3bTestAccess::Arrived(E.Runner));
+	E.HeadXR->bTracked = false; E.Runner->ProcessFlow(5); TestEqual(TEXT("Untracked frame paused"), FP3bTestAccess::Dwell(E.Runner),0.4);
+	E.HeadXR->bTracked = true; E.Head(FTransform(FRotator::ZeroRotator,FVector(400,-331,160))); E.Runner->ProcessFlow(0.1);
+	TestEqual(TEXT("Tracked exit resets dwell"), FP3bTestAccess::Dwell(E.Runner),0.0);
+	E.Head(FTransform(FRotator(0,90,0),FVector(400,-300,160))); E.Runner->ProcessFlow(0.4); E.Runner->ProcessFlow(0.1);
+	TestTrue(TEXT("0.5 s hides route but does not complete"), FP3bTestAccess::Arrived(E.Runner) && R->IsHidden() && E.Runner->GetStepIndex()==0);
+	TestFalse(TEXT("Original marker returns"), FP3bTestAccess::Ring(E.Runner)[0]->bHiddenInGame);
+	TestTrue(TEXT("Arrival panel uses end tangent despite head yaw"), E.Runner->Panel->GetComponentLocation().Equals(FVector(470,-300,160),0.01) && E.Runner->Panel->GetForwardVector().Equals(-FVector::XAxisVector,0.01));
+	TestTrue(TEXT("Arrival button same direction"), FP3FlowTestAccess::Confirm(E.Runner)->GetActorLocation().Equals(FVector(445,-312,130),0.01));
+	const FVector Fixed = E.Runner->Panel->GetComponentLocation();
+	E.Head(FTransform(FRotator::ZeroRotator,FVector(400,-340,160))); E.Runner->ProcessFlow(0.1);
+	E.Head(FTransform(FRotator::ZeroRotator,FVector(400,-300,160))); E.Runner->ProcessFlow(0.2);
+	TestTrue(TEXT("No re-light or re-placement on ring re-entry"), R->IsHidden() && E.Runner->Panel->GetComponentLocation().Equals(Fixed));
+	E.Runner->QueueCommand({EVBoRFlowCommand::Confirm,EVBoRCommandSource::Participant,E.Runner->GetToken()}); E.Runner->ProcessFlow(0);
+	TestEqual(TEXT("Arrival confirm rejected at 0.3 s"),E.Runner->GetStepIndex(),0);
+	E.Runner->ProcessFlow(0.4); E.Runner->QueueCommand({EVBoRFlowCommand::Confirm,EVBoRCommandSource::Participant,E.Runner->GetToken()}); E.Runner->ProcessFlow(0);
+	TestEqual(TEXT("Arrival confirm accepted at 0.7 s"),E.Runner->GetStepIndex(),1);
+	E.Command(EVBoRFlowCommand::Previous); TestTrue(TEXT("Returning to arrived step starts route again"),!R->IsHidden() && !FP3bTestAccess::Arrived(E.Runner));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3bBoundsTest, "vBoR.P3b.E8PlayAreaAndNotices", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP3bBoundsTest::RunTest(const FString&)
+{
+	FP3World E; auto* R = P3bRoute(E,TEXT("Route.Bounds"));
+	for (bool bUnknown : {false,true})
+	{
+		E.HeadXR->PlayArea = bUnknown ? FVector2D::ZeroVector : FVector2D(200,250);
+		FP3bRecords Records; E.Steps({P3bStep(TEXT("07"),TEXT("Route.Bounds"))});
+		TestTrue(TEXT("Unsafe or unknown route hidden"),R->IsHidden());
+		const FString Expected = bUnknown ? TEXT("Floor route hidden — play area unknown") : TEXT("Floor route hidden — outside the play area");
+		TestEqual(TEXT("English operator notice"),E.Runner->GetOperatorStatus().FloorRouteNotice,Expected);
+		TestTrue(TEXT("Korean VR notice"),E.Runner->GetOperatorText().Contains(bUnknown ? TEXT("바닥 경로 숨김 — 영역 모름") : TEXT("바닥 경로 숨김 — 플레이 영역 밖")));
+		TestFalse(TEXT("Hidden route restores original marker"),FP3bTestAccess::Ring(E.Runner)[0]->bHiddenInGame);
+		E.Head(FTransform(FRotator::ZeroRotator,FVector(400,-300,160))); E.Runner->ProcessFlow(2);
+		TestFalse(TEXT("Disabled route has no arrival event"),FP3bTestAccess::Arrived(E.Runner));
+		TestEqual(TEXT("Notice recorded once per entry"),Records.Count(TEXT("Floor route hidden")),1);
+	}
+	E.HeadXR->PlayArea = FVector2D(10000,10000); E.Steps({P3bStep(TEXT("07"),TEXT("Route.Bounds"))});
+	TestTrue(TEXT("Safe route visible, notice cleared"),!R->IsHidden() && E.Runner->GetOperatorStatus().FloorRouteNotice.IsEmpty());
+	// Pawn 의 Stage 회전·이동을 직접 적용해 월드 경계와 혼동하지 않는지 확인 (P3b D6-b)
+	E.Pawn->SetActorLocationAndRotation(FVector(200,-300,0),FRotator(0,90,0)); E.HeadXR->PlayArea=FVector2D(200,1000);
+	E.Steps({P3bStep(TEXT("07"),TEXT("Route.Bounds"))}); TestFalse(TEXT("Rotated Stage wide axis accepts world-X route"),R->IsHidden());
+	E.HeadXR->PlayArea=FVector2D(1000,200); E.Steps({P3bStep(TEXT("07"),TEXT("Route.Bounds"))}); TestTrue(TEXT("Swapping Stage axes rejects route"),R->IsHidden());
+	E.Pawn->SetActorLocationAndRotation(FVector(200,-300,0),FRotator::ZeroRotator); E.HeadXR->PlayArea=FVector2D(510,1000);
+	E.Steps({P3bStep(TEXT("07"),TEXT("Route.Bounds"))}); TestTrue(TEXT("End ring outside inset rejected even if spline inside"),R->IsHidden());
+	E.HeadXR->PlayArea=FVector2D(520,1000); E.Steps({P3bStep(TEXT("07"),TEXT("Route.Bounds"))}); TestFalse(TEXT("Ring exactly at 30 cm inset accepted"),R->IsHidden());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3bValidationTest, "vBoR.P3b.E9FootprintAndRouteValidation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP3bValidationTest::RunTest(const FString&)
+{
+	auto Check = [this](const TCHAR* Kind, auto Setup)
+	{
+		FP3World E; const FName Tag(TEXT("Route.Invalid")); Setup(E);
+		E.Steps({P3bStep(TEXT("07"),*Tag.ToString())});
+		TestTrue(Kind,!E.Runner->IsRunning() && E.Runner->ValidationProblems.Contains(TEXT("07")) && E.Runner->ValidationProblems.Contains(Tag.ToString()));
+	};
+	Check(TEXT("Path crosses footprint"),[](FP3World& E) { P3bRoute(E,TEXT("Route.Invalid"),{FVector(-400,0,0),FVector(400,0,0)}); });
+	Check(TEXT("Ring crosses footprint though endpoint outside"),[](FP3World& E) { P3bRoute(E,TEXT("Route.Invalid"),{FVector(0,-300,0),FVector(0,-130,0)}); });
+	Check(TEXT("Arrival panel crosses footprint"),[](FP3World& E) { P3bRoute(E,TEXT("Route.Invalid"),{FVector(400,0,0),FVector(300,0,0)}); });
+	Check(TEXT("No footprint"),[](FP3World& E) { E.Car->Footprint->ComponentTags.Reset(); P3bRoute(E,TEXT("Route.Invalid")); });
+	Check(TEXT("Duplicate footprint"),[](FP3World& E) { auto* B=NewObject<UBoxComponent>(E.Car); B->ComponentTags.Add(TEXT("Car.Footprint")); B->RegisterComponent(); P3bRoute(E,TEXT("Route.Invalid")); });
+	Check(TEXT("Missing route tag"),[](FP3World&) {});
+	Check(TEXT("Duplicate route tag"),[](FP3World& E) { P3bRoute(E,TEXT("Route.Invalid")); P3bRoute(E,TEXT("Route.Invalid")); });
+	Check(TEXT("Only one spline point"),[](FP3World& E) { P3bRoute(E,TEXT("Route.Invalid"),{FVector(0,-300,0)}); });
+	Check(TEXT("Wrong actor type"),[](FP3World& E) { E.Car->Tags.Add(TEXT("Route.Invalid")); });
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3bMockTest, "vBoR.P3b.E10MockDefaults", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP3bMockTest::RunTest(const FString&)
+{
+	FP3World E; auto* R = E.Car->DriverDoorRoute.Get();
+	TestNotNull(TEXT("Mock route spawned in BeginPlay"),R); if (!R) { return false; }
+	int32 Routes=0,Footprints=0,Starts=0;
+	for (TActorIterator<AActor> It(E.World); It; ++It)
+	{
+		if (It->ActorHasTag(TEXT("Route.ToDriverDoor"))) { ++Routes; }
+		TArray<USceneComponent*> Components; It->GetComponents(Components);
+		for (auto* C : Components) { Footprints += C->ComponentHasTag(TEXT("Car.Footprint")); Starts += C->ComponentHasTag(TEXT("Car.Start")); }
+	}
+	TestTrue(TEXT("One of each required tag"),Routes==1 && Footprints==1 && Starts==1);
+	TestTrue(TEXT("Footprint body plus 20 cm, no collision"),E.Car->Footprint->GetUnscaledBoxExtent().Equals(FVector(255,112.5,72.5)) && E.Car->Footprint->GetCollisionEnabled()==ECollisionEnabled::NoCollision);
+	E.Steps({P3bStep(TEXT("07"),TEXT("Route.ToDriverDoor"))});
+	TestTrue(TEXT("Default route passes footprint and synthetic large room"),E.Runner->IsRunning() && E.Runner->ValidationProblems.IsEmpty() && !R->IsHidden());
+	const FVector End = R->Spline->GetLocationAtSplinePoint(3,ESplineCoordinateSpace::World);
+	TestTrue(TEXT("Default end near outside handle and outside footprint"),FVector::Dist2D(End,E.Car->GetActorTransform().TransformPosition(E.Car->OutsideHandlePivotCm)) <= 70 && FMath::Abs(End.Y) > E.Car->Footprint->GetScaledBoxExtent().Y);
+	TestTrue(TEXT("End tangent is rearward"),R->Spline->GetDirectionAtDistanceAlongSpline(R->Spline->GetSplineLength(),ESplineCoordinateSpace::World).Equals(-FVector::XAxisVector,0.01));
+	UVBoRScenarioAsset* Defaults = NewObject<UVBoRScenarioAsset>();
+	for (const auto& Step : Defaults->Steps) { TestTrue(TEXT("Constructor routes remain unassigned"),Step.RouteTag.IsNone()); }
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3bFacingTest, "vBoR.P3b.E11ViewpointFacing", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP3bFacingTest::RunTest(const FString&)
+{
+	FP3World E;
+	E.Head(FTransform(FRotator(0,30,0),FVector(400,-300,160))); E.Steps({P3Step(TEXT("12"))});
+	TestTrue(TEXT("Standing preserves head yaw"),E.Runner->Panel->GetComponentLocation().Equals(FVector(400,-300,160)+FRotator(0,30,0).Vector()*70,0.01));
+	const FVector Driver = E.Car->DriverEye->GetComponentLocation(); E.Car->Seat->SampleHead(true,Driver,1);
+	E.Head(FTransform(FRotator(0,90,0),Driver)); E.Steps({P3Step(TEXT("12"))});
+	TestTrue(TEXT("Seated step uses driver front"),E.Runner->Panel->GetComponentLocation().Equals(Driver+FVector(70,0,0),0.01));
+	for (const auto Action : {EVBoRFlowCommand::Passenger,EVBoRFlowCommand::Rear})
+	{
+		E.Car->Seat->SampleHead(true,Driver+FVector(0,-100,0),0);
+		auto* View = Action==EVBoRFlowCommand::Passenger ? E.Car->PassengerView.Get() : E.Car->RearView.Get();
+		View->SetRelativeRotation(FRotator(0,25,0)); E.Command(Action); E.FinishSwitch();
+		const FTransform Head(FRotator(0,55,0),View->GetComponentLocation()); E.Head(Head); FP3FlowTestAccess::Replace(E.Runner);
+		TestTrue(TEXT("Viewpoint getter uses active seat"),E.Car->Alignment->GetCurrentEye()==View);
+		TestTrue(TEXT("Away view ignores head yaw on placement"),E.Runner->Panel->GetComponentLocation().Equals(Head.GetLocation()+FRotator(0,25,0).Vector()*70,0.01));
+		E.Steps({P3Step(TEXT("12"))}); TestTrue(TEXT("Away step start uses seat yaw"),E.Runner->Panel->GetComponentLocation().Equals(Head.GetLocation()+FRotator(0,25,0).Vector()*70,0.01));
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3bOperatorPlateTest, "vBoR.P3b.E12OperatorPlateOcclusion", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP3bOperatorPlateTest::RunTest(const FString&)
+{
+	FP3World E; E.Steps({P3Step(TEXT("12"))});
+	for (const auto Action : {EVBoRFlowCommand::ReturnBase,EVBoRFlowCommand::Passenger,EVBoRFlowCommand::Rear})
+	{
+		if (Action!=EVBoRFlowCommand::ReturnBase) { E.Command(Action); E.FinishSwitch(); }
+		const FVector Eye = E.Car->Alignment->GetCurrentEye()->GetComponentLocation(); E.Head(FTransform(FRotator::ZeroRotator,Eye));
+		E.Car->Seat->SampleHead(true,Eye,1); FP3FlowTestAccess::Replace(E.Runner);
+		for (bool bInfo : {false,true})
+		{
+			if (bInfo) { FP3FlowTestAccess::Toggle(E.Runner); }
+			E.Runner->ProcessFlow(0); auto* Plate=FP3FlowTestAccess::OperatorPanel(E.Runner);
+			const FVector2D Size=Plate->GetDrawSize(); const FBox LocalBox(FVector(-0.1,-Size.X/2,-Size.Y/2),FVector(0.1,Size.X/2,Size.Y/2));
+			const FTransform Transform=Plate->GetComponentTransform(); const FVector LocalEye=Transform.InverseTransformPosition(Eye);
+			for (const FVector Target : {E.Runner->Panel->GetComponentLocation(),FP3FlowTestAccess::Confirm(E.Runner)->GetActorLocation(),FP3FlowTestAccess::Action(E.Runner)->GetActorLocation(),FP3FlowTestAccess::Label(E.Runner,0)->GetComponentLocation(),FP3FlowTestAccess::Label(E.Runner,1)->GetComponentLocation()})
+			{
+				const FVector LocalTarget=Transform.InverseTransformPosition(Target);
+				TestFalse(TEXT("Eye segment to guidance/buttons/names misses info rectangle"),FMath::LineBoxIntersection(LocalBox,LocalEye,LocalTarget,LocalTarget-LocalEye));
+			}
+			for (const auto& CarPlate : FP3FlowTestAccess::Plates(E.Car))
+			{ const FVector Target=Plate->GetComponentLocation(); TestFalse(TEXT("Info plate center visible past car plates"),FMath::LineBoxIntersection(CarPlate->Bounds.GetBox(),Eye,Target,Target-Eye)); }
+			if (bInfo)
+			{
+				TestTrue(TEXT("Info beside guidance at same distance and height with gap"),FMath::IsNearlyEqual(Plate->GetComponentLocation().X,E.Runner->Panel->GetComponentLocation().X,0.01) && FMath::IsNearlyEqual(Plate->GetComponentLocation().Z,E.Runner->Panel->GetComponentLocation().Z,0.01) && FMath::Abs(Plate->GetComponentLocation().Y-E.Runner->Panel->GetComponentLocation().Y)>=52-0.01);
+				FP3FlowTestAccess::Toggle(E.Runner);
+			}
+		}
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3bStartTest, "vBoR.P3b.E13StartMarkerRecords", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP3bStartTest::RunTest(const FString&)
+{
+	FP3World E; FP3bRecords Records;
+	const FVector Start=E.Car->GetActorTransform().TransformPosition(FVector(485,0,0.5));
+	E.Head(FTransform(FRotator::ZeroRotator,Start+FVector(51,0,160))); E.Steps({P3Step(TEXT("01")),P3Step(TEXT("02"))}); E.Runner->ProcessFlow(0.1);
+	TestEqual(TEXT("Outside start marker does not record"),Records.Count(TEXT("시작 위치 |")),0);
+	E.Head(FTransform(FRotator::ZeroRotator,Start+FVector(0,0,99))); E.Runner->ProcessFlow(0.1); TestEqual(TEXT("Headset held low does not record"),Records.Count(TEXT("시작 위치 |")),0);
+	E.Head(FTransform(FRotator::ZeroRotator,Start+FVector(50,0,100))); E.HeadXR->bTracked=false; E.Runner->ProcessFlow(1);
+	TestEqual(TEXT("Untracked start ignored"),Records.Count(TEXT("시작 위치 |")),0);
+	E.HeadXR->bTracked=true; E.Runner->ProcessFlow(0.1); E.Runner->ProcessFlow(0.1);
+	TestEqual(TEXT("Threshold 50 cm / 100 cm records once"),Records.Count(TEXT("시작 위치 |")),1);
+	E.Command(EVBoRFlowCommand::Next); TestEqual(TEXT("Visited marker has no fallback"),Records.Count(TEXT("시작 표시를 거치지 않음")),0);
+	E.Head(FTransform(FRotator::ZeroRotator,FVector(0,0,160))); E.Steps({P3Step(TEXT("01")),P3Step(TEXT("02"))}); E.Command(EVBoRFlowCommand::Next);
+	TestEqual(TEXT("Leaving first step records fallback once"),Records.Count(TEXT("시작 표시를 거치지 않음")),1);
+	for (const auto& Line : Records.Lines) { if (Line.Contains(TEXT("시작 표시를 거치지 않음"))) { TestTrue(TEXT("Fallback includes coordinates"),Line.Contains(TEXT("mm"))); } }
+	TArray<USceneComponent*> Components; E.Car->GetComponents(Components);
+	for (auto* C : Components) { C->ComponentTags.Remove(TEXT("Car.Start")); }
+	E.Steps({P3Step(TEXT("01"))}); E.Runner->ProcessFlow(0.1); TestEqual(TEXT("No marker keeps first tracked frame behavior"),Records.Count(TEXT("시작 위치 |")),2);
 	return true;
 }
 #endif

@@ -207,6 +207,7 @@ FVBoROperatorStatus AVBoRScenarioRunner::GetOperatorStatus() const
 	S.Counts = FString::Printf(TEXT("Previous %d · Retry %d · Skipped %d · End %d · Re-apply %d"), PreviousCount, RetryCount, SkipCount, EndCount, ReapplyCount);
 	S.Discards = FString::Printf(TEXT("Discarded — stale %d · permission %d · rule %d · transition %d · lock %d"), StaleDiscards, PermissionDiscards, RuleDiscards, TransitionDiscards, ConfirmLockDiscards);
 	S.LastCommand = LastOperatorCommand.IsEmpty() ? FString(TEXT("None")) : LastOperatorCommand;
+	S.FloorRouteNotice = FloorRouteNotice;
 	return S;
 }
 

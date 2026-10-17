@@ -164,6 +164,9 @@ void SVBoROperatorPanel::Construct(const FArguments& Args)
 							+ SHorizontalBox::Slot().FillWidth(1)[AlignmentText]]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0,0,0,8)[StatusRow(TEXT("Seat"),&FVBoROperatorStatus::Seat)]
 						+ SVerticalBox::Slot().AutoHeight()[StatusRow(TEXT("Last command"),&FVBoROperatorStatus::LastCommand)]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0,8,0,0)
+						[SNew(SBox).Visibility_Lambda([this]() { return Snapshot.Status.FloorRouteNotice.IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible; })
+							[StatusText(&FVBoROperatorStatus::FloorRouteNotice,14,TEXT("f2b544"))]]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0,12,0,4)[StatusText(&FVBoROperatorStatus::Counts,12,TEXT("9aa6b8"))]
 						+ SVerticalBox::Slot().AutoHeight()[StatusText(&FVBoROperatorStatus::Discards,12,TEXT("9aa6b8"))]]
 				]

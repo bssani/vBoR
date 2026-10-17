@@ -23,6 +23,7 @@ struct VBOR_API FVBoRScenarioStep
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="규칙 만족 뒤 확인할 사람. 관찰은 반드시 확인 필요")) EVBoRConfirmBy ConfirmBy = EVBoRConfirmBy::Either;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="운전석 기준 시점으로 복귀해야 완료 가능")) bool bRequireBaseViewpoint = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="바닥 고리와 화살표를 표시할 대상 태그. 생략 가능")) FName MarkerTag;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="현재 단계의 바닥 경로 Actor 태그. 생략 가능 (P3b D2)")) FName RouteTag;
 };
 
 UCLASS(BlueprintType)
