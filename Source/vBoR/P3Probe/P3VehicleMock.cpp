@@ -169,6 +169,7 @@ void AP3VehicleMock::BeginPlay()
 	GearLever->Axis = EAxis::X; GearLever->Release = EVBoRAxisRelease::Detent;
 	GearLever->DetentAnglesDeg = GearDetentAnglesDeg; GearLever->DetentStartIndex = 1;
 	GearLever->DetentUpThresholdDeg = GearUpThresholdDeg; GearLever->DetentDownThresholdDeg = GearDownThresholdDeg;
+	GearLever->bAllowPalmGrab = false; GearLever->bAllowPinchGrab = true; GearLever->bAllowPush = true;
 	GearLever->SpectatorName = FText::FromString(TEXT("Gear Lever"));
 	GearLever->FinishSpawning(GetActorTransform()); GearLever->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	// 버튼 +Z 면을 레버 끝 +Y 로 놓음. 잡기·단계와 연결하지 않음 (P5b D8)
@@ -186,6 +187,7 @@ void AP3VehicleMock::BeginPlay()
 	TurnSignalLever->DetentAnglesDeg = TurnSignalDetentAnglesDeg; TurnSignalLever->DetentStartIndex = 1;
 	TurnSignalLever->DetentUpThresholdDeg = TurnSignalUpThresholdDeg; TurnSignalLever->DetentDownThresholdDeg = TurnSignalDownThresholdDeg;
 	TurnSignalLever->DetentNudgeDeg = TurnSignalNudgeDeg;
+	TurnSignalLever->bAllowPalmGrab = false; TurnSignalLever->bAllowPinchGrab = true; TurnSignalLever->bAllowPush = true;
 	TurnSignalLever->SpectatorName = FText::FromString(TEXT("Turn Signal Lever"));
 	TurnSignalLever->FinishSpawning(GetActorTransform()); TurnSignalLever->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	// 판은 에디터·기존 시험 기준으로 남김 (차 원점 피벗, 근사 cm·deg, P5d D8)
