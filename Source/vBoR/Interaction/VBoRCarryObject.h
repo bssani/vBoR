@@ -91,6 +91,14 @@ public:
 	FVector BoxSizeCm = FVector(45, 35, 30);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry")
 	bool bUsePlacementAssist = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Landing")
+	bool bLevelOnRelease = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Landing", meta = (Units = "cm", ClampMin = "0"))
+	float LevelLiftMaxCm = 15;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Landing")
+	bool bShowLandingPreview = true;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Carry|Landing")
+	TObjectPtr<UStaticMeshComponent> LandingPreview;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Floor")
 	bool bDestroyAtFloor = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Floor", meta = (Units = "cm"))
@@ -147,6 +155,13 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 private:
+	friend class FP1cLevelTest;
+	friend class FP1cStackTest;
+	friend class FP1cLiftTest;
+	friend class FP1cLevelBlockedTest;
+	friend class FP1cLegacyTest;
+	friend class FP1cPreviewTest;
+	friend class FP1cPreviewIsolationTest;
 	friend class FP4bGateBlockingTest;
 	friend class FP1BoxSizeTest;
 	friend class FP1BoxPlacementTest;
@@ -174,6 +189,8 @@ private:
 	UPROPERTY()
 	TObjectPtr<UMaterialInstanceDynamic> StateOverlay;
 	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> PreviewMaterial;
+	UPROPERTY()
 	TObjectPtr<UAudioComponent> StateAudio;
 	FVBoRCarrySession Session;
 	FVBoRCarryMetrics CompletedMetrics;
@@ -194,6 +211,8 @@ private:
 	FTransform AssistFrom;
 	FTransform AssistGoal;
 	FString ReleaseResult = TEXT("none");
+	FString LevelResult = TEXT("level idle");
+	bool bPreviewInside = false;
 	FString LastState;
 	FDelegateHandle PalmSelectHandles[2];
 	FDelegateHandle PalmReleaseHandles[2];
@@ -207,6 +226,8 @@ private:
 	void MoveHeldPose(const FTransform& Desired, float DeltaSeconds);
 	void ResolveHeldContact(const FTransform& Desired, float DeltaSeconds);
 	void FinishPlacement();
+	bool CalculateReleaseDrop(FTransform& DropStart, FTransform& Landing, bool& bLevelBlocked) const;
+	void UpdateLandingPreview();
 	void UpdateVisual();
 	bool HasSimpleCollision() const;
 	void HandlePalmSelect(UIsdkRigComponent* Rig);
