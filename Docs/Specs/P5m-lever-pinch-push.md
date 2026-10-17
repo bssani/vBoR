@@ -4,7 +4,7 @@
 |---|---|
 | 단계 | P5 자유모드 실내 조작(U-09·U-11) — P5b 기어 레버·P5c 방향지시 레버 개정 |
 | 결정 근거 | **사용자 VR(2026-10-17, U-13):** 스티어링 휠 뒤 레버를 손으로 밀거나 손가락으로 올리고 내리고 싶은데 손바닥 잡기로만 움직임. "lever는 grab보다는 pinch로", "손으로 lever를 밀어서 올리거나 내리게". **사용자 문답(같은 날):** pinch + 밀기, 손바닥 잡기는 끔(핸들을 돌리다 손바닥이 레버를 잘못 잡지 않게). 방향지시 레버도 같이 바꿈 |
-| 베이스 브랜치 | `main` @ P5l 머지 뒤 |
+| 베이스 브랜치 | `main` @ P5l 머지 뒤(`b6a634e` + 이 명세 줄 번호 정정 커밋) |
 | 작업 브랜치 | `codex/P5m-lever-pinch-push` |
 | 리뷰 파일 | `Docs/Reviews/P5m-lever-pinch-push.md` (첫 리뷰 때 생김) |
 | 상태 | 명세 — 구현 전 |
@@ -15,7 +15,7 @@
 |---|---|---|
 | D1 | **1축 부품에 입력 옵션 셋** | `AVBoRAxisPart`에 `bAllowPalmGrab`(기본 켬), `bAllowPinchGrab`(기본 끔), `bAllowPush`(기본 끔)를 더한다. 기본값이 지금 동작이다. 그래서 문 손잡이·글러브박스 손잡이 같은 기존 부품은 바뀌지 않는다. 지금은 손바닥만 켜고 pinch는 끈다(`Interaction/VBoRAxisPart.cpp:193-194`). 설정이 잘못되면(걸림 설정 오류 등) 셋 다 끈다(P5b E12와 같음). 밀기는 회전(`Movement = Rotate`)일 때만 받는다. 직선 이동 부품에서 켜면 경고하고 무시한다 |
 | D2 | **pinch 잡기** | 잡는 방식은 선택 순간 grabber에서 읽는다(`IsInputMethodActive`, ISDK `IsdkGrabberComponent.h:206`). 2축 부품이 같은 일을 한다(`Interaction/VBoRTwoAxisPart.cpp:130-139`의 `bPinch`). 지금 손바닥 전용인 곳을 그 방식에 맞게 바꾼다. 하나는 자세 읽기(`GetPalmGrabTransform` → pinch면 `GetPinchGrabTransform`, `IsdkGrabberComponent.h:167-168`, 지금 `Interaction/VBoRAxisPart.cpp:384-404`)다. 다른 하나는 손 펼침 확인(`ReadPalmGrab` → pinch면 `ReadPinchGrab`, `Interaction/VBoRHandRigPawn.cpp:42-74`, 지금 `Interaction/VBoRAxisPart.cpp:371-392`)이다. "다시 잡으려면 먼저 손을 폄"(`bNeedsPalmOpen`, `.h:142`)도 그 방식의 인식기로 본다. 추적 손실 보류·복구 기준 다시 잡기(P2b D7, P5b E9)는 잡는 방식과 상관없이 같다 |
-| D3 | **밀기: 레버 윗면·아랫면을 넘어 들어온 손 점이 레버를 민다** | **손 점:** 문·거울과 같다. 추적된 원래 점(손바닥 + 손가락 끝 4개, `AVBoRHandRigPawn::ReadRawPalmAndTips`, `Interaction/VBoRHandRigPawn.cpp:133-154`)이고 신뢰도 High일 때만 쓴다. **면:** 축 피벗(`AxisPivot`) 좌표에서 쉬는 메시 bounds(`OnConstruction`이 잡기 상자에 쓰는 것, `Interaction/VBoRAxisPart.cpp:160-172`)를 쓴다. 회전 방향(축 × 레버 방향)으로 마주 보는 두 면, 곧 레버의 윗면·아랫면이 미는 면이다. **받는 조건**(문 `FindPush` `Interaction/VBoRDoorMotion.cpp:76-131`과 거울 `Interaction/VBoRTwoAxisMotion.cpp:39-64`의 규칙을 따름): ① 직전 frame에 그 면 밖에 있었거나, 같은 밀기를 잇는 중이다 ② 지금 면 안쪽에 있다. 레버 두께 + 여유보다 깊으면 통과로 보고 뺀다 ③ 축 방향·레버 길이 방향으로 bounds + 여유 안에 있다 ④ 축에서 `PushMinAxisDistanceCm`(자리값 2 cm) 이상 떨어져 있다. 손바닥 방향은 보지 않는다(손가락 끝으로 미는 동작, 거울과 같음). **한 번의 밀기는 점 하나·면 하나다**(거울 P5e R1-1). **각도:** 그 점이 미는 면 위에 머무는 각도로 정한다. 미는 방향으로만 바뀐다(문 `:123-129`와 같은 꼴). 그다음 걸림 범위(첫·끝 걸림 각도)로 자른다 |
+| D3 | **밀기: 레버 윗면·아랫면을 넘어 들어온 손 점이 레버를 민다** | **손 점:** 문·거울과 같다. 추적된 원래 점(손바닥 + 손가락 끝 4개, `AVBoRHandRigPawn::ReadRawPalmAndTips`, `Interaction/VBoRHandRigPawn.cpp:133-154`)이고 신뢰도 High일 때만 쓴다. **면:** 축 피벗(`AxisPivot`) 좌표에서 쉬는 메시 bounds(`OnConstruction`이 잡기 상자에 쓰는 것, `Interaction/VBoRAxisPart.cpp:160-172`)를 쓴다. 회전 방향(축 × 레버 방향)으로 마주 보는 두 면, 곧 레버의 윗면·아랫면이 미는 면이다. **받는 조건**(문 `FindPush` `Interaction/VBoRDoorMotion.cpp:76-131`과 거울 `Interaction/VBoRTwoAxisMotion.cpp:55-87`의 규칙을 따름 — 앞·뒷면 면 번호도 거울과 같은 꼴): ① 직전 frame에 그 면 밖에 있었거나, 같은 밀기를 잇는 중이다 ② 지금 면 안쪽에 있다. 레버 두께 + 여유보다 깊으면 통과로 보고 뺀다 ③ 축 방향·레버 길이 방향으로 bounds + 여유 안에 있다 ④ 축에서 `PushMinAxisDistanceCm`(자리값 2 cm) 이상 떨어져 있다. 손바닥 방향은 보지 않는다(손가락 끝으로 미는 동작, 거울과 같음). **한 번의 밀기는 점 하나·면 하나다**(거울 P5e R1-1). **각도:** 그 점이 미는 면 위에 머무는 각도로 정한다. 미는 방향으로만 바뀐다(문 `:123-129`와 같은 꼴). 그다음 걸림 범위(첫·끝 걸림 각도)로 자른다 |
 | D4 | **밀기와 걸림은 잡기와 같은 길로** | 밀어서 바뀐 각도는 잡아서 바뀐 각도와 같은 처리로 들어간다(`AcceptTransform`의 걸림 분기 → `EvaluateDetent`, `Interaction/VBoRAxisPart.cpp:240-296`). 그래서 걸림 기준·히스테리시스·한 frame 여러 칸·소리·이벤트를 Tick 밖에서 내지 않는 규칙(P5b R1-1), 방향지시 차선 변경·재무장(P5c)이 그대로 맞는다. 지금 `EvaluateDetent`는 잡은 손이 있을 때만 돈다(`:242`). 미는 중에도 돌게 한다. **밀기가 끝나면**(점이 면 밖으로 나감·추적 손실·잡기로 넘어감) 놓았을 때와 같다. 확정된 걸림 자리로 돌아간다(`:413-419`). 걸림 기준을 못 넘겼으면 원래 자리, 넘겼으면 다음 자리다 |
 | D5 | **잡기·밀기·다른 부품** | 어느 손이든 이 레버를 잡고 있으면 밀기를 받지 않는다. 미는 손이 그 자리에서 pinch하면 잡기로 넘어가고 밀기는 끝난다(튐 없이 기준 다시 잡기, 거울 P5e D5). **다른 것을 잡고 있는 손의 점은 밀기로 쓰지 않는다.** 그 손의 ISDK grabber가 무엇이든 잡고 있으면(`HasSelectedInteractable`, `IsdkGrabberComponent.h:130`) 그렇다. grabber는 손 rig의 `GetGrabber`(`Plugins/MetaXRInteraction/Source/OculusInteractionPrebuilts/Public/Rig/IsdkRigComponent.h:193`)로 읽는다. 레버는 휠 바로 뒤에 있어서, 휠을 쥔 손가락이 레버를 건드리는 일을 막는다 |
 | D6 | **피드백** | 밀기 색(`PushingColor`, 문·거울과 같은 덮개)을 더한다. 걸림 소리·이벤트는 지금 그대로다. 디버그 문구에 잡는 방식(palm/pinch)·밀기 상태·밀기 시작 수를 더한다 |
@@ -114,7 +114,7 @@
 | 2축 부품의 pinch·palm 처리(본보기) | `Interaction/VBoRTwoAxisPart.cpp:95-115`, `:130-139` | D2 |
 | 손 점(손바닥 + 손가락 끝) | `Interaction/VBoRHandRigPawn.cpp:133-154`, `Interaction/VBoRDoorMotion.h`(`FVBoRDoorHand`) | D3 |
 | 문 밀기 규칙(crossing·깊이·각도 식) | `Interaction/VBoRDoorMotion.cpp:76-131` | D3 |
-| 거울 밀기(점 하나·손바닥 방향 안 봄) | `Interaction/VBoRTwoAxisMotion.cpp:39-93` | D3 |
+| 거울 밀기(점 하나·손바닥 방향 안 봄) | `Interaction/VBoRTwoAxisMotion.cpp:55-116`(P5l 머지 뒤, 면 번호 `PushFace`) | D3 |
 | 걸림 처리 | `Interaction/VBoRAxisPart.cpp:240-281`(`EvaluateDetent`), `:283-296`(`AcceptTransform`), `:413-419`(놓은 뒤 걸림 자리로) | D4 |
 | 잡기·놓기·손 펼침 | `Interaction/VBoRAxisPart.cpp:308-342`, `:355-427` | D2·D5 |
 | 잡기 상자 bounds | `Interaction/VBoRAxisPart.cpp:160-178` | D3 |
@@ -126,3 +126,4 @@
 | 날짜 | 개정 | 내용 |
 |---|---|---|
 | 2026-10-17 | 처음 | 작성(사용자 VR·문답: pinch + 밀기, 손바닥 끔, 기어·방향지시 둘 다) |
+| 2026-10-17 | 줄 번호 | P5l 머지 뒤 거울 밀기 줄 번호 정정(`:39-64` → `:55-87`, 근거 표 `:55-116`). 뜻은 그대로 |
