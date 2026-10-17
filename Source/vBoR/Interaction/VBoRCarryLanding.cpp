@@ -18,12 +18,12 @@ bool AVBoRCarryObject::CalculateReleaseDrop(FTransform& DropStart, FTransform& L
 		Level.SetRotation((FRotator(0, Relative.Rotator().Yaw, 0).Quaternion() * Rest).GetNormalized());
 		if (!IsPoseClear(Level))
 		{
-			// +Z 만 0.1 cm 간격으로 찾고 경계를 0.001 cm 안으로 좁힘 (P1c D2)
+			// 매 frame 질의를 줄이도록 +Z 만 1 cm 간격으로 찾고 경계를 0.001 cm 안으로 좁힘 (P1c R1-1)
 			const FVector Origin = Level.GetLocation();
 			const double MaxLift = FMath::IsFinite(LevelLiftMaxCm) ? FMath::Max(0.0, double(LevelLiftMaxCm)) : 0.0;
 			double BlockedLift = 0;
 			bool bFound = false;
-			for (double Lift = FMath::Min(0.1, MaxLift); MaxLift > 0; Lift = FMath::Min(Lift + 0.1, MaxLift))
+			for (double Lift = FMath::Min(1.0, MaxLift); MaxLift > 0; Lift = FMath::Min(Lift + 1.0, MaxLift))
 			{
 				Level.SetLocation(Origin + FVector(0, 0, Lift));
 				if (IsPoseClear(Level))
@@ -71,23 +71,28 @@ bool AVBoRCarryObject::CalculateReleaseDrop(FTransform& DropStart, FTransform& L
 
 void AVBoRCarryObject::UpdateLandingPreview()
 {
-	LandingPreview->SetVisibility(false);
-	if (!bShowLandingPreview || Session.Hand == INDEX_NONE || Session.bPaused || bUsePlacementAssist || !PreviewMaterial) { return; }
-	FTransform DropStart;
-	FTransform Landing;
-	bool bLevelBlocked = false;
-	if (!CalculateReleaseDrop(DropStart, Landing, bLevelBlocked)) { return; }
-	const FBox Bounds = GetCollisionBoundsInPose(Landing, FTransform::Identity);
-	if (!Bounds.IsValid || Bounds.Min.Z <= FloorHeightCm + FloorToleranceCm) { return; }
-	FTransform RegionFrame = LoadTarget ? LoadTarget->LoadingRegion->GetComponentTransform() : FTransform::Identity;
-	RegionFrame.RemoveScaling();
-	bPreviewInside = LoadTarget && LoadTarget->ContainsPose(this, Landing, RegionFrame, LoadTarget->LoadingRegion->GetScaledBoxExtent().GetAbs()) && IsPoseClear(Landing);
-	PreviewMaterial->SetVectorParameterValue(TEXT("ColorParam"), bPreviewInside ? SeatedColor : ReleasedColor);
-	LandingPreview->SetStaticMesh(Mesh->GetStaticMesh());
-	for (int32 Slot = 0; Slot < LandingPreview->GetNumMaterials(); ++Slot)
+	const bool bVisible = [this]()
 	{
-		if (LandingPreview->GetMaterial(Slot) != PreviewMaterial) { LandingPreview->SetMaterial(Slot, PreviewMaterial); }
-	}
-	LandingPreview->SetWorldTransform(Landing);
-	LandingPreview->SetVisibility(true);
+		if (!bShowLandingPreview || Session.Hand == INDEX_NONE || Session.bPaused || bUsePlacementAssist || !PreviewMaterial) { return false; }
+		FTransform DropStart;
+		FTransform Landing;
+		bool bLevelBlocked = false;
+		if (!CalculateReleaseDrop(DropStart, Landing, bLevelBlocked)) { return false; }
+		const FBox Bounds = GetCollisionBoundsInPose(Landing, FTransform::Identity);
+		if (!Bounds.IsValid || Bounds.Min.Z <= FloorHeightCm + FloorToleranceCm) { return false; }
+		FTransform RegionFrame = LoadTarget ? LoadTarget->LoadingRegion->GetComponentTransform() : FTransform::Identity;
+		RegionFrame.RemoveScaling();
+		// CalculateReleaseDrop 이 착지 겹침까지 확인했으므로 영역만 판정함 (P1c R1-1)
+		bPreviewInside = LoadTarget && LoadTarget->ContainsPose(this, Landing, RegionFrame, LoadTarget->LoadingRegion->GetScaledBoxExtent().GetAbs());
+		PreviewMaterial->SetVectorParameterValue(TEXT("ColorParam"), bPreviewInside ? SeatedColor : ReleasedColor);
+		LandingPreview->SetStaticMesh(Mesh->GetStaticMesh());
+		for (int32 Slot = 0; Slot < LandingPreview->GetNumMaterials(); ++Slot)
+		{
+			if (LandingPreview->GetMaterial(Slot) != PreviewMaterial) { LandingPreview->SetMaterial(Slot, PreviewMaterial); }
+		}
+		LandingPreview->SetWorldTransform(Landing);
+		return true;
+	}();
+	// 보임이 같으면 render state 재생성을 요청하지 않음 (P1c R1-1)
+	if (LandingPreview->IsVisible() != bVisible) { LandingPreview->SetVisibility(bVisible); }
 }

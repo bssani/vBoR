@@ -174,6 +174,9 @@ bool AVBoRCarryObject::HasSimpleCollision() const
 
 bool AVBoRCarryObject::IsPoseClear(const FTransform& Pose) const
 {
+#if WITH_DEV_AUTOMATION_TESTS
+	++PoseClearCalls;
+#endif
 	if (!GetWorld() || Pose.ContainsNaN() || !HasSimpleCollision()) { return false; }
 	// 등록된 Mesh 의 simple collision 을 그대로 씀 (원통 외접 상자 모서리 제거, P1 R3-2)
 	FComponentQueryParams Params(SCENE_QUERY_STAT(VBoRCarryOverlap), this);

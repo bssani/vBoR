@@ -144,7 +144,10 @@ bool FP1cLiftTest::RunTest(const FString& Parameters)
 	F.Box->SetActorRotation(FRotator(0, 0, 45));
 	TestTrue(TEXT("E4 tilted release starts clear"), F.Box->IsPoseClear(F.Box->GetActorTransform()));
 	TestFalse(TEXT("E4 leveling at current height overlaps lip"), F.Box->IsPoseClear(FTransform(FQuat::Identity, F.Box->GetActorLocation(), F.Box->GetActorScale3D())));
+	F.Box->PoseClearCalls = 0;
 	F.Box->UpdateVisual();
+	TestTrue(TEXT("R1-1 E4 preview uses at most 28 pose checks"), F.Box->PoseClearCalls <= 28);
+	AddInfo(FString::Printf(TEXT("R1-1 E4 preview pose checks: %d (limit 28)"), F.Box->PoseClearCalls));
 	const FTransform Preview = F.Box->LandingPreview->GetComponentTransform();
 	TestTrue(TEXT("E4 preview visible over lip"), F.Box->LandingPreview->IsVisible());
 	F.Box->ReleaseCarry();
@@ -172,7 +175,10 @@ bool FP1cLevelBlockedTest::RunTest(const FString& Parameters)
 	F.Box->BeginCarry(0, nullptr, F.Box->GetActorTransform());
 	F.Box->SetActorRotation(FRotator(0, 0, 45));
 	const FTransform Tilted = F.Box->GetActorTransform();
+	F.Box->PoseClearCalls = 0;
 	F.Box->UpdateVisual();
+	TestTrue(TEXT("R1-1 E5 preview uses at most 28 pose checks"), F.Box->PoseClearCalls <= 28);
+	AddInfo(FString::Printf(TEXT("R1-1 E5 preview pose checks: %d (limit 28)"), F.Box->PoseClearCalls));
 	const FTransform Preview = F.Box->LandingPreview->GetComponentTransform();
 	TestTrue(TEXT("E5 tilted pose clear in narrow gap"), F.Box->IsPoseClear(Tilted));
 	FLevelBlockedLog Logs;
@@ -310,6 +316,31 @@ bool FP1cPreviewIsolationTest::RunTest(const FString& Parameters)
 	F.Box->ReleaseCarry();
 	F.Box->Tick(1);
 	TestTrue(TEXT("E10 own sweep reaches floor through preview"), FMath::IsNearlyEqual(F.Box->GetActorLocation().Z, 65.005, 0.01));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP1cPreviewRenderStateTest, "vBoR.P1c.PreviewRenderState", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP1cPreviewRenderStateTest::RunTest(const FString& Parameters)
+{
+	FSettleWorld F;
+	F.Block(FVector(0, 0, 45), FVector(500, 500, 5));
+	F.Begin();
+	F.Box->BeginCarry(0, nullptr, F.Box->GetActorTransform());
+	F.Box->UpdateLandingPreview();
+	UStaticMeshComponent* Preview = F.Box->LandingPreview;
+	TestTrue(TEXT("R1-1 first update shows preview"), Preview->IsVisible());
+	// nullrhi 에서도 dirty 단언이 실제 render state 를 검사하게 함 (P1c R1-1)
+	Preview->RecreateRenderState_Concurrent();
+	TestTrue(TEXT("R1-1 preview has render state"), Preview->IsRenderStateCreated());
+	Preview->SetVisibility(false);
+	TestTrue(TEXT("R1-1 visibility change dirties render state"), Preview->IsRenderStateDirty());
+	F.Box->UpdateLandingPreview();
+	F.World->SendAllEndOfFrameUpdates();
+	TestTrue(TEXT("R1-1 preview visible before consecutive update"), Preview->IsVisible());
+	TestFalse(TEXT("R1-1 first update render state flushed"), Preview->IsRenderStateDirty());
+	F.Box->UpdateLandingPreview();
+	TestTrue(TEXT("R1-1 consecutive update keeps preview visible"), Preview->IsVisible());
+	TestFalse(TEXT("R1-1 consecutive update does not dirty render state"), Preview->IsRenderStateDirty());
 	return true;
 }
 

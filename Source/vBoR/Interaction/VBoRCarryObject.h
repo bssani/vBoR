@@ -162,6 +162,7 @@ private:
 	friend class FP1cLegacyTest;
 	friend class FP1cPreviewTest;
 	friend class FP1cPreviewIsolationTest;
+	friend class FP1cPreviewRenderStateTest;
 	friend class FP4bGateBlockingTest;
 	friend class FP1BoxSizeTest;
 	friend class FP1BoxPlacementTest;
@@ -213,6 +214,9 @@ private:
 	FString ReleaseResult = TEXT("none");
 	FString LevelResult = TEXT("level idle");
 	bool bPreviewInside = false;
+#if WITH_DEV_AUTOMATION_TESTS
+	mutable int32 PoseClearCalls = 0;
+#endif
 	FString LastState;
 	FDelegateHandle PalmSelectHandles[2];
 	FDelegateHandle PalmReleaseHandles[2];

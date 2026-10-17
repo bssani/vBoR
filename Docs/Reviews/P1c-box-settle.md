@@ -29,7 +29,7 @@
   - 윤곽은 root `Mesh`의 자식이고 절대 변환이라 박스 크기(root scale)와 같다. 충돌·overlap·그림자가 없고, ISDK 잡기 collider는 실제 `Mesh` 그대로다(`PreviewIsolation`).
 - **E7 일치:** 미리 보기 자세와 실제로 놓고 멈춘 자세를 네 시험이 0.01 cm·0.01° 안으로 비교한다. 바닥, 쌓기, 올림, 막힘 대체의 네 경우다.
 
-### R1-1 — 들고 있는 동안 미리 보기가 frame마다 겹침 검사를 최대 150번 넘게 돈다 · 열림
+### R1-1 — 들고 있는 동안 미리 보기가 frame마다 겹침 검사를 최대 150번 넘게 돈다 · 반영함 (perf: reduce box landing preview queries)
 
 - **문제:**
   - **위치:** 미리 보기는 박스를 든 동안 매 Tick 놓기 계산 전체를 다시 한다(`VBoRCarryObject.cpp:559` → `VBoRCarryLanding.cpp:72-93`). 그 안의 올림 탐색은 0.1 cm 간격 선형이다(`VBoRCarryLanding.cpp:26`).
@@ -49,6 +49,20 @@
   - E4 배치(`LevelLift`)에서 같은 상한과 결과(Z = 85 cm ±0.01)를 본다.
   - 보이는 상태에서 연속 두 번 갱신하면, 두 번째에는 렌더 상태가 다시 더러워지지 않는다. `UActorComponent::IsRenderStateDirty()`로 본다.
   - 기존 P1c 8개는 그대로 통과한다.
+
+### Codex R1-1 반영 (2026-10-18)
+
+- `VBoRCarryLanding.cpp`: +Z 탐색 간격을 제안대로 1 cm로 넓히고, 첫 빈 높이와 직전 막힌 높이의 이분 축소는 0.001 cm로 유지했다. 놓기와 미리 보기는 같은 함수를 쓴다. 겹침 없는 자세만 적용하며 실패하면 기울인 채 떨어뜨리는 동작은 그대로다.
+- 색 판정에서 중복 `IsPoseClear`를 없앴다. 보임 결과를 먼저 계산하고 값이 달라질 때만 `SetVisibility`를 부른다.
+- `VBoRCarryObject.h/.cpp`: `WITH_DEV_AUTOMATION_TESTS` 안에만 `PoseClearCalls` 계수기를 두었다.
+- `P1cCarrySettleTests.cpp`: 기존 E4·E5 단언을 유지하고 갱신당 호출 상한 28회를 추가했다. 기본 한도 15 cm에서 시작·세움 2회 + 탐색 최대 15회 + 이분 축소 최대 10회 + 착지 1회다. 실제 E4·E5는 각각 18회였다. E4의 Z = 85 cm ±0.01 및 E7 미리 보기 일치 단언도 통과했다.
+- 새 `PreviewRenderState` 시험은 render state 생성·보임 변경 시 dirty 발생을 먼저 확인하고, end-of-frame 처리 후 연속 갱신에서 `IsRenderStateDirty()`가 거짓인지 확인했다. headless에서도 빈 단언이 되지 않게 했다.
+- 제안과 다른 구현 없음. 1 cm보다 얇은 빈 틈은 탐색에서 놓칠 수 있다는 제안의 절충을 그대로 적용했다. 빈 구간을 찾은 뒤 경계 정밀도는 0.001 cm다. 상한 28회는 기본 15 cm 한도의 시험 배치 기준이며, 임의로 늘린 `LevelLiftMaxCm` 전체에 대한 고정 상한은 아니다.
+- 최종 non-unity(`-DisableUnity -Module=vBoR`)·unity 각각 1회 성공, warning/error 0, exit 0. 로그: `Saved/Logs/CodexP1cR1NonUnity.log`, `CodexP1cR1Unity.log`.
+- 최종 `vBoR.*` 1회: 발견 368, Success 368, Fail 0, P1c 9/9(기존 8개 + 신규 1개), `TEST COMPLETE. EXIT CODE: 0`, 프로세스 exit 0. 로그: `Saved/Logs/CodexP1cR1All.log`. E8Persistence 재실행 사유 없음. 종료 후 `UnrealEditor*` 프로세스 없음.
+- 자동화의 샘플 InfoCardWidget 누락, 임시 월드 `World has no context`, 잘못된 설정을 다루는 시험의 경고는 빌드 진단·실패와 구분했다. 자동화 Error 0, 단언 실패 0이다.
+- API 헤더 직접 확인: UE 5.7 `Engine/Source/Runtime/Engine/Classes/Components/SceneComponent.h:912` (`SetVisibility`), `Components/ActorComponent.h:1051` (`IsRenderStateDirty`), `:1152` (`RecreateRenderState_Concurrent`), `:1158` (`IsRenderStateCreated`), `Engine/World.h:3358` (`SendAllEndOfFrameUpdates`). 새 플러그인 API 없음.
+- Quest 3·VR Preview·Blueprint·GUI 및 T-02·T-08·T-09는 `not-tested`. 실장면의 frame 시간 개선량은 측정하지 않았다. 질문 없음, Claude 리뷰 대기.
 
 ### 참고 — VR 확인 때 볼 것 (명세 §7에 더함)
 
