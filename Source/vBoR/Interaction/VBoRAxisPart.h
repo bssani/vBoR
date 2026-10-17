@@ -5,6 +5,7 @@
 #include "Interaction/Grabbable/IsdkTransformer.h"
 #include "Interaction/Grabbable/IsdkGrabTransformerComponent.h"
 #include "VBoRSpectatorPart.h"
+#include "VBoRDoorMotion.h"
 #include "VBoRAxisPart.generated.h"
 
 class UStaticMeshComponent;
@@ -72,7 +73,7 @@ public:
 	AVBoRAxisPart();
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spectator") FText SpectatorName;
 	virtual FText GetSpectatorName() const override { return SpectatorName; }
-	virtual bool IsSpectatorInteracting() const override { return HoldingGrabber != nullptr; }
+	virtual bool IsSpectatorInteracting() const override { return HoldingGrabber != nullptr || PushHand != INDEX_NONE; }
 
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void PreInitializeComponents() override;
@@ -83,6 +84,12 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Axis part") TObjectPtr<UIsdkGrabbableComponent> Grabbable;
 	UPROPERTY(VisibleAnywhere, Category="Axis part") TObjectPtr<UVBoRAxisGrabComponent> GrabComponent;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part") FTransform MeshRestFromRoot;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Input") bool bAllowPalmGrab = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Input") bool bAllowPinchGrab = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Input") bool bAllowPush = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Input", meta=(Units="cm", ClampMin="0")) float PushMinAxisDistanceCm = 2;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Input", meta=(Units="cm", ClampMin="0")) float PushMarginCm = 0.5;
+	UPROPERTY(EditAnywhere, Category="Axis part") FLinearColor PushingColor = FLinearColor(1,0.5,0,0.4);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part") EVBoRAxisMovement Movement = EVBoRAxisMovement::Rotate;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part") EVBoRAxisRelease Release = EVBoRAxisRelease::Return;
 	// 쉬는 자세 0 기준, 값이 커지는 쪽이 위임 (P5b D2, deg)
@@ -121,6 +128,9 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	virtual bool IsHandTracked() const;
+	virtual bool ReadGrabClosed(int32 Hand, bool Pinch, bool& Closed) const;
+	virtual void ReadPushHands(FVBoRDoorHand (&Hands)[2]) const;
+	virtual UIsdkGrabberComponent* GetPushGrabber(int32 Hand) const;
 private:
 	friend class UVBoRAxisTransformer;
 	friend class AVBoRHingedPanel;
@@ -129,6 +139,7 @@ private:
 	friend struct FP2dTestAccess;
 	friend struct FP5bTestAccess;
 	friend struct FP5cTestAccess;
+	friend struct FP5mTestAccess;
 	UPROPERTY() TObjectPtr<UVBoRAxisTransformer> Transformer;
 	UPROPERTY() TObjectPtr<UIsdkGrabberComponent> HoldingGrabber;
 	UPROPERTY() TObjectPtr<AVBoRHingedPanel> LinkedDoor;
@@ -140,6 +151,18 @@ private:
 	bool bPaused = false, bRebase = false, bDoorHold = false;
 	bool bCancelPending = false;
 	bool bNeedsPalmOpen[2] = {false,false};
+	bool bNeedsPinchOpen[2] = {false,false};
+	bool bPinch = false, bPushEnabled = false;
+	FBox PushBounds = FBox(ForceInit);
+	FVector PushRadial = FVector::YAxisVector, PushNormal = FVector::ZAxisVector;
+	FVBoRDoorHand PreviousPushHands[2];
+	double PreviousPushValue = 0;
+	int32 PushHand = INDEX_NONE, PushPoint = INDEX_NONE, PushFace = INDEX_NONE, PushStarts = 0;
+	void ConfigurePush();
+	void ClearPush();
+	void AdvancePush(const FVBoRDoorHand (&Hands)[2]);
+	bool FindPush(int32 Hand, const FVBoRDoorHand& Input, FVector& Point, int32& PointIndex, int32& FaceIndex) const;
+	void ReadHoldingPose(FTransform& Pose) const;
 	bool bOpenArmed = true, bClosedArmed = false;
 	double Value = 0, MaximumRatio = 0, PausedSeconds = 0, RecoveryDiscard = 0;
 	int32 Attempts = 0, Grabs = 0, Opens = 0, Closes = 0, Pauses = 0;

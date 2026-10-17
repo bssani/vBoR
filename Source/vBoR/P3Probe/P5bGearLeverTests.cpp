@@ -335,6 +335,7 @@ bool FP5bInvalid::RunTest(const FString&)
 		TestEqual(TEXT("Invalid config holds initial angle"),FP5bTestAccess::Value(Part),Expected);
 		TestEqual(TEXT("Grab collision disabled"),Part->GrabBox->GetCollisionEnabled(),ECollisionEnabled::NoCollision);
 		TestFalse(TEXT("Palm disabled"),Part->Grabbable->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm));
+		TestFalse(TEXT("Pinch disabled"),Part->Grabbable->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch));
 		AActor* Owner = W.World->SpawnActor<AActor>(); UIsdkGrabberComponent* Grabber = NewObject<UIsdkGrabberComponent>(Owner);
 		Owner->SetRootComponent(Grabber); Grabber->InteractorTags.AddTag(IsdkGameplayTags::TAG_Isdk_Type_Device_Left); Grabber->RegisterComponent();
 		FIsdkInteractionPointerEvent Event; Event.Interactor = Grabber; Event.Type = EIsdkPointerEventType::Select;

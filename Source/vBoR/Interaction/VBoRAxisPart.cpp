@@ -190,8 +190,9 @@ void AVBoRAxisPart::PreInitializeComponents()
 		}
 	}
 	Grabbable->SetGrabCollider(GrabBox);
-	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, PartMesh->GetStaticMesh() != nullptr && bDetentValid);
-	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch, false);
+	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, bAllowPalmGrab && PartMesh->GetStaticMesh() != nullptr && bDetentValid);
+	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch, bAllowPinchGrab && PartMesh->GetStaticMesh() != nullptr && bDetentValid);
+	ConfigurePush();
 	GrabComponent->Configure();
 	GrabComponent->SetTransformTarget(AxisPivot);
 	GrabComponent->SetSingleGrabTransformerObject(Transformer);
@@ -239,7 +240,7 @@ FString AVBoRAxisPart::DetentProblem() const
 
 void AVBoRAxisPart::EvaluateDetent()
 {
-	if (!bDetentValid || HoldingHand == INDEX_NONE || bPaused || !DetentAnglesDeg.IsValidIndex(DetentIndex)) { return; }
+	if (!bDetentValid || (HoldingHand == INDEX_NONE && PushHand == INDEX_NONE) || bPaused || !DetentAnglesDeg.IsValidIndex(DetentIndex)) { return; }
 	const double NudgeOffset = Value - DetentAnglesDeg[DetentStartIndex];
 	// 먼저 차선 변경을 대기시킴 (한 Move 에 끝까지 밀어도 알림 순서 유지, P5c D4·D5)
 	const double NudgeTolerance = FMath::Min(1.e-4, static_cast<double>(DetentNudgeDeg) / 4);
@@ -305,6 +306,144 @@ bool AVBoRAxisPart::IsHandTracked() const
 	return UOculusXRInputFunctionLibrary::IsHandPositionValid(Type) && UOculusXRInputFunctionLibrary::GetTrackingConfidence(Type) == EOculusXRTrackingConfidence::High;
 }
 
+void AVBoRAxisPart::ReadHoldingPose(FTransform& Pose) const
+{
+	if (bPinch) { HoldingGrabber->GetPinchGrabTransform(Pose); }
+	else { HoldingGrabber->GetPalmGrabTransform(Pose); }
+}
+
+bool AVBoRAxisPart::ReadGrabClosed(int32 Hand, bool Pinch, bool& Closed) const
+{
+	const auto* Pawn = Cast<AVBoRHandRigPawn>(UGameplayStatics::GetPlayerPawn(this,0));
+	const EOculusXRHandType Type = Hand == 0 ? EOculusXRHandType::HandLeft : EOculusXRHandType::HandRight;
+	if (!Pawn || !UOculusXRInputFunctionLibrary::IsHandPositionValid(Type) ||
+		UOculusXRInputFunctionLibrary::GetTrackingConfidence(Type) != EOculusXRTrackingConfidence::High) { return false; }
+	if (Pinch) { return Hand == 0 ? Pawn->LeftRig->ReadPinchGrab(Closed) : Pawn->RightRig->ReadPinchGrab(Closed); }
+	return Hand == 0 ? Pawn->LeftRig->ReadPalmGrab(Closed) : Pawn->RightRig->ReadPalmGrab(Closed);
+}
+
+UIsdkGrabberComponent* AVBoRAxisPart::GetPushGrabber(int32 Hand) const
+{
+	const auto* Pawn = Cast<AVBoRHandRigPawn>(UGameplayStatics::GetPlayerPawn(this,0));
+	return Pawn ? Pawn->GetHandRig(Hand)->GetGrabber() : nullptr;
+}
+
+void AVBoRAxisPart::ReadPushHands(FVBoRDoorHand (&Hands)[2]) const
+{
+	const auto* Pawn = Cast<AVBoRHandRigPawn>(UGameplayStatics::GetPlayerPawn(this,0));
+	if (!Pawn) { return; }
+	const FTransform RestWorld = RestPivot * GetActorTransform();
+	for (int32 H=0; H<2; ++H)
+	{
+		const EOculusXRHandType Type = H == 0 ? EOculusXRHandType::HandLeft : EOculusXRHandType::HandRight;
+		if (!UOculusXRInputFunctionLibrary::IsHandPositionValid(Type) ||
+			UOculusXRInputFunctionLibrary::GetTrackingConfidence(Type) != EOculusXRTrackingConfidence::High || !Pawn->ReadRawPalmAndTips(H,Hands[H]))
+		{ Hands[H].bTracked = false; continue; }
+		for (FVector& Point : Hands[H].Points) { Point = RestWorld.InverseTransformPosition(Point); }
+	}
+}
+
+void AVBoRAxisPart::ConfigurePush()
+{
+	bPushEnabled = bAllowPush && bDetentValid && PartMesh->GetStaticMesh() && Movement == EVBoRAxisMovement::Rotate;
+	if (bAllowPush && Movement != EVBoRAxisMovement::Rotate)
+	{ UE_LOG(LogAxisPart,Warning,TEXT("%s: Push requires Rotate; push disabled"),*GetName()); }
+	if (!bPushEnabled) { ClearPush(); return; }
+	const FBox Bounds = PartMesh->GetStaticMesh()->GetBoundingBox().TransformBy(PartMesh->GetRelativeTransform());
+	// 축에 수직인 두 bounds 축 중 긴 쪽이 레버 길이임 (메시 피벗 대신 쉬는 bounds, P5m D3)
+	const int32 A = Axis == EAxis::Y ? 1 : Axis == EAxis::Z ? 2 : 0;
+	const int32 B = (A+1)%3, C = (A+2)%3;
+	const int32 R = Bounds.GetExtent()[B] >= Bounds.GetExtent()[C] ? B : C;
+	PushRadial = FVector::ZeroVector; PushRadial[R] = Bounds.GetCenter()[R] < 0 ? -1 : 1;
+	PushNormal = FVector::CrossProduct(LocalAxis(),PushRadial);
+	PushBounds = FBox(ForceInit);
+	for (int32 Corner=0; Corner<8; ++Corner)
+	{
+		const FVector P(Corner&1 ? Bounds.Max.X : Bounds.Min.X,Corner&2 ? Bounds.Max.Y : Bounds.Min.Y,Corner&4 ? Bounds.Max.Z : Bounds.Min.Z);
+		PushBounds += FVector(FVector::DotProduct(P,PushRadial),FVector::DotProduct(P,PushNormal),FVector::DotProduct(P,LocalAxis()));
+	}
+	ClearPush();
+}
+
+void AVBoRAxisPart::ClearPush()
+{
+	if (PushHand != INDEX_NONE) { bNudgeArmed = true; }
+	PushHand = PushPoint = PushFace = INDEX_NONE;
+	PreviousPushHands[0] = PreviousPushHands[1] = FVBoRDoorHand(); PreviousPushValue = Value;
+}
+
+bool AVBoRAxisPart::FindPush(int32 Hand, const FVBoRDoorHand& Input, FVector& Point, int32& PointIndex, int32& FaceIndex) const
+{
+	if (!Input.bTracked) { return false; }
+	const bool Continuing = PushHand == Hand;
+	const FQuat Rotation = ValueTransform().GetRotation();
+	const FQuat PreviousRotation(LocalAxis(),FMath::DegreesToRadians(PreviousPushValue*(bReverse?-1:1)));
+	auto ToFace = [this](const FVector& P) { return FVector(FVector::DotProduct(P,PushRadial),FVector::DotProduct(P,PushNormal),FVector::DotProduct(P,LocalAxis())); };
+	const double Margin = FMath::Max(0.f,PushMarginCm);
+	auto Inside = [this,Margin](const FVector& P)
+	{
+		return P.X >= PushBounds.Min.X-Margin && P.X <= PushBounds.Max.X+Margin &&
+			P.Z >= PushBounds.Min.Z-Margin && P.Z <= PushBounds.Max.Z+Margin;
+	};
+	bool Found = false; double Deepest = -Margin;
+	for (int32 I=0; I<5; ++I)
+	{
+		if (Continuing && I != PushPoint) { continue; }
+		const FVector P = ToFace(Rotation.UnrotateVector(Input.Points[I]));
+		if (P.ContainsNaN() || !Inside(P) || FMath::Square(P.X)+FMath::Square(P.Y) < FMath::Square(FMath::Max(0.f,PushMinAxisDistanceCm))) { continue; }
+		const FVector Prev = ToFace(PreviousRotation.UnrotateVector(PreviousPushHands[Hand].Points[I]));
+		for (int32 Face=0; Face<2; ++Face)
+		{
+			if (Continuing && Face != PushFace) { continue; }
+			const double Depth = Face == 0 ? P.Y-PushBounds.Min.Y : PushBounds.Max.Y-P.Y;
+			const double PreviousDepth = Face == 0 ? Prev.Y-PushBounds.Min.Y : PushBounds.Max.Y-Prev.Y;
+			if (Depth < (Continuing ? -Margin : 1.e-6) || Depth > PushBounds.Max.Y-PushBounds.Min.Y+Margin) { continue; }
+			// 면 위·안쪽의 복구 점은 새 crossing 이 아님 (P5m D3·E9·E13)
+			if (!Continuing && (!PreviousPushHands[Hand].bTracked || Prev.ContainsNaN() || !Inside(Prev) || PreviousDepth >= -1.e-6)) { continue; }
+			if (Depth > Deepest) { Deepest=Depth; Point=Input.Points[I]; PointIndex=I; FaceIndex=Face; Found=true; }
+		}
+	}
+	return Found;
+}
+
+void AVBoRAxisPart::AdvancePush(const FVBoRDoorHand (&Input)[2])
+{
+	FVBoRDoorHand Hands[2] = {Input[0],Input[1]};
+	for (int32 H=0; H<2; ++H)
+	{
+		const auto* Grabber = GetPushGrabber(H);
+		if (Grabber && Grabber->HasSelectedInteractable()) { Hands[H].bTracked = false; }
+	}
+	if (!bPushEnabled || HoldingHand != INDEX_NONE) { ClearPush(); return; }
+	FVector Point = FVector::ZeroVector;
+	bool Found = PushHand != INDEX_NONE && FindPush(PushHand,Hands[PushHand],Point,PushPoint,PushFace);
+	if (!Found)
+	{
+		if (PushHand != INDEX_NONE) { bNudgeArmed = true; }
+		PushHand = PushPoint = PushFace = INDEX_NONE;
+		for (int32 H=0; H<2; ++H)
+		{
+			if (FindPush(H,Hands[H],Point,PushPoint,PushFace)) { PushHand=H; ++PushStarts; Found=true; break; }
+		}
+	}
+	if (Found)
+	{
+		const double R = FVector::DotProduct(Point,PushRadial), N = FVector::DotProduct(Point,PushNormal);
+		const double Radius = FMath::Sqrt(R*R+N*N), Plane = PushFace == 0 ? PushBounds.Min.Y : PushBounds.Max.Y;
+		if (Radius > FMath::Abs(Plane)+UE_SMALL_NUMBER)
+		{
+			const double Current = Value*(bReverse?-1:1);
+			const double Target = FMath::RadiansToDegrees(FMath::Atan2(N,R)-FMath::Asin(Plane/Radius));
+			const double Delta = FMath::FindDeltaAngleDegrees(Current,Target);
+			// 처음 닿은 면의 법선 방향으로만 밂. 걸림 확정은 잡기와 같은 경로 사용 (P5m D3·D4, deg)
+			const double Angle = Current + (PushFace == 0 ? FMath::Max(0.,Delta) : FMath::Min(0.,Delta));
+			AcceptTransform(FTransform(FQuat(LocalAxis(),FMath::DegreesToRadians(Angle))));
+			AxisPivot->SetRelativeTransform(ValueTransform()*RestPivot);
+		}
+	}
+	PreviousPushHands[0]=Hands[0]; PreviousPushHands[1]=Hands[1]; PreviousPushValue=Value;
+}
+
 void AVBoRAxisPart::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 {
 	UIsdkGrabberComponent* Grabber = Cast<UIsdkGrabberComponent>(Event.Interactor);
@@ -316,8 +455,11 @@ void AVBoRAxisPart::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 	else if (Event.Type == EIsdkPointerEventType::Select)
 	{
 		if (HoldingHand != INDEX_NONE || bNeedsPalmOpen[Hand] || !PartMesh->GetStaticMesh() || !bDetentValid) { return; }
-		HoldingHand = Hand; HoldingGrabber = Grabber;
+		const bool Pinch = Grabber->IsInputMethodActive(EIsdkGrabInputMethod::Pinch);
+		if (Pinch ? !bAllowPinchGrab : !bAllowPalmGrab) { bCancelPending = true; return; }
+		HoldingHand = Hand; HoldingGrabber = Grabber; bPinch = Pinch;
 		if (!IsHandTracked()) { HoldingHand = INDEX_NONE; HoldingGrabber = nullptr; bCancelPending = true; return; }
+		ClearPush();
 		++Grabs;
 		bPaused = bRebase = false;
 		UE_LOG(LogAxisPart, Log, TEXT("%s grab hand=%d"), *GetName(), Hand);
@@ -347,7 +489,7 @@ void AVBoRAxisPart::ConnectDoor(AVBoRHingedPanel* Door, int32 Handle)
 }
 void AVBoRAxisPart::EndDoorHold(bool bLatch)
 {
-	if (bLatch && HoldingHand != INDEX_NONE) { bNeedsPalmOpen[HoldingHand] = true; }
+	if (bLatch && HoldingHand != INDEX_NONE) { bNeedsPalmOpen[HoldingHand] = true; bNeedsPinchOpen[HoldingHand] = bPinch; }
 	ReleasePart();
 	bCancelPending = true;
 }
@@ -370,53 +512,55 @@ void AVBoRAxisPart::Tick(float DeltaSeconds)
 		bCancelPending = false;
 		GrabComponent->CancelSelection();
 	}
-	AVBoRHandRigPawn* Pawn = Cast<AVBoRHandRigPawn>(UGameplayStatics::GetPlayerPawn(this,0));
 	for (int32 H = 0; H < 2; ++H)
 	{
 		bool bClosed = true;
-		const EOculusXRHandType Type = H == 0 ? EOculusXRHandType::HandLeft : EOculusXRHandType::HandRight;
-		if (Pawn && UOculusXRInputFunctionLibrary::IsHandPositionValid(Type) && UOculusXRInputFunctionLibrary::GetTrackingConfidence(Type) == EOculusXRTrackingConfidence::High &&
-			(H == 0 ? Pawn->LeftRig->ReadPalmGrab(bClosed) : Pawn->RightRig->ReadPalmGrab(bClosed)) && !bClosed) { bNeedsPalmOpen[H] = false; }
+		if (bNeedsPalmOpen[H] &&
+			ReadGrabClosed(H,bNeedsPinchOpen[H],bClosed) && !bClosed) { bNeedsPalmOpen[H] = false; }
 	}
 	if (HoldingHand != INDEX_NONE && !bDoorHold)
 	{
 		if (!IsHandTracked()) { if (!bPaused) { ++Pauses; } bPaused = bRebase = true; PausedSeconds += DeltaSeconds; return; }
 		if (bRebase && HoldingGrabber)
 		{
-			FTransform Pose; HoldingGrabber->GetPalmGrabTransform(Pose);
+			FTransform Pose; ReadHoldingPose(Pose);
 			FIsdkGrabPose GrabPose = Transformer->LastPose; GrabPose.Pose.Position = FVector3f(Pose.GetLocation()); GrabPose.Pose.Orientation = Pose.GetRotation();
 			Transformer->Rebase(GrabPose);
 			return;
 		}
 		bool bClosed = true;
-		if (Pawn && (HoldingHand == 0 ? Pawn->LeftRig->ReadPalmGrab(bClosed) : Pawn->RightRig->ReadPalmGrab(bClosed)) && !bClosed) { ReleasePart(); }
+		if (ReadGrabClosed(HoldingHand,bPinch,bClosed) && !bClosed) { ReleasePart(); }
 		else if (!Transformer->IsTransformerActive() && HoldingGrabber)
 		{
 			// SDK 가 추적 손실 때 선택을 끝내도 실제 손을 펼 때까지 보유함 (P2b D7)
-			FTransform Pose; HoldingGrabber->GetPalmGrabTransform(Pose);
+			FTransform Pose; ReadHoldingPose(Pose);
 			FIsdkGrabPose GrabPose = Transformer->LastPose; GrabPose.Pose.Position = FVector3f(Pose.GetLocation()); GrabPose.Pose.Orientation = Pose.GetRotation();
 			Transformer->BeginTransform({GrabPose}, FIsdkTargetTransform(AxisPivot));
 		}
 		else if (HoldingGrabber && !GrabComponent->GetNumGrabbers())
 		{
-			FTransform Pose; HoldingGrabber->GetPalmGrabTransform(Pose);
+			FTransform Pose; ReadHoldingPose(Pose);
 			FIsdkGrabPose GrabPose = Transformer->LastPose; GrabPose.Pose.Position = FVector3f(Pose.GetLocation()); GrabPose.Pose.Orientation = Pose.GetRotation();
 			AxisPivot->SetRelativeTransform(Transformer->UpdateTransform({GrabPose}, FIsdkTargetTransform(AxisPivot)));
 		}
 	}
-	if (HoldingHand == INDEX_NONE && Release == EVBoRAxisRelease::Return)
+	FVBoRDoorHand Hands[2];
+	if (bPushEnabled) { ReadPushHands(Hands); }
+	AdvancePush(Hands);
+	if (HoldingHand == INDEX_NONE && PushHand == INDEX_NONE && Release == EVBoRAxisRelease::Return)
 	{
 		const double Speed = Movement == EVBoRAxisMovement::Rotate ? ReturnDegPerSecond : ReturnCmPerSecond;
 		Value = FMath::Max(0.0, Value - FMath::Max(0.0, Speed) * DeltaSeconds);
 		AxisPivot->SetRelativeTransform(ValueTransform() * RestPivot);
 	}
-	if (HoldingHand == INDEX_NONE && Release == EVBoRAxisRelease::Detent && bDetentValid && DetentAnglesDeg.IsValidIndex(DetentIndex))
+	if (HoldingHand == INDEX_NONE && PushHand == INDEX_NONE && Release == EVBoRAxisRelease::Detent && bDetentValid && DetentAnglesDeg.IsValidIndex(DetentIndex))
 	{
 		const double Target = DetentAnglesDeg[DetentIndex];
 		const double Step = FMath::Max(0.f, ReturnDegPerSecond) * DeltaSeconds;
 		Value += FMath::Clamp(Target - Value, -Step, Step);
 		AxisPivot->SetRelativeTransform(ValueTransform() * RestPivot);
 	}
+	PreviousPushValue = Value;
 	EvaluateState();
 	// Move delegate 안에서 ForceCancel 을 부르지 않음 (SDK 선택 배열 재진입 방지, P2b D5)
 	// 풀린 문도 손잡이를 먼저 젖힘 (같은 손 넘김은 문턱에서만, P2c D4)
@@ -433,7 +577,7 @@ void AVBoRAxisPart::EvaluateState()
 	{
 		if (StateOverlay)
 		{
-			StateOverlay->SetVectorParameterValue(TEXT("ColorParam"), HoldingHand != INDEX_NONE ? GrabColor : Hovering.IsEmpty() ? FLinearColor::Transparent : HoverColor);
+			StateOverlay->SetVectorParameterValue(TEXT("ColorParam"), HoldingHand != INDEX_NONE ? GrabColor : PushHand != INDEX_NONE ? PushingColor : Hovering.IsEmpty() ? FLinearColor::Transparent : HoverColor);
 			PartMesh->SetOverlayMaterial(StateOverlay);
 		}
 		return;
@@ -445,23 +589,25 @@ void AVBoRAxisPart::EvaluateState()
 	if (bClosedArmed && Ratio <= ClosedThreshold) { bClosedArmed = false; ++Closes; StateAudio->Play(); OnPartClosed.Broadcast(); UE_LOG(LogAxisPart, Log, TEXT("%s closed | %s"), *GetName(), *GetDebugText()); }
 	if (StateOverlay)
 	{
-		StateOverlay->SetVectorParameterValue(TEXT("ColorParam"), HoldingHand != INDEX_NONE ? GrabColor : Ratio >= OpenThreshold ? OpenColor : Hovering.IsEmpty() ? FLinearColor::Transparent : HoverColor);
+		StateOverlay->SetVectorParameterValue(TEXT("ColorParam"), HoldingHand != INDEX_NONE ? GrabColor : PushHand != INDEX_NONE ? PushingColor : Ratio >= OpenThreshold ? OpenColor : Hovering.IsEmpty() ? FLinearColor::Transparent : HoverColor);
 		PartMesh->SetOverlayMaterial(StateOverlay);
 	}
 }
 FString AVBoRAxisPart::GetDebugText() const
 {
+	const FString Input = FString::Printf(TEXT("grab=%s hand=%d push=%d point=%d face=%d starts=%d | "), bPinch ? TEXT("pinch") : TEXT("palm"), HoldingHand, PushHand, PushPoint, PushFace, PushStarts);
 	if (Release == EVBoRAxisRelease::Detent)
 	{
-		return FString::Printf(TEXT("Approximate geometry | detent=%d angle=%.3f deg confirmed=%.3f deg | nudge=%.3f deg armed=%d | pauses=%d %.3f s | rebase discarded=%.3f deg | not-tested"),
+		return Input + FString::Printf(TEXT("Approximate geometry | detent=%d angle=%.3f deg confirmed=%.3f deg | nudge=%.3f deg armed=%d | pauses=%d %.3f s | rebase discarded=%.3f deg | not-tested"),
 			DetentIndex, Value, DetentAnglesDeg.IsValidIndex(DetentIndex) ? DetentAnglesDeg[DetentIndex] : 0.f, DetentNudgeDeg, bNudgeArmed, Pauses, PausedSeconds, RecoveryDiscard);
 	}
-	return FString::Printf(TEXT("Approximate geometry | ratio=%.3f | attempts=%d grabs=%d open/close=%d/%d max=%.3f | pauses=%d %.3f s | rebase discarded=%.3f %s | not-tested"),
+	return Input + FString::Printf(TEXT("Approximate geometry | ratio=%.3f | attempts=%d grabs=%d open/close=%d/%d max=%.3f | pauses=%d %.3f s | rebase discarded=%.3f %s | not-tested"),
 		GetOpenRatio(), Attempts, Grabs, Opens, Closes, MaximumRatio, Pauses, PausedSeconds, RecoveryDiscard, Movement == EVBoRAxisMovement::Rotate ? TEXT("deg") : TEXT("cm"));
 }
 void AVBoRAxisPart::EndPlay(const EEndPlayReason::Type Reason)
 {
 	Grabbable->GetInteractionPointerEventDelegate().RemoveDynamic(this, &AVBoRAxisPart::HandlePointer);
 	PartMesh->SetOverlayMaterial(nullptr);
+	ClearPush();
 	Super::EndPlay(Reason);
 }

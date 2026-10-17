@@ -181,6 +181,7 @@ bool FP5cInvalid::RunTest(const FString&)
 		Part->FinishSpawning(FTransform::Identity); W.Play(); Part->Tick(1); GLog->FlushThreadedLogs();
 		TestEqual(TEXT("One warning"),Logs.Warnings.Num(),1); TestTrue(TEXT("Warning explains nudge and disabled grab"),Logs.Warnings.Num() == 1 && Logs.Warnings[0].Contains(TEXT("nudge")) && Logs.Warnings[0].Contains(TEXT("grabbing disabled")));
 		TestEqual(TEXT("Collider disabled"),Part->GrabBox->GetCollisionEnabled(),ECollisionEnabled::NoCollision); TestFalse(TEXT("Palm disabled"),Part->Grabbable->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm));
+		TestFalse(TEXT("Pinch disabled"),Part->Grabbable->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch));
 		P5cBegin(Part); P5cMove(Part,20); Part->Tick(0.01f); TestEqual(TEXT("Invalid acceptance keeps initial angle"),FP5cTestAccess::Value(Part),0.0);
 	}
 	return true;
