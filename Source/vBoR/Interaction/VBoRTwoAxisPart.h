@@ -69,6 +69,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Two axis part", meta=(Units="cm", ClampMin="0")) float FrontToleranceCm = 0.5;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Two axis part", meta=(Units="cm", ClampMin="0")) float DepthMarginCm = 1;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Two axis part", meta=(Units="cm", ClampMin="0")) float EdgeMarginCm = 0.5;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Two axis part", meta=(Units="cm", ClampMin="0")) float MinLeverCm = 10;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Two axis part", meta=(Units="cm", ClampMin="0")) float MaxGrabJumpCm = 5;
 	UPROPERTY(EditAnywhere, Category="Two axis part") FLinearColor HoverColor = FLinearColor(0,0.6,1,0.4);
 	UPROPERTY(EditAnywhere, Category="Two axis part") FLinearColor GrabColor = FLinearColor(0.5,0,1,0.4);
 	UPROPERTY(EditAnywhere, Category="Two axis part") FLinearColor PushingColor = FLinearColor(0,1,0.3,0.4);

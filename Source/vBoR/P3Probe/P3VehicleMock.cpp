@@ -208,6 +208,13 @@ void AP3VehicleMock::BeginPlay()
 		RearviewMirror->MeshRestFromRoot = FTransform(FQuat::Identity,MirrorCenterCm,MirrorSizeCm/100);
 		RearviewMirror->SpectatorName = FText::FromString(TEXT("Rearview Mirror"));
 		RearviewMirror->FinishSpawning(GetActorTransform()); RearviewMirror->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform);
+		// 근사 색은 근사 차에서만 칠함 (Blueprint 자식의 실제 재질 보존, P5l D4)
+		if (auto* Material = LoadObject<UMaterialInterface>(nullptr,IsdkContentAssetPaths::Materials::GrabbableDefault))
+		{
+			auto* FaceMaterial = UMaterialInstanceDynamic::Create(Material,RearviewMirror);
+			FaceMaterial->SetVectorParameterValue(TEXT("ColorParam"),FLinearColor(0.15,0.3,0.4,1));
+			RearviewMirror->PartMesh->SetMaterial(0,FaceMaterial);
+		}
 	}
 	// Actor 원점은 차 원점, +Z 가 노브 윗면임 (근사 지름·높이 cm, P5f D8·U-09)
 	ConsoleKnob = GetWorld()->SpawnActorDeferred<AVBoRKnob>(AVBoRKnob::StaticClass(),GetActorTransform(),this);

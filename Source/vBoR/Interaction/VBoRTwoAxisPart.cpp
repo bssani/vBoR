@@ -58,9 +58,11 @@ void AVBoRTwoAxisPart::PreInitializeComponents()
 {
 	Motion.YawLimitDeg = YawLimitDeg; Motion.PitchLimitDeg = PitchLimitDeg; Motion.CenterExclusionCm = CenterExclusionCm;
 	Motion.FrontToleranceCm = FrontToleranceCm; Motion.DepthMarginCm = DepthMarginCm; Motion.EdgeMarginCm = EdgeMarginCm;
+	Motion.MinLeverCm = MinLeverCm; Motion.MaxGrabJumpCm = MaxGrabJumpCm;
 	bValid = PartMesh->GetStaticMesh() && !MeshRestFromRoot.ContainsNaN() && !Pivot->GetRelativeTransform().ContainsNaN();
 	for (float Value : {YawLimitDeg,PitchLimitDeg,CenterExclusionCm,FrontToleranceCm,DepthMarginCm,EdgeMarginCm})
 	{ bValid = bValid && FMath::IsFinite(Value) && Value >= 0; }
+	for (float Value : {MinLeverCm,MaxGrabJumpCm}) { bValid = bValid && FMath::IsFinite(Value) && Value > 0; }
 	if (PartMesh->GetStaticMesh())
 	{
 		const FBox Bounds = PartMesh->GetStaticMesh()->GetBoundingBox().TransformBy(MeshRestFromRoot.GetRelativeTransform(Pivot->GetRelativeTransform()));
@@ -86,8 +88,6 @@ void AVBoRTwoAxisPart::BeginPlay()
 	if (Material)
 	{
 		StateOverlay = UMaterialInstanceDynamic::Create(Material,this);
-		auto* FaceMaterial = UMaterialInstanceDynamic::Create(Material,this);
-		FaceMaterial->SetVectorParameterValue(TEXT("ColorParam"),FLinearColor(0.15,0.3,0.4,1)); PartMesh->SetMaterial(0,FaceMaterial);
 	}
 	Grabbable->GetInteractionPointerEventDelegate().AddUniqueDynamic(this,&AVBoRTwoAxisPart::HandlePointer); UpdateVisual();
 }
@@ -134,7 +134,7 @@ bool AVBoRTwoAxisPart::BeginHold(int32 Hand, UIsdkGrabberComponent* Grabber)
 	HoldingGrabber = Grabber; bPinch = Grabber && Grabber->IsInputMethodActive(EIsdkGrabInputMethod::Pinch);
 	// 광학 입력을 읽을 손만 임시 지정함 (무효 선택은 Tick 에서 취소, P5e D6)
 	Motion.GrabHand = Hand; FTransform Pose; const bool Tracked = ReadGrabPose(Pose); Motion.GrabHand = INDEX_NONE;
-	if (!Tracked || !Motion.BeginGrab(Hand,Pose.GetRotation())) { HoldingGrabber = nullptr; bCancelPending = true; return false; }
+	if (!Tracked || !Motion.BeginGrab(Hand,Pose.GetLocation())) { HoldingGrabber = nullptr; bCancelPending = true; return false; }
 	bRetainUntilOpen = false; return true;
 }
 
@@ -142,9 +142,9 @@ void AVBoRTwoAxisPart::AdvanceGrab()
 {
 	if (Motion.GrabHand == INDEX_NONE) { return; }
 	FTransform Pose; const bool Tracked = ReadGrabPose(Pose), WasPaused = Motion.bPaused;
-	Motion.AdvanceGrab(Tracked,Pose.GetRotation());
+	Motion.AdvanceGrab(Tracked,Pose.GetLocation());
 	if (!Tracked) { bRetainUntilOpen = true; }
-	if (Tracked && WasPaused) { UE_LOG(LogTwoAxisPart,Log,TEXT("%s recovery discarded %.3f deg | not-tested"),*GetName(),Motion.RecoveryDiscardDeg); }
+	if (Tracked && WasPaused) { UE_LOG(LogTwoAxisPart,Log,TEXT("%s recovery discarded %.3f cm | not-tested"),*GetName(),Motion.RecoveryDiscardCm); }
 }
 
 void AVBoRTwoAxisPart::HandlePointer(const FIsdkInteractionPointerEvent& Event)
@@ -197,7 +197,7 @@ void AVBoRTwoAxisPart::UpdateVisual()
 
 FString AVBoRTwoAxisPart::GetDebugText() const
 {
-	return FString::Printf(TEXT("Approximate geometry | yaw=%.3f pitch=%.3f deg grab=%d push=%d paused=%d discarded=%.3f deg | no reflection (반사 없음) | not-tested"),Motion.YawDeg,Motion.PitchDeg,Motion.GrabHand,Motion.PushHand,Motion.bPaused,Motion.RecoveryDiscardDeg);
+	return FString::Printf(TEXT("Approximate geometry | yaw=%.3f pitch=%.3f deg grab=%d push=%d paused=%d discarded=%.3f cm | no reflection (반사 없음) | not-tested"),Motion.YawDeg,Motion.PitchDeg,Motion.GrabHand,Motion.PushHand,Motion.bPaused,Motion.RecoveryDiscardCm);
 }
 
 void AVBoRTwoAxisPart::EndPlay(const EEndPlayReason::Type Reason)
