@@ -210,11 +210,13 @@ bool FP2cOpenDoorHandle::RunTest(const FString& Parameters)
 	FP2cWorld W; AP2bTrackedDoor* Door = W.World->SpawnActor<AP2bTrackedDoor>(); AP2bTrackedPart* Part = W.World->SpawnActor<AP2bTrackedPart>(); W.Play(); Door->SetAxisHandle(0, Part);
 	FVBoRDoorMotion& Motion = FP2cTestAccess::Motion(Door); Motion.bLocked = false; Motion.AngleDeg = 30; FP2cTestAccess::Apply(Door);
 	Door->Hands[0] = HandAt(FVector(100, 9, 60));
-	FP2cTestAccess::Begin(Part, Pose(FVector(0, 10, 0))); FP2cTestAccess::Move(Part, Pose(FQuat(FVector::XAxisVector, FMath::DegreesToRadians(15.0)).RotateVector(FVector(0, 10, 0))));
+	// 문을 따라 돈 손잡이의 쉬는 축 좌표로 입력함 (로컬 15/25 deg 유지, P2e §3·Q1)
+	const FTransform HandleFrame = Part->AxisPivot->GetComponentTransform();
+	FP2cTestAccess::Begin(Part, Pose(HandleFrame.TransformPosition(FVector(0, 10, 0)))); FP2cTestAccess::Move(Part, Pose(HandleFrame.TransformPosition(FQuat(FVector::XAxisVector, FMath::DegreesToRadians(15.0)).RotateVector(FVector(0, 10, 0)))));
 	Part->Tick(0.01f);
 	TestTrue(TEXT("Open-door handle follows hand below threshold"), FMath::IsNearlyEqual(Part->GetOpenRatio(), 0.5f, 0.001f));
 	TestEqual(TEXT("No transfer below threshold"), Motion.GrabHand, INDEX_NONE);
-	FP2cTestAccess::Move(Part, Pose(FQuat(FVector::XAxisVector, FMath::DegreesToRadians(25.0)).RotateVector(FVector(0, 10, 0)))); Part->Tick(0.01f);
+	FP2cTestAccess::Move(Part, Pose(HandleFrame.TransformPosition(FQuat(FVector::XAxisVector, FMath::DegreesToRadians(25.0)).RotateVector(FVector(0, 10, 0))))); Part->Tick(0.01f);
 	TestEqual(TEXT("Threshold transfers same hand"), Motion.GrabHand, 0);
 	TestEqual(TEXT("No second unlock"), Motion.Metrics.Unlocks, 0);
 	Door->Hands[0] = HandAt(FQuat(FVector::ZAxisVector, PI / 12).RotateVector(FVector(100, 9, 60))); Door->Tick(1);

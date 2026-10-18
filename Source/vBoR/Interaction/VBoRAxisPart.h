@@ -23,6 +23,13 @@ UENUM(BlueprintType)
 enum class EVBoRAxisMovement : uint8 { Rotate, Translate };
 UENUM(BlueprintType)
 enum class EVBoRAxisRelease : uint8 { Return, Stay, Detent };
+UENUM(BlueprintType)
+enum class EVBoRDoorHandleSide : uint8
+{
+	None UMETA(DisplayName="없음"),
+	Outside UMETA(DisplayName="바깥"),
+	Inside UMETA(DisplayName="안쪽")
+};
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FVBoRAxisEvent);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVBoRDetentEvent, int32, Index);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVBoRDetentNudgeEvent, int32, Direction);
@@ -71,6 +78,7 @@ class VBOR_API AVBoRAxisPart : public AActor, public IVBoRSpectatorPart
 	GENERATED_BODY()
 public:
 	AVBoRAxisPart();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part", meta=(DisplayName="문의 어느 쪽", ToolTip="문 밑에 붙인 손잡이를 Play 때 연결함. 문과 무관한 부품은 없음.")) EVBoRDoorHandleSide DoorHandleSide = EVBoRDoorHandleSide::None;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spectator") FText SpectatorName;
 	virtual FText GetSpectatorName() const override { return SpectatorName; }
 	virtual bool IsSpectatorInteracting() const override { return HoldingGrabber != nullptr || PushHand != INDEX_NONE; }
@@ -137,6 +145,7 @@ private:
 	friend struct FP2bTestAccess;
 	friend struct FP2cTestAccess;
 	friend struct FP2dTestAccess;
+	friend struct FP2eTestAccess;
 	friend struct FP5bTestAccess;
 	friend struct FP5cTestAccess;
 	friend struct FP5mTestAccess;
