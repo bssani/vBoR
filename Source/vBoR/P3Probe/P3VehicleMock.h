@@ -21,6 +21,10 @@ class AVBoRTwoAxisPart;
 class AVBoRKnob;
 class AVBoRFloorRoute;
 class UBoxComponent;
+class AP1TrunkMock;
+class AVBoRPoweredPanel;
+class AVBoRLoadTarget;
+class AVBoRBoxStand;
 
 UCLASS(Blueprintable)
 class VBOR_API AP3VehicleMock : public AActor
@@ -41,8 +45,15 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) float StartOutsideCm = 250;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<UBoxComponent> Footprint;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm", ClampMin="0")) float FootprintMarginCm = 20;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(ToolTip="차 기준 경로 점 (근사 형상·자리값, cm)")) TArray<FVector> DriverDoorRoutePointsCm = {FVector(360,-20,0), FVector(330,-150,0), FVector(150,-165,0), FVector(-65,-165,0)};
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(ToolTip="차 기준 경로 점 (근사 형상·자리값, cm)")) TArray<FVector> DriverDoorRoutePointsCm = {FVector(-295,-20,0), FVector(-280,-150,0), FVector(-150,-165,0), FVector(-65,-165,0)};
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRFloorRoute> DriverDoorRoute;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(ToolTip="차 기준 경로 점 (근사 형상·자리값, cm)")) TArray<FVector> AroundCarRoutePointsCm = {FVector(360,40,0), FVector(300,170,0), FVector(-150,175,0), FVector(-270,160,0), FVector(-330,0,0)};
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRFloorRoute> AroundCarRoute;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector RearBoxStandCm = FVector(-340,140,0);
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AP1TrunkMock> Trunk;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRPoweredPanel> Liftgate;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRLoadTarget> LoadTarget;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRBoxStand> BoxStand;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<UVBoREyePointComponent> DriverEye;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<UVBoRViewpointComponent> PassengerView;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<UVBoRViewpointComponent> RearView;
@@ -121,6 +132,7 @@ private:
 	friend struct FP5eTestAccess;
 	friend struct FP5fTestAccess;
 	void PlaceReachButton();
+	void CreateRearSection();
 	AVBoRKeyTable* CreateKeyTable(FVector PositionCm, const TCHAR* KeyTag, const TCHAR* UnlockTag, const TCHAR* LockTag);
 	UFUNCTION() void KeyUnlockPressed(AVBoRKeyFob* Key);
 	UFUNCTION() void KeyLockPressed(AVBoRKeyFob* Key);

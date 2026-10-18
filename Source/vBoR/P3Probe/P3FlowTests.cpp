@@ -1,6 +1,11 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "P3VehicleMock.h"
+#include "../P1Probe/P1TrunkMock.h"
+#include "../Interaction/VBoRBoxStand.h"
+#include "../Interaction/VBoRCarryObject.h"
+#include "../Interaction/VBoRLoadTarget.h"
+#include "../Interaction/VBoRPoweredPanel.h"
 #include "P3FlowGameMode.h"
 #include "../Interaction/VBoRScenarioRunner.h"
 #include "../Interaction/VBoRFloorRoute.h"
@@ -755,7 +760,7 @@ bool FP3bMockTest::RunTest(const FString&)
 	TestTrue(TEXT("Default route passes footprint and synthetic large room"),E.Runner->IsRunning() && E.Runner->ValidationProblems.IsEmpty() && !R->IsHidden());
 	const FVector End = R->Spline->GetLocationAtSplinePoint(3,ESplineCoordinateSpace::World);
 	TestTrue(TEXT("Default end near outside handle and outside footprint"),FVector::Dist2D(End,E.Car->GetActorTransform().TransformPosition(E.Car->OutsideHandlePivotCm)) <= 70 && FMath::Abs(End.Y) > E.Car->Footprint->GetScaledBoxExtent().Y);
-	TestTrue(TEXT("End tangent is rearward"),R->Spline->GetDirectionAtDistanceAlongSpline(R->Spline->GetSplineLength(),ESplineCoordinateSpace::World).Equals(-FVector::XAxisVector,0.01));
+	TestTrue(TEXT("End tangent is forward (P4d D4)"),R->Spline->GetDirectionAtDistanceAlongSpline(R->Spline->GetSplineLength(),ESplineCoordinateSpace::World).Equals(FVector::XAxisVector,0.01));
 	UVBoRScenarioAsset* Defaults = NewObject<UVBoRScenarioAsset>();
 	for (const auto& Step : Defaults->Steps) { TestTrue(TEXT("Constructor routes remain unassigned"),Step.RouteTag.IsNone()); }
 	return true;
@@ -975,9 +980,9 @@ bool FP4cAssetTest::RunTest(const FString&)
 		{TEXT("01"),TEXT("테이블의 키를 집으세요."),EVBoRStepRule::KeyHeld,TEXT("Car.FrontKey"),EVBoRConfirmBy::None},
 		{TEXT("02"),TEXT("키 버튼으로 외장 조명을 켜고 꺼 보세요."),EVBoRStepRule::KeyUnlockAndLock,TEXT("Car.FrontKey"),EVBoRConfirmBy::Either},
 		{TEXT("03"),TEXT("차량 주변을 둘러보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Either},
-		{TEXT("04"),TEXT("리프트게이트를 열어보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
+		{TEXT("04"),TEXT("리프트게이트를 열어보세요."),EVBoRStepRule::PoweredOpen,TEXT("Car.Liftgate"),EVBoRConfirmBy::None},
 		{TEXT("05"),TEXT("박스를 적재해 보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
-		{TEXT("06"),TEXT("리프트게이트를 닫아보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
+		{TEXT("06"),TEXT("리프트게이트를 닫아보세요."),EVBoRStepRule::PoweredClosed,TEXT("Car.Liftgate"),EVBoRConfirmBy::None},
 		{TEXT("07"),TEXT("도어 핸들을 조작해 보세요."),EVBoRStepRule::DoorUnlocked,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None},
 		{TEXT("08"),TEXT("문을 열어보세요."),EVBoRStepRule::DoorOpened,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None},
 		{TEXT("09"),TEXT("차량에 탑승해 보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
@@ -999,7 +1004,7 @@ bool FP4cAssetTest::RunTest(const FString&)
 		TestEqual(Prefix+TEXT("ID"),S.StepId,FName(X.Id)); TestEqual(Prefix+TEXT("instruction"),S.Instruction.ToString(),FString(X.Text));
 		TestEqual(Prefix+TEXT("rule"),S.Rule,X.Rule); TestEqual(Prefix+TEXT("target"),S.TargetTag,FName(X.Tag)); TestEqual(Prefix+TEXT("confirm"),S.ConfirmBy,X.By);
 		TestEqual(Prefix+TEXT("marker"),S.MarkerTag,I == 0 ? FName(TEXT("Car.FrontKey")) : NAME_None);
-		TestEqual(Prefix+TEXT("route"),S.RouteTag,I == 6 ? FName(TEXT("Route.ToDriverDoor")) : NAME_None);
+		TestEqual(Prefix+TEXT("route"),S.RouteTag,I == 2 ? FName(TEXT("Route.AroundCar")) : I == 6 ? FName(TEXT("Route.ToDriverDoor")) : NAME_None);
 		TestEqual(Prefix+TEXT("base viewpoint"),S.bRequireBaseViewpoint,I == 16);
 		TestEqual(Prefix+TEXT("door deg"),S.DoorOpenDeg,45.0f); TestEqual(Prefix+TEXT("seated seconds"),S.SeatedSeconds,1.5f);
 		const FString TV = I == 0 ? TEXT("Pick up the key from the table.") : I == 1 ? TEXT("Turn the exterior lights on and off with the key.") : TEXT("");
@@ -1030,6 +1035,204 @@ bool FP4cIntegrationTest::RunTest(const FString&)
 	const auto* Defaults = NewObject<UVBoRScenarioAsset>();
 	TestEqual(TEXT("E12 defaults still fourteen"),Defaults->Steps.Num(),14);
 	TestEqual(TEXT("E12 default 01 still Approach"),Defaults->Steps[0].Rule,EVBoRStepRule::Approach);
+	return true;
+}
+
+struct FP4dTestAccess
+{
+	static void Grab(AVBoRCarryObject* Box) { Box->BeginCarry(0, nullptr, Box->GetActorTransform()); }
+	static void Release(AVBoRCarryObject* Box) { Box->ReleaseCarry(); }
+	static void Pause(AVBoRCarryObject* Box, bool bPaused) { Box->Session.bPaused = bPaused; }
+};
+
+namespace
+{
+	int32 P4dBoxes(UWorld* World, AActor* Stand)
+	{
+		int32 Count = 0;
+		for (TActorIterator<AVBoRCarryObject> It(World); It; ++It) { Count += It->GetOwner() == Stand; }
+		return Count;
+	}
+	void P4dOpen(AVBoRPoweredPanel* Gate) { Gate->RequestOpen(); Gate->Tick(6); }
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4dMockTest, "vBoR.P4d.E1E10RearAssemblyAndRoutes", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4dMockTest::RunTest(const FString&)
+{
+	FP3World E; const auto* T = E.Car->Trunk.Get(); const auto* S = E.Car->BoxStand.Get();
+	if (!TestNotNull(TEXT("E1 trunk"),T) || !TestNotNull(TEXT("E1 stand"),S)) { return false; }
+	TestTrue(TEXT("E1 rear opening faces +X"),T->GetActorLocation().Equals(FVector(-235,0,0)) && T->GetActorForwardVector().Equals(FVector::XAxisVector));
+	for (const TCHAR* Tag : {TEXT("Car.Liftgate"),TEXT("Car.BoxStand")})
+	{
+		int32 Count = 0; for (TActorIterator<AActor> It(E.World); It; ++It) { Count += It->ActorHasTag(Tag); }
+		TestEqual(TEXT("E1 one actor per tag"),Count,1);
+	}
+	TestTrue(TEXT("E1 loading region is trunk interior"),E.Car->LoadTarget->LoadingRegion->GetUnscaledBoxExtent().Equals(FVector(45,65,35)) && E.Car->LoadTarget->LoadingRegion->GetComponentLocation().Equals(FVector(-190,0,110)));
+	TestFalse(TEXT("E1 guide hidden"),E.Car->LoadTarget->bShowGuide);
+	TestEqual(TEXT("E1 one box"),P4dBoxes(E.World,E.Car->BoxStand),1);
+	TestTrue(TEXT("E1 box target and drop policy"),S->SourceBox->LoadTarget == E.Car->LoadTarget && !S->SourceBox->bUsePlacementAssist && S->SourceBox->bDestroyAtFloor);
+	TestTrue(TEXT("E1 box bottom on stand"),FMath::IsNearlyEqual(S->SourceBox->GetCollisionBoundsInPose(S->SourceBox->GetActorTransform(),S->GetActorTransform()).Min.Z,75.01,0.02));
+	TestTrue(TEXT("E1 rear plate below floor"),FP3FlowTestAccess::Plates(E.Car)[3]->Bounds.GetBox().Max.Z <= T->FloorHeightCm+0.01);
+	E.Steps({P3bStep(TEXT("03"),TEXT("Route.AroundCar")),P3bStep(TEXT("07"),TEXT("Route.ToDriverDoor"))});
+	TestTrue(TEXT("E10 both route validations pass"),E.Runner->IsRunning() && E.Runner->ValidationProblems.IsEmpty());
+	const FVector End = E.Car->AroundCarRoute->Spline->GetLocationAtSplinePoint(4,ESplineCoordinateSpace::World);
+	const FVector Local = T->GetActorTransform().InverseTransformPosition(End);
+	TestTrue(TEXT("E10 rear arrival 60-120 cm behind opening and within width"),Local.X <= -60 && Local.X >= -120 && FMath::Abs(Local.Y) <= T->InsideWidthCm/2);
+	TestTrue(TEXT("E10 07 starts behind body and ends unchanged"),E.Car->DriverDoorRoute->Spline->GetLocationAtSplinePoint(0,ESplineCoordinateSpace::Local).X < -235 && E.Car->DriverDoorRoute->Spline->GetLocationAtSplinePoint(3,ESplineCoordinateSpace::Local).Equals(FVector(-65,-165,0)));
+	for (AVBoRFloorRoute* Route : {E.Car->AroundCarRoute.Get(),E.Car->DriverDoorRoute.Get()})
+	{
+		double Minimum = TNumericLimits<double>::Max();
+		for (float D = 0; D <= Route->Spline->GetSplineLength(); D += 1)
+		{
+			const FVector P = Route->Spline->GetLocationAtDistanceAlongSpline(D,ESplineCoordinateSpace::World);
+			for (const FBox Obstacle : {S->Stand->Bounds.GetBox(), E.Car->RearKeyTable->TopMesh->Bounds.GetBox()})
+			{
+				const double DX = FMath::Max3(Obstacle.Min.X-P.X,0.0,P.X-Obstacle.Max.X);
+				const double DY = FMath::Max3(Obstacle.Min.Y-P.Y,0.0,P.Y-Obstacle.Max.Y);
+				Minimum = FMath::Min(Minimum,FMath::Sqrt(DX*DX+DY*DY));
+			}
+		}
+		TestTrue(FString::Printf(TEXT("E10 %s obstacle clearance %.2f cm >= 10"),*Route->Tags[0].ToString(),Minimum),Minimum >= 10);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4dOpenTest, "vBoR.P4d.E2E3PoweredOpen", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4dOpenTest::RunTest(const FString&)
+{
+	FP3World E; auto* G = E.Car->Liftgate.Get();
+	const auto Open = P3Step(TEXT("04"),EVBoRStepRule::PoweredOpen,TEXT("Car.Liftgate"),EVBoRConfirmBy::None);
+	E.Steps({Open,P3Step(TEXT("05"))}); E.Runner->ProcessFlow(0);
+	TestEqual(TEXT("E2 closed waits"),E.Runner->GetStepIndex(),0);
+	G->RequestOpen(); E.Runner->ProcessFlow(0); TestEqual(TEXT("E2 wait state"),E.Runner->GetStepIndex(),0);
+	G->Tick(1.5); E.Runner->ProcessFlow(0); TestEqual(TEXT("E2 opening waits"),E.Runner->GetStepIndex(),0);
+	G->Tick(4); TestEqual(TEXT("E2 no flow processing yet"),E.Runner->GetStepIndex(),0);
+	E.Runner->ProcessFlow(0); TestEqual(TEXT("E2 open completes next processing frame"),E.Runner->GetStepIndex(),1);
+	TestTrue(TEXT("E2 participant rule attribution"),E.Runner->LastCompletion.Contains(TEXT("참가자 규칙")));
+	E.Steps({P3Step(TEXT("03")),Open,P3Step(TEXT("05"))}); E.Command(EVBoRFlowCommand::Next);
+	TestEqual(TEXT("E3 already open does not complete entered frame"),E.Runner->GetStepIndex(),1);
+	E.Runner->ProcessFlow(0); TestEqual(TEXT("E3 completes following frame"),E.Runner->GetStepIndex(),2);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4dCloseTest, "vBoR.P4d.E4ClosedAndObstruction", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4dCloseTest::RunTest(const FString&)
+{
+	FP3World E; auto* G = E.Car->Liftgate.Get(); P4dOpen(G);
+	const auto Closed = P3Step(TEXT("06"),EVBoRStepRule::PoweredClosed,TEXT("Car.Liftgate"),EVBoRConfirmBy::None);
+	E.Steps({Closed,P3Step(TEXT("07"))}); G->RequestClose(); G->Tick(1.5); E.Runner->ProcessFlow(0);
+	TestEqual(TEXT("E4 closing waits"),E.Runner->GetStepIndex(),0);
+	G->Tick(5); E.Runner->ProcessFlow(0); TestEqual(TEXT("E4 closed completes"),E.Runner->GetStepIndex(),1);
+	P4dOpen(G); E.Steps({Closed,P3Step(TEXT("07"))});
+	auto* Box = E.Car->BoxStand->SourceBox.Get(); Box->SetActorLocation(FVector(-245,0,100));
+	G->RequestClose(); G->Tick(6); E.Runner->ProcessFlow(0);
+	TestTrue(TEXT("E4 actual obstruction reopens"),G->GetObstructionCount() > 0 && G->GetState() != EVBoRPoweredState::Closed);
+	G->Tick(5); E.Runner->ProcessFlow(0);
+	TestTrue(TEXT("E4 reopened still waits"),G->GetState() == EVBoRPoweredState::Open && E.Runner->GetStepIndex() == 0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4dTargetTest, "vBoR.P4d.E5TargetValidation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4dTargetTest::RunTest(const FString&)
+{
+	FP3World E;
+	for (auto Rule : {EVBoRStepRule::PoweredOpen,EVBoRStepRule::PoweredClosed})
+	{
+		E.Steps({P3Step(TEXT("04"),Rule,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None)});
+		TestTrue(TEXT("E5 wrong type blocks"),!E.Runner->IsRunning() && E.Runner->ValidationProblems.Contains(TEXT("종류 불일치")));
+		E.Steps({P3Step(TEXT("04"),Rule,TEXT("Car.MissingGate"),EVBoRConfirmBy::None)});
+		TestTrue(TEXT("E5 missing tag blocks"),!E.Runner->IsRunning() && E.Runner->ValidationProblems.Contains(TEXT("0개 발견")));
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4dStandTest, "vBoR.P4d.E6E7SupplyFloorResetCleanup", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4dStandTest::RunTest(const FString&)
+{
+	FP3World E; auto* S = E.Car->BoxStand.Get(); auto* First = S->SourceBox.Get(); const FTransform Start = First->GetActorTransform();
+	FP4dTestAccess::Grab(First); S->Tick(0); TestEqual(TEXT("E6 grabbing alone keeps one"),P4dBoxes(E.World,S),1);
+	First->AddActorWorldOffset(FVector(0,0,5)); S->Tick(0); TestEqual(TEXT("E6 overlap keeps one"),P4dBoxes(E.World,S),1);
+	First->SetActorLocation(Start.GetLocation()+FVector(0,0,31)); S->Tick(0); TestEqual(TEXT("E6 one cm boundary still occupied"),P4dBoxes(E.World,S),1);
+	First->SetActorLocation(Start.GetLocation()+FVector(0,0,40)); FP4dTestAccess::Pause(First,true); S->Tick(0);
+	TestEqual(TEXT("E6 paused clear source is not replenished"),P4dBoxes(E.World,S),1);
+	FP4dTestAccess::Pause(First,false); S->Tick(0); TestEqual(TEXT("E6 clear source makes one more"),P4dBoxes(E.World,S),2);
+	TestTrue(TEXT("E6 replacement at original pose"),S->SourceBox->GetActorTransform().Equals(Start));
+	S->Tick(0); TestEqual(TEXT("E6 only one replacement"),P4dBoxes(E.World,S),2);
+	First->SetActorLocation(FVector(-500,300,25)); FP4dTestAccess::Release(First); First->Tick(1);
+	TestFalse(TEXT("E7 released box reaches floor and disappears"),IsValid(First));
+	TestEqual(TEXT("E7 floor leaves one"),P4dBoxes(E.World,S),1);
+	auto* Before = S->SourceBox.Get(); S->ResetStand(); TestFalse(TEXT("E7 reset destroys old source"),IsValid(Before));
+	TestEqual(TEXT("E7 reset creates one"),P4dBoxes(E.World,S),1);
+	auto* Last = S->SourceBox.Get(); S->Destroy(); TestFalse(TEXT("E7 EndPlay cleans source"),IsValid(Last));
+	TestEqual(TEXT("E7 EndPlay cleans all"),P4dBoxes(E.World,S),0);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4dRestartTest, "vBoR.P4d.E8E9Restart", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4dRestartTest::RunTest(const FString&)
+{
+	for (bool bPassenger : {false,true}) for (bool bClosing : {false,true})
+	{
+		FP3World E; auto* S = E.Car->BoxStand.Get(); auto* G = E.Car->Liftgate.Get();
+		E.Steps({P3Step(TEXT("01")),P3Step(TEXT("04"),EVBoRStepRule::PoweredOpen,TEXT("Car.Liftgate"),EVBoRConfirmBy::None)});
+		TArray<AVBoRCarryObject*> Old;
+		for (int32 I = 0; I < 2; ++I)
+		{
+			auto* Box = S->SourceBox.Get(); Old.Add(Box); FP4dTestAccess::Grab(Box);
+			Box->SetActorLocation(FVector(-180,I == 0 ? -22 : 22,90)); FP4dTestAccess::Release(Box); Box->Tick(0); S->Tick(0);
+		}
+		Old.Add(S->SourceBox); FP4dTestAccess::Grab(S->SourceBox);
+		P4dOpen(G); if (bClosing) { G->RequestClose(); G->Tick(1.5); }
+		E.Car->Door->Unlock(); E.DoorMotion().AngleDeg = 40;
+		const FTransform KeyPose = E.Car->FrontKeyTable->Key->GetActorTransform(); FP4cTestAccess::Hold(E.Car->FrontKeyTable->Key);
+		if (bPassenger) { E.Command(EVBoRFlowCommand::Passenger); E.FinishSwitch(); }
+		E.Command(EVBoRFlowCommand::Restart);
+		for (auto* Box : Old) { TestFalse(TEXT("E8/E9 all old boxes gone"),IsValid(Box)); }
+		TestEqual(TEXT("E8/E9 one new box"),P4dBoxes(E.World,S),1);
+		TestEqual(TEXT("E8/E9 closed gate"),G->GetState(),EVBoRPoweredState::Closed);
+		TestTrue(TEXT("E8/E9 locked closed door"),E.DoorMotion().bLocked && E.DoorMotion().AngleDeg == 0);
+		TestTrue(TEXT("E8/E9 key unchanged"),E.Car->FrontKeyTable->Key->GetActorTransform().Equals(KeyPose) && E.Car->FrontKeyTable->Key->GetHoldingHand() == 0);
+		if (bPassenger) { TestFalse(TEXT("E9 waits for base"),E.Runner->IsRunning()); E.FinishSwitch(); E.Runner->ProcessFlow(0); }
+		TestTrue(TEXT("E8/E9 running 01 on base"),E.Runner->IsRunning() && E.Runner->GetStepIndex() == 0 && E.Car->Alignment->IsBaseViewpoint());
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4dAreaTest, "vBoR.P4d.E11UnknownAreaRecovery", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4dAreaTest::RunTest(const FString&)
+{
+	for (bool bInside : {true,false})
+	{
+		FP3World E; FP3bRecords Records; E.HeadXR->PlayArea = FVector2D::ZeroVector;
+		E.Steps({P3bStep(TEXT("03"),TEXT("Route.AroundCar"))});
+		E.Runner->ProcessFlow(0); E.Runner->ProcessFlow(0);
+		TestTrue(TEXT("E11 unknown hidden"),E.Car->AroundCarRoute->IsHidden());
+		TestEqual(TEXT("E11 unknown recorded once"),Records.Count(TEXT("play area unknown")),1);
+		E.HeadXR->PlayArea = bInside ? FVector2D(10000,10000) : FVector2D(100,100); E.Runner->ProcessFlow(0);
+		TestEqual(TEXT("E11 visibility after bounds arrive"),E.Car->AroundCarRoute->IsHidden(),!bInside);
+		TestEqual(TEXT("E11 outside recorded once if necessary"),Records.Count(TEXT("outside the play area")),bInside ? 0 : 1);
+		TestEqual(TEXT("E11 notice cleared or replaced"),E.Runner->GetOperatorText().Contains(TEXT("play area unknown")),false);
+		E.HeadXR->PlayArea = FVector2D(10000,10000); E.Runner->ProcessFlow(0);
+		TestEqual(TEXT("E11 known outside does not retry"),E.Car->AroundCarRoute->IsHidden(),!bInside);
+		TestEqual(TEXT("E11 no repeated outside record"),Records.Count(TEXT("outside the play area")),bInside ? 0 : 1);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4dFlowTest, "vBoR.P4d.E12E13AssetRearFlow", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4dFlowTest::RunTest(const FString&)
+{
+	FP3World E; E.Runner->Scenario = LoadObject<UVBoRScenarioAsset>(nullptr,TEXT("/Game/P3/DA_P3_Scenario.DA_P3_Scenario"));
+	if (!TestNotNull(TEXT("E12 asset loads"),E.Runner->Scenario.Get())) { return false; }
+	TestTrue(TEXT("E13 asset validates"),E.Runner->InitializeFlow());
+	E.Command(EVBoRFlowCommand::Next); E.Command(EVBoRFlowCommand::Next);
+	TestTrue(TEXT("E13 03 route visible"),E.Runner->GetStepIndex() == 2 && !E.Car->AroundCarRoute->IsHidden());
+	E.Command(EVBoRFlowCommand::Confirm); TestEqual(TEXT("E13 04"),E.Runner->GetStepIndex(),3);
+	P4dOpen(E.Car->Liftgate); E.Runner->ProcessFlow(0); TestEqual(TEXT("E13 05"),E.Runner->GetStepIndex(),4);
+	E.Runner->ProcessFlow(1); TestEqual(TEXT("E13 05 waits for operator"),E.Runner->GetStepIndex(),4);
+	E.Command(EVBoRFlowCommand::Confirm); TestEqual(TEXT("E13 06"),E.Runner->GetStepIndex(),5);
+	E.Car->Liftgate->RequestClose(); E.Car->Liftgate->Tick(6); E.Runner->ProcessFlow(0);
+	TestTrue(TEXT("E13 07 route visible"),E.Runner->GetStepIndex() == 6 && !E.Car->DriverDoorRoute->IsHidden());
 	return true;
 }
 #endif

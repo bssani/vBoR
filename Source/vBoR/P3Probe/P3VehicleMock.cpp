@@ -1,4 +1,8 @@
 #include "P3VehicleMock.h"
+#include "../P1Probe/P1TrunkMock.h"
+#include "../Interaction/VBoRPoweredPanel.h"
+#include "../Interaction/VBoRLoadTarget.h"
+#include "../Interaction/VBoRBoxStand.h"
 #include "../Interaction/VBoRFloorRoute.h"
 #include "Components/BoxComponent.h"
 #include "Components/SplineComponent.h"
@@ -78,7 +82,9 @@ void AP3VehicleMock::OnConstruction(const FTransform& Transform)
 	Plate(0,FVector(0,0,1),FVector(BodySizeCm.X,BodySizeCm.Y,2));
 	Plate(1,FVector(-40,0,Z),FVector(BodySizeCm.X-120,BodySizeCm.Y,3));
 	Plate(2,FVector(X-50,0,65),FVector(100,BodySizeCm.Y,5));
-	Plate(3,FVector(-X+10,0,55),FVector(20,BodySizeCm.Y,100));
+	// 개구부 바닥 아래만 남김 (트렁크 안을 뒤 벽 판이 가리지 않게, P4d D2, cm)
+	const float TrunkFloor = GetDefault<AP1TrunkMock>()->FloorHeightCm;
+	Plate(3,FVector(-X+10,0,TrunkFloor/2),FVector(20,BodySizeCm.Y,TrunkFloor));
 	Plate(4,FVector(0,Y,25),FVector(BodySizeCm.X,4,50));
 	Plate(5,FVector(35,Y,Z/2),FVector(5,4,Z));
 	Plate(6,FVector((-X-75)/2,-Y,25),FVector(X-75,4,50));
@@ -100,6 +106,11 @@ void AP3VehicleMock::BeginPlay()
 	MockLabel->SetSlateWidget(SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 32)).ColorAndOpacity(FLinearColor::Yellow).Text(FText::FromString(TEXT("시작 위치 / 근사 형상·자리값"))));
 	FrontKeyTable = CreateKeyTable(FrontKeyTableCm, TEXT("Car.FrontKey"), TEXT("Car.FrontKey.Unlock"), TEXT("Car.FrontKey.Lock"));
 	RearKeyTable = CreateKeyTable(RearKeyTableCm, TEXT("Car.RearKey"), TEXT("Car.RearKey.Unlock"), TEXT("Car.RearKey.Lock"));
+	CreateRearSection();
+	AroundCarRoute = GetWorld()->SpawnActorDeferred<AVBoRFloorRoute>(AVBoRFloorRoute::StaticClass(), GetActorTransform(), this);
+	AroundCarRoute->Tags.Add(TEXT("Route.AroundCar"));
+	AroundCarRoute->Spline->SetSplinePoints(AroundCarRoutePointsCm, ESplineCoordinateSpace::Local);
+	AroundCarRoute->FinishSpawning(GetActorTransform()); AroundCarRoute->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	DriverDoorRoute = GetWorld()->SpawnActorDeferred<AVBoRFloorRoute>(AVBoRFloorRoute::StaticClass(), GetActorTransform(), this);
 	DriverDoorRoute->Tags.Add(TEXT("Route.ToDriverDoor"));
 	DriverDoorRoute->Spline->SetSplinePoints(DriverDoorRoutePointsCm, ESplineCoordinateSpace::Local);
@@ -277,6 +288,11 @@ void AP3VehicleMock::PlaceReachButton()
 
 void AP3VehicleMock::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (BoxStand) { BoxStand->Destroy(); }
+	if (Liftgate) { Liftgate->Destroy(); }
+	if (LoadTarget) { LoadTarget->Destroy(); }
+	if (Trunk) { Trunk->Destroy(); }
+	if (AroundCarRoute) { AroundCarRoute->Destroy(); }
 	if (DriverDoorRoute) { DriverDoorRoute->Destroy(); }
 	if (Door) { Door->Destroy(); }
 	if (OutsideAxisHandle) { OutsideAxisHandle->Destroy(); }
@@ -296,4 +312,30 @@ void AP3VehicleMock::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (RearKeyTable) { RearKeyTable->Destroy(); }
 	MockLabel->SetSlateWidget(nullptr);
 	Super::EndPlay(EndPlayReason);
+}
+
+void AP3VehicleMock::CreateRearSection()
+{
+	const FTransform RearPose(GetActorQuat(), GetActorTransform().TransformPosition(FVector(-BodySizeCm.X/2,0,0)));
+	Trunk = GetWorld()->SpawnActor<AP1TrunkMock>(AP1TrunkMock::StaticClass(), RearPose);
+	Trunk->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+	Liftgate = GetWorld()->SpawnActorDeferred<AVBoRPoweredPanel>(AVBoRPoweredPanel::StaticClass(), RearPose, this);
+	Liftgate->Tags.Add(TEXT("Car.Liftgate"));
+	// 개구부 +X 가 차 안쪽. P1 시험대와 같은 축·버튼 자리값 (P4d D2, cm)
+	Liftgate->HingeLocationCm = FVector(0,0,Trunk->FloorHeightCm+Trunk->InsideHeightCm);
+	Liftgate->MeshRestFromRoot = FTransform(FQuat::Identity, FVector(-Trunk->PanelThicknessCm*0.5,0,Trunk->FloorHeightCm+Trunk->InsideHeightCm*0.5), FVector(Trunk->PanelThicknessCm,Trunk->InsideWidthCm,Trunk->InsideHeightCm)/100);
+	Liftgate->OpenButtonFromHinge.SetLocation(FVector(-Trunk->PanelThicknessCm-1,20,-Trunk->InsideHeightCm+10));
+	Liftgate->CloseButtonFromHinge.SetLocation(FVector(-Trunk->PanelThicknessCm-1,-20,-Trunk->InsideHeightCm+10));
+	Liftgate->FinishSpawning(RearPose); Liftgate->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+	const FVector Size(Trunk->InsideDepthCm,Trunk->InsideWidthCm,Trunk->InsideHeightCm);
+	const FTransform Goal(GetActorQuat(), RearPose.TransformPosition(FVector(Size.X/2,0,Trunk->FloorHeightCm+15)));
+	LoadTarget = GetWorld()->SpawnActorDeferred<AVBoRLoadTarget>(AVBoRLoadTarget::StaticClass(), Goal, this);
+	LoadTarget->bShowGuide = false; LoadTarget->GoalSizeCm = FVector(45,35,30);
+	LoadTarget->FinishSpawning(Goal); LoadTarget->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+	LoadTarget->LoadingRegion->SetBoxExtent(Size/2);
+	LoadTarget->LoadingRegion->SetWorldTransform(FTransform(GetActorQuat(), RearPose.TransformPosition(FVector(Size.X/2,0,Trunk->FloorHeightCm+Size.Z/2))));
+	const FTransform StandPose(GetActorQuat(), GetActorTransform().TransformPosition(RearBoxStandCm));
+	BoxStand = GetWorld()->SpawnActorDeferred<AVBoRBoxStand>(AVBoRBoxStand::StaticClass(), StandPose, this);
+	BoxStand->Tags.Add(TEXT("Car.BoxStand")); BoxStand->LoadTarget = LoadTarget;
+	BoxStand->FinishSpawning(StandPose); BoxStand->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 }
