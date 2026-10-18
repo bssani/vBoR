@@ -5,7 +5,7 @@
 #include "VBoRScenarioAsset.generated.h"
 
 UENUM(BlueprintType)
-enum class EVBoRStepRule : uint8 { Confirm, Approach, Seated, ButtonPressed, DoorUnlocked, DoorOpened, DoorLatched, Viewpoint };
+enum class EVBoRStepRule : uint8 { Confirm, Approach, Seated, ButtonPressed, DoorUnlocked, DoorOpened, DoorLatched, Viewpoint, KeyHeld, KeyUnlockAndLock };
 UENUM(BlueprintType)
 enum class EVBoRConfirmBy : uint8 { None, Participant, Operator, Either };
 

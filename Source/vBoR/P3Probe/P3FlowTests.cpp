@@ -14,6 +14,8 @@
 #include "../Interaction/VBoRViewpointComponent.h"
 #include "../Interaction/VBoRHingedDoor.h"
 #include "../Interaction/VBoRPokeButton.h"
+#include "../Interaction/VBoRKeyTable.h"
+#include "../Spectator/VBoRSpectatorModel.h"
 #include "Components/InputComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/WidgetComponent.h"
@@ -64,6 +66,16 @@ struct FP3bTestAccess
 	static double Dwell(AVBoRScenarioRunner* R) { return R->RouteDwellSeconds; }
 	static UArrowComponent* Arrow(AVBoRScenarioRunner* R) { return R->MarkerArrow; }
 	static const TArray<TObjectPtr<UStaticMeshComponent>>& Ring(AVBoRScenarioRunner* R) { return R->MarkerRing; }
+};
+
+struct FP4cTestAccess
+{
+	// 쥔 상태·키 이벤트만 합성함. 실제 잡기·버튼 필터는 P4a 시험 범위 (P4c §5)
+	static void Hold(AVBoRKeyFob* Key, int32 Hand = 0) { Key->HoldingHand = Hand; }
+	static FIntPoint Counts(AVBoRScenarioRunner* R, AVBoRKeyFob* Key) { return R->KeyCounts.FindRef(Key); }
+	static bool Pending(AVBoRScenarioRunner* R) { return R->bStartHeadPending; }
+	static bool Bound(AVBoRScenarioRunner* R, AVBoRKeyFob* Key)
+	{ return Key->OnUnlockPressed.IsAlreadyBound(R, &AVBoRScenarioRunner::HandleKeyUnlock) || Key->OnLockPressed.IsAlreadyBound(R, &AVBoRScenarioRunner::HandleKeyLock); }
 };
 
 namespace
@@ -822,6 +834,202 @@ bool FP3bStartTest::RunTest(const FString&)
 	TArray<USceneComponent*> Components; E.Car->GetComponents(Components);
 	for (auto* C : Components) { C->ComponentTags.Remove(TEXT("Car.Start")); }
 	E.Steps({P3Step(TEXT("01"))}); E.Runner->ProcessFlow(0.1); TestEqual(TEXT("No marker keeps first tracked frame behavior"),Records.Count(TEXT("시작 위치 |")),2);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4cHeldTest, "vBoR.P4c.E1E2E3KeyHeld", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4cHeldTest::RunTest(const FString&)
+{
+	FP3World E; AVBoRKeyFob* Key = E.Car->FrontKeyTable->Key;
+	E.Steps({P3Step(TEXT("01"),EVBoRStepRule::KeyHeld,TEXT("Car.FrontKey"),EVBoRConfirmBy::None),
+		P3Step(TEXT("02"),EVBoRStepRule::KeyUnlockAndLock,TEXT("Car.FrontKey"))});
+	E.Runner->ProcessFlow(0); TestEqual(TEXT("E1 unheld waits"),E.Runner->GetStepIndex(),0);
+	Key->OnUnlockPressed.Broadcast(Key); Key->OnLockPressed.Broadcast(Key);
+	FP4cTestAccess::Hold(Key); E.Runner->ProcessFlow(0);
+	TestEqual(TEXT("E1 held advances to 02"),E.Runner->GetStepIndex(),1);
+	TestTrue(TEXT("E1 participant rule recorded"),E.Runner->LastCompletion.Contains(TEXT("참가자 규칙")));
+	E.Command(EVBoRFlowCommand::Confirm); TestEqual(TEXT("E3 events before 02 ignored"),E.Runner->GetStepIndex(),1);
+	Key->OnUnlockPressed.Broadcast(Key); Key->OnLockPressed.Broadcast(Key);
+	E.Command(EVBoRFlowCommand::Previous);
+	TestEqual(TEXT("E2/E3 entering 01 cannot finish in same frame"),E.Runner->GetStepIndex(),0);
+	E.Runner->ProcessFlow(0); TestEqual(TEXT("E3 held key returns to 02 next frame"),E.Runner->GetStepIndex(),1);
+	E.Command(EVBoRFlowCommand::Confirm); TestEqual(TEXT("E3 new baseline ignores earlier 02 presses"),E.Runner->GetStepIndex(),1);
+	TestTrue(TEXT("E2 reinitialize already holding key"),E.Runner->InitializeFlow());
+	TestEqual(TEXT("E2 initialization enters 01"),E.Runner->GetStepIndex(),0);
+	E.Runner->ProcessFlow(0); TestEqual(TEXT("E2 next frame advances"),E.Runner->GetStepIndex(),1);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4cButtonsTest, "vBoR.P4c.E4E5KeyButtons", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4cButtonsTest::RunTest(const FString&)
+{
+	for (bool bUnlockFirst : {false,true})
+	{
+		FP3World E; AVBoRKeyFob* Key = E.Car->FrontKeyTable->Key; AVBoRKeyFob* Rear = E.Car->RearKeyTable->Key;
+		E.Steps({P3Step(TEXT("01"),EVBoRStepRule::KeyHeld,TEXT("Car.FrontKey"),EVBoRConfirmBy::None),
+			P3Step(TEXT("02"),EVBoRStepRule::KeyUnlockAndLock,TEXT("Car.FrontKey")),P3Step(TEXT("03"))});
+		Key->OnUnlockPressed.Broadcast(Key); Key->OnLockPressed.Broadcast(Key);
+		FP4cTestAccess::Hold(Key); E.Runner->ProcessFlow(0);
+		E.Command(EVBoRFlowCommand::Confirm); TestEqual(TEXT("E5 01 presses ignored"),E.Runner->GetStepIndex(),1);
+		Rear->OnUnlockPressed.Broadcast(Rear); Rear->OnLockPressed.Broadcast(Rear);
+		E.Command(EVBoRFlowCommand::Confirm); TestEqual(TEXT("E5 rear presses ignored"),E.Runner->GetStepIndex(),1);
+		TestTrue(TEXT("E4 no confirmation button before both"),FP3FlowTestAccess::Confirm(E.Runner)->IsHidden());
+		if (bUnlockFirst) { Key->OnUnlockPressed.Broadcast(Key); } else { Key->OnLockPressed.Broadcast(Key); }
+		E.Command(EVBoRFlowCommand::Confirm); TestEqual(TEXT("E4 one kind waits"),E.Runner->GetStepIndex(),1);
+		if (bUnlockFirst) { Key->OnLockPressed.Broadcast(Key); } else { Key->OnUnlockPressed.Broadcast(Key); }
+		E.Runner->ProcessFlow(0);
+		TestEqual(TEXT("E4 both require confirmation"),E.Runner->GetStepIndex(),1);
+		TestFalse(TEXT("E4 participant confirmation visible"),FP3FlowTestAccess::Confirm(E.Runner)->IsHidden());
+		E.Command(EVBoRFlowCommand::Confirm);
+		TestEqual(TEXT("E4 Space advances after either order"),E.Runner->GetStepIndex(),2);
+		TestTrue(TEXT("E4 operator confirmation recorded"),E.Runner->LastCompletion.Contains(TEXT("진행자 확인")));
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4cBindingTest, "vBoR.P4c.E6KeyBindings", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4cBindingTest::RunTest(const FString&)
+{
+	FP3World E; AVBoRKeyFob* Key = E.Car->FrontKeyTable->Key;
+	E.Steps({P3Step(TEXT("02"),EVBoRStepRule::KeyUnlockAndLock,TEXT("Car.FrontKey"))});
+	TestTrue(TEXT("E6 reinitialize"),E.Runner->InitializeFlow());
+	Key->OnUnlockPressed.Broadcast(Key); Key->OnLockPressed.Broadcast(Key);
+	TestEqual(TEXT("E6 one broadcast counted once"),FP4cTestAccess::Counts(E.Runner,Key),FIntPoint(1,1));
+	E.Steps({P3Step(TEXT("02"),EVBoRStepRule::KeyUnlockAndLock,TEXT("Car.RearKey"))});
+	TestFalse(TEXT("E6 old target unbound"),FP4cTestAccess::Bound(E.Runner,Key));
+	E.Steps({P3Step(TEXT("02"),EVBoRStepRule::KeyUnlockAndLock,TEXT("Car.FrontKey"))});
+	TestTrue(TEXT("E6 target bound"),FP4cTestAccess::Bound(E.Runner,Key));
+	E.Runner->Destroy(); TestFalse(TEXT("E6 EndPlay unbound"),FP4cTestAccess::Bound(E.Runner,Key));
+	Key->OnUnlockPressed.Broadcast(Key); Key->OnLockPressed.Broadcast(Key);
+	TestEqual(TEXT("E6 EndPlay receives no events"),FP4cTestAccess::Counts(E.Runner,Key),FIntPoint::ZeroValue);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4cValidationTest, "vBoR.P4c.E7KeyValidation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4cValidationTest::RunTest(const FString&)
+{
+	FP3World E;
+	for (EVBoRStepRule Rule : {EVBoRStepRule::KeyHeld,EVBoRStepRule::KeyUnlockAndLock})
+	{
+		for (const TCHAR* Tag : {TEXT("Car.DriverDoor"),TEXT("Car.MissingKey")})
+		{
+			E.Runner->Scenario->Steps = {P3Step(TEXT("01"),Rule,Tag)};
+			TestFalse(TEXT("E7 invalid target blocks initialization"),E.Runner->InitializeFlow());
+			TestFalse(TEXT("E7 flow stopped"),E.Runner->IsRunning());
+			TestTrue(TEXT("E7 mismatch diagnostic"),E.Runner->ValidationProblems.Contains(TEXT("종류 불일치")));
+			if (FName(Tag) == TEXT("Car.MissingKey")) { TestTrue(TEXT("E7 missing tag diagnostic"),E.Runner->ValidationProblems.Contains(TEXT("0개 발견"))); }
+		}
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4cStartTest, "vBoR.P4c.E8StartAttempts", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4cStartTest::RunTest(const FString&)
+{
+	FP3World E; FP3bRecords Records;
+	const FTransform Outside(FRotator::ZeroRotator,FVector(0,0,160));
+	const FTransform Start(FRotator::ZeroRotator,E.Car->GetActorTransform().TransformPosition(FVector(485,0,160.5)));
+	E.Head(Outside); E.Steps({P3Step(TEXT("01")),P3Step(TEXT("02"))});
+	E.Command(EVBoRFlowCommand::Next); E.Command(EVBoRFlowCommand::Previous); E.Command(EVBoRFlowCommand::Next);
+	TestEqual(TEXT("E8.1 revisiting 01 does not repeat fallback"),Records.Count(TEXT("시작 표시를 거치지 않음")),1);
+	TestFalse(TEXT("E8.1 revisiting 01 never rearms"),FP4cTestAccess::Pending(E.Runner));
+	E.Runner->InitializeFlow(); E.Command(EVBoRFlowCommand::Previous);
+	TestTrue(TEXT("E8.2 previous at 01 preserves pending"),FP4cTestAccess::Pending(E.Runner));
+	TestEqual(TEXT("E8.2 previous at 01 no fallback"),Records.Count(TEXT("시작 표시를 거치지 않음")),1);
+	E.Head(Start); E.Runner->ProcessFlow(0); E.Command(EVBoRFlowCommand::Previous);
+	TestFalse(TEXT("E8.2 recorded start remains recorded"),FP4cTestAccess::Pending(E.Runner));
+	E.Runner->ProcessFlow(0); TestEqual(TEXT("E8.2 previous no duplicate start"),Records.Count(TEXT("시작 위치 |")),1);
+	E.Head(Outside); E.Runner->InitializeFlow(); E.Command(EVBoRFlowCommand::Restart);
+	TestEqual(TEXT("E8.3 R discards attempt without fallback"),Records.Count(TEXT("시작 표시를 거치지 않음")),1);
+	TestTrue(TEXT("E8.3 R rearms on base"),FP4cTestAccess::Pending(E.Runner));
+	E.Head(Start); E.Runner->ProcessFlow(0); TestEqual(TEXT("E8.3 start after R recorded"),Records.Count(TEXT("시작 위치 |")),2);
+	E.Head(Outside); E.Runner->InitializeFlow(); E.Command(EVBoRFlowCommand::Passenger); E.FinishSwitch();
+	E.Head(Outside); E.Command(EVBoRFlowCommand::Restart);
+	TestEqual(TEXT("E8.4 R at passenger no fallback"),Records.Count(TEXT("시작 표시를 거치지 않음")),1);
+	TestFalse(TEXT("E8.4 return transition does not record old attempt"),FP4cTestAccess::Pending(E.Runner));
+	E.FinishSwitch(); E.Head(Outside); E.Runner->ProcessFlow(0);
+	TestEqual(TEXT("E8.4 returned to 01"),E.Runner->GetStepIndex(),0);
+	TestTrue(TEXT("E8.4 return rearms start"),FP4cTestAccess::Pending(E.Runner));
+	E.Head(Start); E.Runner->ProcessFlow(0); TestEqual(TEXT("E8.4 start after return recorded"),Records.Count(TEXT("시작 위치 |")),3);
+	// 떠나는 입력 네 가지가 모두 같은 fallback 경로를 씀 (P4c D3)
+	for (EVBoRFlowCommand Action : {EVBoRFlowCommand::Next,EVBoRFlowCommand::Confirm,EVBoRFlowCommand::EnterFreeMode})
+	{
+		E.Head(Outside); E.Runner->InitializeFlow(); const int32 Before = Records.Count(TEXT("시작 표시를 거치지 않음"));
+		E.Command(Action); TestEqual(TEXT("E8 leave records once"),Records.Count(TEXT("시작 표시를 거치지 않음")),Before+1);
+	}
+	E.Head(Outside); E.Steps({P3Step(TEXT("01"),EVBoRStepRule::KeyHeld,TEXT("Car.FrontKey"),EVBoRConfirmBy::None),P3Step(TEXT("02"))});
+	const int32 Before = Records.Count(TEXT("시작 표시를 거치지 않음")); FP4cTestAccess::Hold(E.Car->FrontKeyTable->Key); E.Runner->ProcessFlow(0);
+	TestEqual(TEXT("E8 rule leave records once"),Records.Count(TEXT("시작 표시를 거치지 않음")),Before+1);
+	E.Car->Alignment->State = EVBoRAlignmentState::NoSavedValue; TestFalse(TEXT("Alignment blocks new attempt"),E.Runner->InitializeFlow());
+	E.Command(EVBoRFlowCommand::IgnoreAlignment); TestTrue(TEXT("O starts pending attempt"),FP4cTestAccess::Pending(E.Runner));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4cAssetTest, "vBoR.P4c.E9ScenarioAsset", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4cAssetTest::RunTest(const FString&)
+{
+	const auto* Asset = LoadObject<UVBoRScenarioAsset>(nullptr,TEXT("/Game/P3/DA_P3_Scenario.DA_P3_Scenario"));
+	if (!TestNotNull(TEXT("E9 asset loads"),Asset)) { return false; }
+	struct FExpected { const TCHAR* Id; const TCHAR* Text; EVBoRStepRule Rule; const TCHAR* Tag; EVBoRConfirmBy By; };
+	const FExpected Expected[] = {
+		{TEXT("01"),TEXT("테이블의 키를 집으세요."),EVBoRStepRule::KeyHeld,TEXT("Car.FrontKey"),EVBoRConfirmBy::None},
+		{TEXT("02"),TEXT("키 버튼으로 외장 조명을 켜고 꺼 보세요."),EVBoRStepRule::KeyUnlockAndLock,TEXT("Car.FrontKey"),EVBoRConfirmBy::Either},
+		{TEXT("03"),TEXT("차량 주변을 둘러보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Either},
+		{TEXT("04"),TEXT("리프트게이트를 열어보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
+		{TEXT("05"),TEXT("박스를 적재해 보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
+		{TEXT("06"),TEXT("리프트게이트를 닫아보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
+		{TEXT("07"),TEXT("도어 핸들을 조작해 보세요."),EVBoRStepRule::DoorUnlocked,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None},
+		{TEXT("08"),TEXT("문을 열어보세요."),EVBoRStepRule::DoorOpened,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None},
+		{TEXT("09"),TEXT("차량에 탑승해 보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
+		{TEXT("10"),TEXT("좌석에 앉아보세요."),EVBoRStepRule::Seated,TEXT("Car.DriverSeat"),EVBoRConfirmBy::Operator},
+		{TEXT("11"),TEXT("문을 닫아보세요."),EVBoRStepRule::DoorLatched,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None},
+		{TEXT("12"),TEXT("실내를 둘러보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Either},
+		{TEXT("13"),TEXT("가장 먼 버튼까지 손가락을 뻗어보세요."),EVBoRStepRule::ButtonPressed,TEXT("Car.ReachButton"),EVBoRConfirmBy::None},
+		{TEXT("14"),TEXT("동승석 위치에서 확인하세요."),EVBoRStepRule::Viewpoint,TEXT("Car.PassengerView"),EVBoRConfirmBy::Either},
+		{TEXT("15"),TEXT("2열 위치에서 확인하세요."),EVBoRStepRule::Viewpoint,TEXT("Car.RearView"),EVBoRConfirmBy::Either},
+		{TEXT("16"),TEXT("시트 폴딩 각도를 확인하세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
+		{TEXT("18"),TEXT("하차를 위해 문을 열어보세요."),EVBoRStepRule::DoorOpened,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None},
+		{TEXT("19"),TEXT("차량에서 내려보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
+		{TEXT("20"),TEXT("문을 닫아보세요."),EVBoRStepRule::DoorLatched,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None}
+	};
+	if (!TestEqual(TEXT("E9 nineteen steps"),Asset->Steps.Num(),static_cast<int32>(UE_ARRAY_COUNT(Expected)))) { return false; }
+	for (int32 I = 0; I < Asset->Steps.Num(); ++I)
+	{
+		const auto& S = Asset->Steps[I]; const auto& X = Expected[I]; const FString Prefix = FString::Printf(TEXT("E9 %s "),X.Id);
+		TestEqual(Prefix+TEXT("ID"),S.StepId,FName(X.Id)); TestEqual(Prefix+TEXT("instruction"),S.Instruction.ToString(),FString(X.Text));
+		TestEqual(Prefix+TEXT("rule"),S.Rule,X.Rule); TestEqual(Prefix+TEXT("target"),S.TargetTag,FName(X.Tag)); TestEqual(Prefix+TEXT("confirm"),S.ConfirmBy,X.By);
+		TestEqual(Prefix+TEXT("marker"),S.MarkerTag,I == 0 ? FName(TEXT("Car.FrontKey")) : NAME_None);
+		TestEqual(Prefix+TEXT("route"),S.RouteTag,I == 6 ? FName(TEXT("Route.ToDriverDoor")) : NAME_None);
+		TestEqual(Prefix+TEXT("base viewpoint"),S.bRequireBaseViewpoint,I == 16);
+		TestEqual(Prefix+TEXT("door deg"),S.DoorOpenDeg,45.0f); TestEqual(Prefix+TEXT("seated seconds"),S.SeatedSeconds,1.5f);
+		const FString TV = I == 0 ? TEXT("Pick up the key from the table.") : I == 1 ? TEXT("Turn the exterior lights on and off with the key.") : TEXT("");
+		TestEqual(Prefix+TEXT("TV"),S.SpectatorText.ToString(),TV);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4cIntegrationTest, "vBoR.P4c.E10E11E12MockAssetDefaults", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4cIntegrationTest::RunTest(const FString&)
+{
+	FP3World E; E.Runner->Scenario = LoadObject<UVBoRScenarioAsset>(nullptr,TEXT("/Game/P3/DA_P3_Scenario.DA_P3_Scenario"));
+	if (!TestNotNull(TEXT("E10 asset loads"),E.Runner->Scenario.Get())) { return false; }
+	TestTrue(TEXT("E10 asset initializes against mock"),E.Runner->InitializeFlow());
+	TestTrue(TEXT("E10 validation empty"),E.Runner->ValidationProblems.IsEmpty());
+	TestEqual(TEXT("E10 starts 01"),E.Runner->GetStepIndex(),0);
+	TestEqual(TEXT("E10 TV total"),VBoRSpectator::Banner(*E.Runner,FVBoRSpectatorLabels()).Total,19);
+	for (const TCHAR* Tag : {TEXT("Car.FrontKey"),TEXT("Car.RearKey"),TEXT("Car.FrontKey.Unlock"),TEXT("Car.FrontKey.Lock"),TEXT("Car.RearKey.Unlock"),TEXT("Car.RearKey.Lock")})
+	{
+		int32 Count = 0;
+		for (TActorIterator<AActor> It(E.World); It; ++It)
+		{
+			if (!It->ActorHasTag(Tag)) { continue; } ++Count;
+			TestTrue(TEXT("E11 tags have expected actor type"),FString(Tag).EndsWith(TEXT("Key")) ? It->IsA<AVBoRKeyFob>() : It->IsA<AVBoRPokeButton>());
+		}
+		TestEqual(FString(TEXT("E11 unique "))+Tag,Count,1);
+	}
+	const auto* Defaults = NewObject<UVBoRScenarioAsset>();
+	TestEqual(TEXT("E12 defaults still fourteen"),Defaults->Steps.Num(),14);
+	TestEqual(TEXT("E12 default 01 still Approach"),Defaults->Steps[0].Rule,EVBoRStepRule::Approach);
 	return true;
 }
 #endif

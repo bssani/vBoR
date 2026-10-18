@@ -98,8 +98,8 @@ void AP3VehicleMock::BeginPlay()
 {
 	Super::BeginPlay();
 	MockLabel->SetSlateWidget(SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 32)).ColorAndOpacity(FLinearColor::Yellow).Text(FText::FromString(TEXT("시작 위치 / 근사 형상·자리값"))));
-	FrontKeyTable = CreateKeyTable(FrontKeyTableCm, TEXT("Car.FrontKey.Unlock"), TEXT("Car.FrontKey.Lock"));
-	RearKeyTable = CreateKeyTable(RearKeyTableCm, TEXT("Car.RearKey.Unlock"), TEXT("Car.RearKey.Lock"));
+	FrontKeyTable = CreateKeyTable(FrontKeyTableCm, TEXT("Car.FrontKey"), TEXT("Car.FrontKey.Unlock"), TEXT("Car.FrontKey.Lock"));
+	RearKeyTable = CreateKeyTable(RearKeyTableCm, TEXT("Car.RearKey"), TEXT("Car.RearKey.Unlock"), TEXT("Car.RearKey.Lock"));
 	DriverDoorRoute = GetWorld()->SpawnActorDeferred<AVBoRFloorRoute>(AVBoRFloorRoute::StaticClass(), GetActorTransform(), this);
 	DriverDoorRoute->Tags.Add(TEXT("Route.ToDriverDoor"));
 	DriverDoorRoute->Spline->SetSplinePoints(DriverDoorRoutePointsCm, ESplineCoordinateSpace::Local);
@@ -243,7 +243,7 @@ void AP3VehicleMock::BeginPlay()
 	}
 }
 
-AVBoRKeyTable* AP3VehicleMock::CreateKeyTable(FVector PositionCm, const TCHAR* UnlockTag, const TCHAR* LockTag)
+AVBoRKeyTable* AP3VehicleMock::CreateKeyTable(FVector PositionCm, const TCHAR* KeyTag, const TCHAR* UnlockTag, const TCHAR* LockTag)
 {
 	if (!KeyTableClass) { return nullptr; }
 	const FTransform TableWorld = FTransform(PositionCm) * GetActorTransform();
@@ -251,6 +251,7 @@ AVBoRKeyTable* AP3VehicleMock::CreateKeyTable(FVector PositionCm, const TCHAR* U
 	Table->FinishSpawning(TableWorld); Table->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	if (Table->Key)
 	{
+		Table->Key->Tags.Add(KeyTag);
 		Table->Key->SpectatorName = FText::FromString(TEXT("Key"));
 		Table->Key->UnlockButton->Tags.Add(UnlockTag); Table->Key->LockButton->Tags.Add(LockTag);
 		Table->Key->OnUnlockPressed.AddDynamic(this, &AP3VehicleMock::KeyUnlockPressed);

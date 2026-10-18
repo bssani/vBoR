@@ -5,6 +5,7 @@
 #include "VBoRHingedDoor.h"
 #include "VBoRPokeButton.h"
 #include "VBoRFloorRoute.h"
+#include "VBoRKeyFob.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
@@ -169,6 +170,7 @@ void AVBoRScenarioRunner::BeginPlay()
 void AVBoRScenarioRunner::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	CloseOperatorWindow();
+	UnbindKeys();
 	for (const auto& Entry : ButtonCounts)
 	{ if (Entry.Key.IsValid()) { Entry.Key->OnButtonPressed.RemoveDynamic(this, &AVBoRScenarioRunner::HandleTargetPoke); } }
 	if (ConfirmButton) { ConfirmButton->Destroy(); }
@@ -183,6 +185,7 @@ void AVBoRScenarioRunner::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 bool AVBoRScenarioRunner::InitializeFlow()
 {
+	UnbindKeys(); bStartHeadPending = false;
 	bInitialized = true; bRunning = false; bFinished = false; ValidationProblems.Reset(); Targets.Reset(); Markers.Reset();
 	Routes.Reset(); FloorRouteNotice.Reset(); StartMarker = nullptr;
 	for (TActorIterator<AVBoRFloorRoute> It(GetWorld()); It; ++It) { It->SetRouteVisible(false); }
@@ -212,6 +215,7 @@ bool AVBoRScenarioRunner::InitializeFlow()
 		case EVBoRStepRule::ButtonPressed: Target = Cast<AVBoRPokeButton>(P3Actor(Raw)); break;
 		case EVBoRStepRule::DoorUnlocked: case EVBoRStepRule::DoorOpened: case EVBoRStepRule::DoorLatched: Target = Cast<AVBoRHingedDoor>(P3Actor(Raw)); break;
 		case EVBoRStepRule::Viewpoint: Target = P3Component<UVBoRViewpointComponent>(Raw); break;
+		case EVBoRStepRule::KeyHeld: case EVBoRStepRule::KeyUnlockAndLock: Target = Cast<AVBoRKeyFob>(P3Actor(Raw)); break;
 		}
 		if (Step.Rule != EVBoRStepRule::Confirm && !Target) { ValidationProblems += FString::Printf(TEXT("%s: 태그 %s 종류 불일치 또는 없음\n"), *Step.StepId.ToString(), *Step.TargetTag.ToString()); }
 		const FString Id = Step.StepId.ToString(); const int32 Number = FCString::Atoi(*Id);
@@ -247,6 +251,12 @@ bool AVBoRScenarioRunner::InitializeFlow()
 		{
 			ButtonCounts.FindOrAdd(Button) = 0; Button->OnButtonPressed.AddUniqueDynamic(this, &AVBoRScenarioRunner::HandleTargetPoke);
 		}
+		if (AVBoRKeyFob* Key = Cast<AVBoRKeyFob>(Target))
+		{
+			KeyCounts.FindOrAdd(Key) = FIntPoint::ZeroValue;
+			Key->OnUnlockPressed.AddUniqueDynamic(this, &AVBoRScenarioRunner::HandleKeyUnlock);
+			Key->OnLockPressed.AddUniqueDynamic(this, &AVBoRScenarioRunner::HandleKeyLock);
+		}
 	}
 	if (Alignment)
 	{
@@ -264,7 +274,7 @@ bool AVBoRScenarioRunner::InitializeFlow()
 	if (!ValidationProblems.IsEmpty()) { Record(TEXT("시작 차단:\n") + ValidationProblems); RefreshPanel(); return false; }
 	if (Alignment->State != EVBoRAlignmentState::Applied && !bAlignmentIgnored)
 	{ Record(TEXT("정렬 필요 — P0-c 레벨에서 C로 저장; O로 무시 가능 | ") + Alignment->Describe()); RefreshPanel(); return false; }
-	bRunning = true; EnterStep(0); RefreshPanel(); return true;
+	bRunning = true; EnterStep(0, true); RefreshPanel(); return true;
 }
 
 const FVBoRScenarioStep* AVBoRScenarioRunner::CurrentStep() const
@@ -286,6 +296,12 @@ bool AVBoRScenarioRunner::RuleSatisfied() const
 	case EVBoRStepRule::DoorOpened: { const auto* C = Cast<AVBoRHingedDoor>(Target); return C && C->GetMotion().AngleDeg >= Step->DoorOpenDeg; }
 	case EVBoRStepRule::DoorLatched: { const auto* C = Cast<AVBoRHingedDoor>(Target); return C && C->GetMotion().bLocked && C->GetMotion().AngleDeg <= C->LatchAngleDeg; }
 	case EVBoRStepRule::Viewpoint: return Alignment && Alignment->IsAtViewpoint(Cast<UVBoRViewpointComponent>(Target));
+	case EVBoRStepRule::KeyHeld: { const auto* Key = Cast<AVBoRKeyFob>(Target); return Key && Key->GetHoldingHand() != INDEX_NONE; }
+	case EVBoRStepRule::KeyUnlockAndLock:
+	{
+		const FIntPoint Counts = KeyCounts.FindRef(Cast<AVBoRKeyFob>(Target));
+		return Counts.X > KeyBaseline.X && Counts.Y > KeyBaseline.Y;
+	}
 	}
 	return false;
 }
@@ -302,12 +318,13 @@ bool AVBoRScenarioRunner::CanParticipantConfirm() const
 	return bRunning && !bPanelPlacementPending && ConfirmLockRemaining <= 0 && Step && NeedsConfirmation() && Step->ConfirmBy != EVBoRConfirmBy::Operator && RuleSatisfied();
 }
 
-void AVBoRScenarioRunner::EnterStep(int32 Index)
+void AVBoRScenarioRunner::EnterStep(int32 Index, bool bNewAttempt)
 {
-	if (StepIndex == 0) { RecordStartFallback(); }
+	if (StepIndex == 0 && Index != 0) { RecordStartFallback(); }
 	OperatorCompletedSteps = FMath::Max(0, Index);
 	StepIndex = Index; ++Generation; StepElapsed = 0; ConfirmLockRemaining = FMath::Max(0.0f, ConfirmLockSeconds); bSeatHeadRecorded = false;
-	if (Index == 0) { bStartHeadPending = true; }
+	// 이전 단계로 돌아가도 같은 시도의 시작 기록을 유지함 (P4c D3)
+	if (bNewAttempt) { bStartHeadPending = true; }
 	if (!CurrentStep())
 	{
 		EnterFreeMode(true); return;
@@ -315,6 +332,7 @@ void AVBoRScenarioRunner::EnterStep(int32 Index)
 	else
 	{
 		ButtonBaseline = ButtonCounts.FindRef(Cast<AVBoRPokeButton>(Targets[Index]));
+		KeyBaseline = KeyCounts.FindRef(Cast<AVBoRKeyFob>(Targets[Index]));
 		Record(FString::Printf(TEXT("단계 시작 %s %d/%d generation=%llu | 이전 %d 재시도 %d 건너뛰기 %d"), *CurrentStep()->StepId.ToString(), Index + 1, Scenario->Steps.Num(), Generation, PreviousCount, RetryCount, SkipCount));
 	}
 	BeginRoute(); PlacePanel(); UpdateMarker();
@@ -392,7 +410,7 @@ void AVBoRScenarioRunner::ProcessFlow(double DeltaSeconds)
 	for (const auto& Command : Commands) { Dispatch(Command); }
 	if (bReapplyPending && Alignment && !Alignment->IsSwitching()) { FinishReapply(); }
 	if (bRestartPending && Alignment && !Alignment->IsSwitching())
-	{ bRestartPending = false; bRunning = true; bFinished = false; EnterStep(0); }
+	{ bRestartPending = false; bRunning = true; bFinished = false; EnterStep(0, true); }
 	// 한 frame 에 규칙으로 여러 단계를 넘기지 않음 (P3 E1·E2)
 	if (bRunning && Generation == Before && RuleSatisfied() && !NeedsConfirmation()) { CompleteStep(TEXT("참가자 규칙")); }
 	RefreshPanel();
@@ -406,7 +424,7 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 	const bool bOperator = Command.Source == EVBoRCommandSource::Operator;
 	if (Command.Action == EVBoRFlowCommand::IgnoreAlignment)
 	{
-		bAlignmentIgnored = true; Record(TEXT("진행자 정렬 무시하고 시작")); bRunning = true; EnterStep(0); return;
+		bAlignmentIgnored = true; Record(TEXT("진행자 정렬 무시하고 시작")); bRunning = true; EnterStep(0, true); return;
 	}
 	if (Command.Action == EVBoRFlowCommand::Viewpoint || Command.Action == EVBoRFlowCommand::Passenger || Command.Action == EVBoRFlowCommand::Rear || Command.Action == EVBoRFlowCommand::ReturnBase)
 	{
@@ -449,8 +467,9 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 		}
 		Record(TEXT("진행자 처음부터 — 문 닫힘·잠김, 기준 복귀"));
 		bFreeMode = false;
-		if (!Alignment->IsBaseViewpoint()) { RecordStartFallback(); bRestartPending = Alignment->ReturnToBase(); bRunning = false; ++Generation; BeginRoute(); UpdateMarker(); }
-		else { bRunning = true; bFinished = false; EnterStep(0); }
+		bStartHeadPending = false;
+		if (!Alignment->IsBaseViewpoint()) { bRestartPending = Alignment->ReturnToBase(); bRunning = false; ++Generation; BeginRoute(); UpdateMarker(); }
+		else { bRunning = true; bFinished = false; EnterStep(0, true); }
 		break;
 	default: break;
 	}
@@ -698,6 +717,18 @@ void AVBoRScenarioRunner::RecordStartFallback()
 }
 
 void AVBoRScenarioRunner::Record(const FString& Text) { LastRecord = Text; UE_LOG(LogP3Flow, Log, TEXT("%s"), *Text); }
+void AVBoRScenarioRunner::UnbindKeys()
+{
+	for (const auto& Entry : KeyCounts)
+	{
+		if (!Entry.Key.IsValid()) { continue; }
+		Entry.Key->OnUnlockPressed.RemoveDynamic(this, &AVBoRScenarioRunner::HandleKeyUnlock);
+		Entry.Key->OnLockPressed.RemoveDynamic(this, &AVBoRScenarioRunner::HandleKeyLock);
+	}
+	KeyCounts.Reset();
+}
+void AVBoRScenarioRunner::HandleKeyUnlock(AVBoRKeyFob* Key) { if (FIntPoint* Counts = KeyCounts.Find(Key)) { ++Counts->X; } }
+void AVBoRScenarioRunner::HandleKeyLock(AVBoRKeyFob* Key) { if (FIntPoint* Counts = KeyCounts.Find(Key)) { ++Counts->Y; } }
 void AVBoRScenarioRunner::HandleConfirmPoke(const FIsdkInteractionPointerEvent&) { QueueLive(bFreeMode ? FreeSeatActions[0] : EVBoRFlowCommand::Confirm, EVBoRCommandSource::Participant); }
 void AVBoRScenarioRunner::HandleActionPoke(const FIsdkInteractionPointerEvent&) { QueueLive(bFreeMode ? FreeSeatActions[1] : PanelAction, EVBoRCommandSource::Participant); }
 void AVBoRScenarioRunner::HandleTargetPoke(const FIsdkInteractionPointerEvent& Event)

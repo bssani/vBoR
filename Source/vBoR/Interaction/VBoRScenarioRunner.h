@@ -18,6 +18,7 @@ class UStaticMeshComponent;
 class STextBlock;
 class SBorder;
 class AVBoRFloorRoute;
+class AVBoRKeyFob;
 
 enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel, ReapplyAlignment };
 enum class EVBoRCommandSource : uint8 { Participant, Operator };
@@ -86,6 +87,7 @@ private:
 	friend struct FP5gTestAccess;
 	friend struct FP5iTestAccess;
 	friend struct FP3bTestAccess;
+	friend struct FP4cTestAccess;
 	UPROPERTY() TObjectPtr<UVBoRVehicleAlignmentComponent> Alignment;
 	UPROPERTY() TObjectPtr<UVBoRApproachZoneComponent> Approach;
 	UPROPERTY() TObjectPtr<UVBoRSeatZoneComponent> Seat;
@@ -106,6 +108,9 @@ private:
 	void SampleRoute(bool bTracked, const FTransform& Head, double DeltaSeconds);
 	void RecordStartFallback();
 	TMap<TWeakObjectPtr<AVBoRPokeButton>, int32> ButtonCounts;
+	TMap<TWeakObjectPtr<AVBoRKeyFob>, FIntPoint> KeyCounts;
+	FIntPoint KeyBaseline = FIntPoint::ZeroValue;
+	void UnbindKeys();
 	TSharedPtr<STextBlock> PanelText;
 	TSharedPtr<STextBlock> OperatorText;
 	TSharedPtr<SBorder> PanelBorder;
@@ -142,7 +147,7 @@ private:
 	bool RuleSatisfied() const;
 	bool NeedsConfirmation() const;
 	bool CanParticipantConfirm() const;
-	void EnterStep(int32 Index);
+	void EnterStep(int32 Index, bool bNewAttempt = false);
 	void EnterFreeMode(bool bCompleted);
 	void CompleteStep(const TCHAR* Who);
 	void Dispatch(const FVBoRFlowCommand& Command);
@@ -160,6 +165,8 @@ private:
 	UFUNCTION() void HandleConfirmPoke(const FIsdkInteractionPointerEvent& Event);
 	UFUNCTION() void HandleActionPoke(const FIsdkInteractionPointerEvent& Event);
 	UFUNCTION() void HandleTargetPoke(const FIsdkInteractionPointerEvent& Event);
+	UFUNCTION() void HandleKeyUnlock(AVBoRKeyFob* Key);
+	UFUNCTION() void HandleKeyLock(AVBoRKeyFob* Key);
 	void KeyConfirm(); void KeyNext(); void KeyPrevious(); void KeyPassenger(); void KeyRear(); void KeyReturn(); void KeyRestart(); void KeyIgnore();
 	void KeyOperatorInfo();
 	void KeyFreeMode(); void KeyReloadLevel();

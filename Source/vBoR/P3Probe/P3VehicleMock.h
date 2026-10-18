@@ -121,7 +121,7 @@ private:
 	friend struct FP5eTestAccess;
 	friend struct FP5fTestAccess;
 	void PlaceReachButton();
-	AVBoRKeyTable* CreateKeyTable(FVector PositionCm, const TCHAR* UnlockTag, const TCHAR* LockTag);
+	AVBoRKeyTable* CreateKeyTable(FVector PositionCm, const TCHAR* KeyTag, const TCHAR* UnlockTag, const TCHAR* LockTag);
 	UFUNCTION() void KeyUnlockPressed(AVBoRKeyFob* Key);
 	UFUNCTION() void KeyLockPressed(AVBoRKeyFob* Key);
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> Plates;

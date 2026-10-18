@@ -25,7 +25,67 @@ MCP `inspect.get_property`로 `/Game/P3/DA_P3_Scenario.DA_P3_Scenario`의 `Steps
 - 기존 시험 중 이 에셋을 읽는 것은 없다(`main`의 `P3FlowTests.cpp`에 `/Game/P3` 0건, Claude 확인). 그래서 에셋을 19개로 바꿔도 기존 단언은 그대로다.
 - 멈춘 판단, 에셋을 쓰기 전에 사본·해시를 남긴 것 모두 맞았다. 재개 순서도 적은 대로다.
 
-## Codex 중단 결과 (2026-10-18)
+## Q1 구현 반영 상태
+
+**반영함 (feat: add nineteen-step scenario and key rules)** — E12 14개, 생성자 보존, 에셋 19개 적용. 아래 완료 결과 참조.
+
+## Codex 완료 결과 (2026-10-18)
+
+**완료 — P4c 구현과 Q1 정정 반영. Claude 리뷰 대기.**
+
+- 브랜치 `codex/P4c-step-list-keys`, 재개 HEAD `9ace8f0`. 기존 미커밋 WIP를 보존하고 E12를 정정한 뒤 에셋까지 완료함.
+- 마지막 커밋 제목: `feat: add nineteen-step scenario and key rules`.
+- Q1: **반영함 (feat: add nineteen-step scenario and key rules)**. Claude 답대로 생성자 기본값 14개 유지·E12 14개 단언·에셋 19개 적용. 새 질문·열린 리뷰 항목 없음.
+- 하위 에이전트·자체 리뷰 루프 없음. push·PR·merge 없음.
+
+### ① 바뀐 파일
+
+- `Source/vBoR/Interaction/VBoRScenarioAsset.h`: 기존 enum 끝에 `KeyHeld`·`KeyUnlockAndLock` 추가.
+- `Source/vBoR/Interaction/VBoRScenarioRunner.h`, `.cpp`: 키 대상 검사, 이벤트 누적·단계 진입 기준값, 초기화/EndPlay 해제. 시작 기록은 새 흐름·R 뒤에만 다시 기다리고 ←는 같은 시도를 유지함.
+- `Source/vBoR/Interaction/VBoRKeyFob.h`: 합성 시험용 friend. 키 잡기·버튼·물리 동작 변경 없음.
+- `Source/vBoR/P3Probe/P3VehicleMock.h`, `.cpp`: 앞·뒤 키 Actor 태그 추가. 버튼 태그 4개 유지.
+- `Source/vBoR/P3Probe/P3FlowTests.cpp`: P4c 자동화 7개(E1–E12) 추가. 기존 단언은 그대로임.
+- `Content/P3/DA_P3_Scenario.uasset`: 19개 단계, 01·02 키 규칙/TV 문구/대상, 01 표시, 07 경로.
+- `Docs/Reviews/P4c-step-list-keys.md`: Q1 반영 상태·완료 보고. `HANDOFF.md`는 git 무시 파일에 별도 갱신.
+- 생성자 `VBoRScenarioAsset.cpp`, TV 기본표, 다른 에셋·레벨·설정·플러그인 소스 변경 없음.
+
+### ② 명세 §6 완료 조건별 결과
+
+1. **충족:** D1–D3 C++와 D4·D5 에셋, §4 자동화 모두 구현함.
+2. **충족:** 최종 트리 전체 `vBoR.*` 발견 389·완료 389·Success 389·Fail 0. P4c 7/7과 기존 382/382 통과. E9가 에셋 19개 전체 필드, E10이 근사 차 검증/시작 01/TV 전체 19, E11 태그 6개, E12 기본값 14개/Approach 보존을 확인함. E13은 기존 전체 시험으로 확인함.
+3. **충족:** 정정 후 non-unity(`-DisableUnity -Module=vBoR`)·unity 각각 1회 Succeeded·프로세스 exit 0, vBoR 컴파일·링크 경고/오류 0. 에셋 저장·에디터 종료 뒤 전체 자동화 1회, `TEST COMPLETE. EXIT CODE: 0`·프로세스 exit 0.
+4. **충족:** 보고 ①–⑤를 리뷰·HANDOFF와 마지막 커밋 본문에 기록함.
+5. **유지:** Quest 3 Link/VR·T-06·T-10은 `not-tested`. 에셋 조회·합성 시험·스크린샷을 기기 시험으로 보지 않음.
+
+### ③ 명세와 다르게 한 것과 이유 / MCP
+
+- 개정 명세와 다른 제품 동작 없음. Q1 답대로 E12만 13 → 14로 고침. 기존 생성자·기존 단언 변경 없음.
+- 실행 capability: `inspect.get_property`로 전후 Steps 조회, `inspect.set_property`로 이 에셋의 Steps만 쓰기(`saved=true`), `control_editor.save_all`에 이 에셋만 지정(이미 저장돼 noop, 다른 dirty package 0), `control_editor.open_asset`·`control_editor.screenshot`으로 화면 확인.
+- search → describe로 계약을 확인했고 구조체 배열은 UE export text 배열로 지원됨을 로컬 도구 소스로 확인함. Python·콘솔·PIE 사용 없음. 도구 소스는 읽기만 함.
+- 시작 시 사용자 에디터 없음. C++ 빌드 뒤 연 PID 46160에서 작업함. 저장 뒤 일반 종료 신호로 닫히지 않아 Workflow §2.5·§2.10대로 /F 종료. 종료 완료를 확인한 뒤 자동화를 시작함. 자동화 뒤 `UnrealEditor*` 프로세스 0.
+
+### ④ API·헤더 확인
+
+신규 ISDK·MetaXR API 없음. 다음 실제 파일을 확인했으며 추정 API 없음.
+
+- 프로젝트 `Source/vBoR/Interaction/VBoRKeyFob.h:51,64-65`: GetHoldingHand·키 이벤트. `.cpp:151-170`: 안 쥔 손 필터/Broadcast. `VBoRPokeButton.cpp:119`: PressFilter.
+- 엔진 기준 `C:/Program Files/Epic Games/UE_5.7/Engine/Source/`:
+  - `Runtime/Core/Public/Delegates/DelegateSignatureImpl.inl:1197,1250,1278`: IsAlreadyBound·AddUniqueDynamic·RemoveDynamic.
+  - `Runtime/CoreUObject/Public/UObject/UObjectGlobals.h:2135`: LoadObject.
+  - `Runtime/Engine/Classes/GameFramework/Actor.h:2076,2330,2474`: ActorHasTag·Destroy·GetRootComponent.
+- MCP 구조체 배열 근거: `Plugins/McpAutomationBridge/Source/McpAutomationBridge/Private/Foundation/BridgeHelpers/Properties/McpAutomationBridgeHelpersPropertyApplyArrays.h:17,112-134`. 프로젝트 의존성으로 추가하지 않음.
+
+### ⑤ 검증 기록 / 로컬에서 확인할 것
+
+- 이번 재개 빌드: `Saved/Logs/P4cResumeNonUnityBuild.log`(6 actions, P3FlowTests.cpp 개별 compile 1)·`P4cResumeUnityBuild.log`(48 actions, Module.vBoR.6.cpp compile 1). 둘 다 Succeeded·exit 0. 앞선 WIP 전체 컴파일 근거는 기존 `P4cNonUnityBuild.log`(82 actions, compile 79)·`P4cUnityBuild.log`(57 actions, compile 10)에 보존돼 있음.
+- 로컬 도구/project의 기존 StructUtils 폐기 안내와 vBoR 진단을 구분함. vBoR 컴파일·링크 경고/오류 0.
+- 최종 자동화: `Saved/Logs/P4cFinalAutomation.log`, 389/389 성공·실패 0·시험/프로세스 exit 0. P0Buck E8Persistence 최초 실행 성공, 재실행 없음. OpenXR API 1.1→1.0 폴백·없는 XR 확장·샘플 InfoCard CDO·MetaXR empty engine version 잡음은 Workflow §2.5와 같으며 시험 결과와 구분함.
+- **수정 전 에셋:** 기존 사본과 SHA256 `1C7997F939E1F10642F864EC03E8B9A92FE05DBB27E3D9121CC721345591E5AE` 동일. MCP 재조회도 생성자와 같은 14개(01·02·07–15·18–20), 사용자 편집 차이 없음. 재조회 `Saved/P4cResumeScenarioBefore.json`, 원래 사본 `Saved/P4cScenarioBefore.uasset` 보존.
+- **수정 후 에셋:** SHA256 `7210D3A6A940FAADFCBF099D0C342CC3BDDB79B4D779B9E6ACB4FF75F3359560`. `Saved/P4cScenarioAfter.json` 전 필드를 입력값과 대조(저장 시 FText가 NSLOCTEXT로 바뀐 표현만 정규화), E9가 새 프로세스에서 저장된 에셋을 읽어 다시 검증함.
+- 에디터 로그 `Saved/Logs/P4cResumeEditor.log`. 스크린샷 `Saved/Screenshots/P4cScenarioAfter.png`: DA_P3_Scenario Details의 19 Array elements·All Saved 확인. 세부 필드와 순서는 JSON·E9로 확인함.
+- 사용자 확인: 명세 §7대로 에셋 19개/문구, VR 01 키 집기, 02 열림·잠금 뒤 확인, 03–06·16 진행자 확인, TV 01·02 영어/진행 막대 19. **VR·실제 손 추적·TV 외관·T-06·T-10은 not-tested.** 새 질문 없음.
+
+## 이전 Codex 중단 결과 (2026-10-18, Q1 답 이전 기록)
 
 - 브랜치 `codex/P4c-step-list-keys`, 베이스 `3b02f1e`. **미커밋 WIP**이며 push·PR·merge 없음. Claude 명세 정정 대기.
 - C++ 단계에서 D1·D2·D3 및 E1–E12 시험 코드를 작성한 뒤, 빌드 둘을 완료했다. 에디터 단계에서 위 Q1을 발견하여 **에셋 쓰기 전에 중단**했다. 전체 자동화는 실행하지 않았다.
