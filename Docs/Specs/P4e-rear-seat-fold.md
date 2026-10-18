@@ -7,7 +7,7 @@
 | 베이스 브랜치 | `main` @ P4d 머지 뒤(`ae62470` + 이 명세 커밋) |
 | 작업 브랜치 | `codex/P4e-rear-seat-fold` |
 | 리뷰 파일 | `Docs/Reviews/P4e-rear-seat-fold.md` (첫 리뷰 때 생김) |
-| 상태 | 명세 — 구현 전 |
+| 상태 | 명세 — 구현 전 (개정 1: 리뷰 Q1 답함) |
 
 ## 0. 결정
 
@@ -15,8 +15,8 @@
 |---|---|---|
 | D1 | **접히는 시트 부모를 새로 만든다** | `AVBoRFoldingSeat`(`Source/vBoR/Interaction/`, Blueprintable). 실제 차 CAD의 2열 등받이를 자식 BP에 넣어 쓴다.<br>**구성:** root, 경첩 `HingePivot`(축 = 액터 Y, 위치 `HingeLocationCm`), 등받이 메시. 메시는 `MeshRestFromRoot`로 원래 월드 자리를 지킨다(U-09, 다른 부모와 같은 꼴 — 예: `VBoRPoweredPanel.h:71`).<br>**접는 방향:** +각도는 등받이 윗부분을 앞(+X)으로 숙인다. 회전 꼴은 리프트게이트와 같다(`FQuat(Y, +각)`, `VBoRPoweredPanel.cpp:125`) — 경첩 위의 점 (0,0,+z)가 +X 쪽으로 간다.<br>**값(자리값):** `FoldAngleDeg`(기본 80, 접힌 각도), `SpeedDegPerSecond`(기본 45).<br>**상태:** 섬·접히는 중·접힘·펴지는 중. `Fold()`·`Unfold()`(`BlueprintCallable`)는 멈춰 있을 때만 받는다: 섬에서 접기, 접힘에서 펴기. 움직이는 중이거나 같은 쪽 명령은 무시하고 거짓을 돌려준다(리프트게이트 P4b D3와 같은 규칙). `ResetSeat()`는 바로 섬 상태로 둔다. `GetState()`·`GetAngleDeg()`.<br>움직임은 Tick에서 한다. 각도는 0–`FoldAngleDeg`로 묶는다. 대기·경고음·버튼·충돌·끼임은 없다. 손으로 잡거나 미는 입력도 없다(U-15) |
 | D2 | **근사 차에 2열 좌석을 넣는다** | 근사 형상·자리값(카테고리 `자리값|근사 2열`). `AP3VehicleMock`이 다른 부품처럼 `BeginPlay`에서 만든다:<br>- 방석: 근사 판 하나(충돌 없음, `P3Probe/P3VehicleMock.cpp:45`와 같음).<br>- 등받이: D1, 액터 태그 `Car.RearSeat`.<br>자리는 운전석 판(`:93-94` — eye 아래 방석, 뒤 28 cm 등받이)과 같은 꼴로 `RearEyeCm`(`P3VehicleMock.h:39`)에서 정한다. 폭은 차 안쪽 폭이다.<br>**조건(시험으로 확인):** 2열 시점(`RearView`) 자리는 그대로다. 등받이는 선 상태·접힌 상태 모두 차체 상자 안이고, 트렁크 안 공간(P4d 적재 영역)과 겹치지 않는다 |
-| D3 | **진행자 창 버튼 둘 + 키 둘** | `EVBoROperatorButton`(`Interaction/VBoROperatorPanel.h:12-13`) **끝(Count 앞)**에 `FoldSeat`·`UnfoldSeat`를 붙인다. 단축키 표(`VBoROperatorPanel.cpp:12-28`)에도 같은 순서로 붙인다 — `Shortcut()`이 enum 값으로 표를 찾는다(`:30`).<br>- 이름은 "Fold rear seat" / "Unfold rear seat", 키 `F` / `U`.<br>- 진행자 창에 "Rear seat" 칸을 하나 더하고 두 버튼을 `Pair`로 둔다(`:180-202`의 칸 꼴).<br>**명령 길:** 다른 버튼과 같다. `EVBoRFlowCommand`(`Interaction/VBoRScenarioRunner.h:23`) **끝**에 `FoldSeat`·`UnfoldSeat`를 붙인다. 버튼은 `FlowAction`(`VBoRScenarioOperator.cpp:13-30`), 키는 Runner `BeginPlay`의 `BindKey`(`VBoRScenarioRunner.cpp:156-167`)로 같은 명령을 큐에 넣는다. `Dispatch`가 시트의 `Fold()`·`Unfold()`를 부른다. 그래서 `vBoR.P5i.E2ButtonsEqualGameKeys`(`P3Probe/P5iOperatorPanelTests.cpp:132-148`)가 새 버튼도 그대로 확인한다.<br>**대상:** 월드의 `AVBoRFoldingSeat` 모두. 실제 차 레벨에서 태그 없이 놓아도 동작하게 하려는 것이다 |
-| D4 | **명령 판정** | `EvaluateCommand`(`VBoRScenarioOperator.cpp:75-`)에서:<br>- 안내 중·자유모드 모두 받는다. 그래서 "시작 전"·"자유모드에는 단계 없음" 검사(`:102-105`)보다 먼저 판정한다(정렬 다시 적용 `:87-92`와 같은 자리).<br>- 시트가 없으면 버린다: "No folding seat".<br>- 접을(펼) 수 있는 시트가 하나도 없으면 버린다: 이미 접힘·움직이는 중 등. 진행자 창 버튼은 이 판정으로 흐려진다(P5i 꼴).<br>- 레벨 다시 열기 암전 중에는 지금처럼 버린다(`:79`).<br>확인 잠금과는 상관없다. 지난 단계 검사(`:80-81`)는 다른 명령처럼 그대로 둔다. 그래서 단계가 바뀌는 frame에 누른 F·U는 버려질 수 있다(다시 누르면 됨) |
+| D3 | **진행자 창 버튼 둘 + 키 둘** | `EVBoROperatorButton`(`Interaction/VBoROperatorPanel.h:12-13`) **끝(Count 앞)**에 `FoldSeat`·`UnfoldSeat`를 붙인다. 단축키 표(`VBoROperatorPanel.cpp:12-28`)에도 같은 순서로 붙인다 — `Shortcut()`이 enum 값으로 표를 찾는다(`:30`).<br>- 이름은 "Fold rear seat" / "Unfold rear seat", 키 `F` / `U`.<br>- 진행자 창에 "Seat folding" 칸을 하나 더하고 두 버튼을 `Pair`로 둔다(`:180-202`의 칸 꼴). 칸 이름을 "Rear seat"로 하지 않는다 — 2열 시점 버튼 이름이다(`:22`).<br>**명령 길:** 다른 버튼과 같다. `EVBoRFlowCommand`(`Interaction/VBoRScenarioRunner.h:23`) **끝**에 `FoldSeat`·`UnfoldSeat`를 붙인다. 버튼은 `FlowAction`(`VBoRScenarioOperator.cpp:13-30`), 키는 Runner `BeginPlay`의 `BindKey`(`VBoRScenarioRunner.cpp:156-167`)로 같은 명령을 큐에 넣는다. `Dispatch`가 시트의 `Fold()`·`Unfold()`를 부른다. 그래서 `vBoR.P5i.E2ButtonsEqualGameKeys`(`P3Probe/P5iOperatorPanelTests.cpp:132-148`)가 새 버튼도 그대로 확인한다.<br>**대상:** 월드의 `AVBoRFoldingSeat` 모두. 실제 차 레벨에서 태그 없이 놓아도 동작하게 하려는 것이다 |
+| D4 | **명령 판정** (개정 1) | `EvaluateCommand`(`VBoRScenarioOperator.cpp:75-135`)에서 **시점 전환 중 검사(`:117`) 뒤**에 판정한다(확인·다음·처음부터 검사와 같은 자리). 그래서 앞의 검사를 그대로 탄다:<br>- 레벨 다시 열기 암전 중: 버림(`:79`).<br>- 지난 단계 token: 버림(`:80-81`). 단계가 바뀌는 frame에 누른 F·U는 버려질 수 있다(다시 누르면 됨).<br>- **시작 전: 버림**(`:102-103` "Scenario has not started"). 자유모드는 이 검사에 걸리지 않는다(`!bFreeMode`). 자유모드 단계 검사(`:104-105`)에도 새 명령을 넣지 않는다.<br>- **시점 전환 암전 중: 버림**(`:117` "View transition in progress"). 정렬 다시 적용 암전도 같다.<br>그 뒤 새 판정:<br>- 월드에 `AVBoRFoldingSeat`가 없음: 버림, "No folding seat", `EVBoRDiscard::Rule`.<br>- 접을(펼) 수 있는 시트가 하나도 없음(이미 접힘·섬에서 펴기·움직이는 중): 버림, `EVBoRDiscard::None`, 기록 줄 없음 — 버튼만 흐린다(이미 시작한 뒤 O `:98`과 같은 꼴, 센 값을 늘리지 않음).<br>- 그 밖: 받음. 안내 중·자유모드 모두.<br>확인 잠금과는 상관없다. 진행자 창 버튼 흐림은 이 판정을 그대로 쓴다(P5i 꼴) |
 | D5 | **R은 시트도 세운다** | R(`VBoRScenarioRunner.cpp:464-480`)이 리프트게이트·박스(P4d D6)와 같은 자리에서 월드의 `AVBoRFoldingSeat`마다 `ResetSeat()`를 부른다. 기록 줄에 더한다. P4d D6(사용자: R은 처음부터)과 같은 뜻이다. F6은 레벨을 다시 열므로 따로 할 일이 없다 |
 | D6 | **16단계는 그대로** | 사용자 ③. 새 단계 규칙·에셋 변경·시점 요구를 넣지 않는다. 16은 P4c 표대로 `Confirm`·진행자다. 진행자가 16에서 접어 보이고 싶으면 F를 누르면 된다(D4 — 안내 중에도 받음) |
 | D7 | **경로 위 화살표 갱신(P4d 리뷰 참고 1)** | `CheckRouteArea`(`VBoRScenarioRunner.cpp:690-714`)가 "영역 모름"이던 경로를 보이게 바꿀 때 `UpdateMarker()`(`:658-681`)를 부른다. 그러면 단계에 들어갈 때 이미 영역을 알던 경우와 같은 모습이 된다: 경로 끝 위 화살표가 보이고, 그 단계 `MarkerTag`의 고리는 숨는다. 원인은 P4d 명세 D5가 표시 갱신을 말하지 않은 것이다(Claude 명세 문제) |
@@ -55,7 +55,11 @@
 - 2열 시점 자리와 기존 근사 차 부품·경로·트렁크는 그대로다.
 - 단계 규칙·에셋·생성자 기본 단계·TV 기본표는 그대로다.
 - D7 밖의 경로 동작(모를 때 다시 읽기, 알림 한 번 기록, "밖"은 다시 안 읽음 — P4d E11)은 그대로다.
-- 기존 단언은 바꾸지 않는다.
+- 기존 단언은 바꾸지 않는다. **예외 하나(개정 1, 리뷰 Q1):** `vBoR.P5i.E6FreeMode`(`P3Probe/P5iOperatorPanelTests.cpp:172-173`)의 Expected에 `FoldSeat` 하나만 더한다.
+  - 이유: 이 시험의 `Enabled()`(`:113-120`)는 단축키를 모두 돌며 Expected에 없는 버튼은 꺼져 있다고 단언한다. 자유모드에서 선 시트는 접을 수 있으므로 `FoldSeat`가 켜진다.
+  - `UnfoldSeat`는 더하지 않는다(펼 시트가 없어 꺼짐).
+  - E3(시작 전, `:150-152`)·E5(시점 전환 중, `:169-170`)·E14(레벨 다시 열기 암전, `:251-252`)는 D4대로면 새 버튼이 꺼지므로 그대로 둔다.
+  - 시험에서 시트를 지우거나 단축키 순회를 줄여 새 버튼을 빼는 우회는 하지 않는다.
 
 ## 4. 경계 상황과 그 시험
 
@@ -67,7 +71,7 @@
 | E4 | 접는 방향·메시 자리 | 접히면 등받이 윗부분이 +X(앞)로, 경첩 축 위의 점은 제자리. 각도 0에서 메시 월드 자세 = `MeshRestFromRoot` | 시트 |
 | E5 | 근사 차 2열 | `Car.RearSeat` 액터 하나. 2열 시점 자리 그대로. 선 상태·접힌 상태 등받이가 차체 상자 안, 적재 영역과 겹치지 않음 | 근사 차 |
 | E6 | 진행자 버튼·키 F·U | 버튼과 키가 같은 명령(출처 진행자)을 큐에 넣음(P5i E2가 자동으로 포함), 처리하면 시트가 접힘/펴짐 | 명령 |
-| E7 | 판정: 안내 중 / 자유모드 / 시작 전 / 시트 없음 / 이미 접힘에서 접기 / 움직이는 중 / 레벨 다시 열기 암전 | 안내 중·자유모드는 받음. 시작 전은 정한 대로(구현자, 시험으로 보임). 시트 없음·이미 접힘·움직이는 중·암전은 버림, 이유 글. 버튼 흐림이 판정과 같음 | 판정 |
+| E7 | 판정: 안내 중 / 자유모드 / 시작 전 / 시점 전환 중 / 레벨 다시 열기 암전 / 시트 없음 / 이미 접힘에서 접기 / 섬에서 펴기 / 움직이는 중 | 안내 중·자유모드는 받음. 나머지는 버림, 이유 글과 D4의 버림 종류(시트 없음 `Rule`, 움직일 시트 없음 `None`·센 값 그대로). 버튼 흐림이 판정과 같음. P5i E3·E5·E14는 그대로, E6은 §3 예외대로 통과 | 판정 |
 | E8 | 16단계에서 F | 시트가 접히고, 단계는 그대로(진행자 확인 대기) | 흐름 |
 | E9 | R(시트 접힘 또는 접히는 중) | 시트 바로 섬. 게이트·박스·문 초기화는 P4d 그대로 | 흐름 |
 | E10 | 영역 모름 → 다음 frame 앎(안) | 경로 끝 위 화살표 보임(끝 + 160 cm), `MarkerTag` 고리 숨음 — 처음부터 알던 경우와 같음 | 경로 |
@@ -77,8 +81,8 @@
 
 - `AVBoRFoldingSeat`의 내부 구조, 상태 enum 이름.
 - 근사 2열 좌석의 정확한 자리값(D2 조건 안).
-- 진행자 창 "Rear seat" 칸의 위치(기존 칸 사이 또는 아래).
-- D4의 "시작 전"에 받을지(자유모드·안내 중은 받음).
+- 진행자 창 "Seat folding" 칸의 위치(기존 칸 사이 또는 아래).
+- D4 "움직일 시트 없음"의 이유 글(영어, 진행자 창 툴팁·마지막 명령 줄).
 - 진행자 VR 정보 글(I)이나 자유모드 안내 글에 F·U를 적을지.
 
 ## 6. 완료 조건
@@ -91,7 +95,7 @@
 
 ## 7. 로컬에서 확인할 것 — 사용자(VR·진행자 창, 끝에 한꺼번에)
 
-1. 진행자 창의 "Rear seat" 칸에서 접기·펴기를 누르고, F·U 키로도 해 본다.
+1. 진행자 창의 "Seat folding" 칸에서 접기·펴기를 누르고, F·U 키로도 해 본다.
 2. 접히는 속도와 접힌 각도가 자연스러운지 본다(값만 바꾸면 됨).
 3. 자유모드에서 2열 시점(2)·운전석(Home)으로 바꿔 가며 접힌 모습을 본다.
 4. R을 누르면 시트가 바로 서는지 본다.
@@ -103,7 +107,9 @@
 | 쓸 것 | 위치 | 쓰임 |
 |---|---|---|
 | 진행자 버튼 enum·단축키 표·찾기·칸 배치 | `Interaction/VBoROperatorPanel.h:12-13`, `Interaction/VBoROperatorPanel.cpp:12-28`, `:30`, `:180-202` | D3 |
-| 버튼 → 명령, 판정, 버튼·키 입력 | `Interaction/VBoRScenarioOperator.cpp:13-30`, `:75-107`, `:167-180` | D3·D4 |
+| 버튼 → 명령, 판정, 버튼·키 입력 | `Interaction/VBoRScenarioOperator.cpp:13-30`, `:75-135`, `:167-180` | D3·D4 |
+| 판정 순서(암전·지난 단계·시작 전·전환 중), no-op 흐림 꼴 | `Interaction/VBoRScenarioOperator.cpp:79`, `:80-81`, `:102-103`, `:117`, `:98` | D4 |
+| 켜진 버튼 집합 시험 | `P3Probe/P5iOperatorPanelTests.cpp:113-120`(`Enabled`), `:150-152`(E3), `:169-170`(E5), `:172-173`(E6), `:251-252`(E14) | §3 예외 |
 | 흐름 명령 enum, 키 묶기, R | `Interaction/VBoRScenarioRunner.h:23`, `Interaction/VBoRScenarioRunner.cpp:156-167`, `:464-480` | D3·D5 |
 | 경로 표시·영역 다시 읽기 | `Interaction/VBoRScenarioRunner.cpp:658-681`(`UpdateMarker`), `:690-714`(`CheckRouteArea`), `:716-719`(`SampleRoute`) | D7 |
 | 회전 꼴(Y축 +각)·메시 자리 보존 | `Interaction/VBoRPoweredPanel.cpp:123-127`, `Interaction/VBoRPoweredPanel.h:69-71` | D1 |
@@ -115,3 +121,4 @@
 | 날짜 | 개정 | 내용 |
 |---|---|---|
 | 2026-10-19 | 처음 | 작성(U-15 ③. 사용자 문답: 2열 등받이 한 판, 시점 정하지 않음, 폴딩은 자유모드에서 보며 시나리오와 무관 — 16 규칙 그대로, 키 F·U). P4d 리뷰 참고 1(D7)을 같이 넣음 |
+| 2026-10-19 | 개정 1 (리뷰 Q1) | Codex Q1: P5i E3·E5·E6은 단축키 모두의 켜짐을 단언해서 §3 "기존 단언 그대로"와 D4가 같이 성립하지 않았다. D4를 전환 중 검사 뒤로 옮겨 시작 전·시점 전환 중은 버림으로 정함(§5의 "시작 전" 재량 없앰). 움직일 시트 없음은 `None`(센 값 그대로). §3에 E6 Expected `FoldSeat` 추가 예외. 칸 이름 "Rear seat" → "Seat folding"(2열 시점 버튼 이름과 겹침). 원인은 Claude 명세 문제 — P5i E2만 보고 E3·E5·E6을 보지 않음 |
