@@ -70,6 +70,7 @@ protected:
 private:
 	friend class UVBoRKeyGrabbableComponent;
 	friend struct FP4aTestAccess;
+	friend struct FP4cTestAccess;
 	int32 HoldingHand = INDEX_NONE;
 	TWeakObjectPtr<UObject> HoldingInteractor;
 	TArray<bool> RecentHighFrames;

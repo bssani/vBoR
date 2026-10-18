@@ -14,6 +14,8 @@
 #include "GameFramework/WorldSettings.h"
 #include "HAL/FileManager.h"
 #include "Misc/Paths.h"
+#include "Misc/OutputDevice.h"
+#include "Misc/OutputDeviceRedirector.h"
 #include "Framework/Application/SlateApplication.h"
 #include "Rendering/SlateRenderer.h"
 #include "Fonts/FontMeasure.h"
@@ -25,6 +27,7 @@
 
 struct FP5iTestAccess
 {
+	static bool StartPending(AVBoRScenarioRunner* R) { return R->bStartHeadPending; }
 	static void NewFrame(AVBoRScenarioRunner* R) { R->LiveFrame = MAX_uint64; }
 	static const TArray<FVBoRFlowCommand>& Queue(AVBoRScenarioRunner* R) { return R->PendingCommands; }
 	static void Clear(AVBoRScenarioRunner* R) { R->PendingCommands.Reset(); }
@@ -268,6 +271,48 @@ bool FP5iE16::RunTest(const FString&)
 {
 	FP5iWorld W(false); W.NeedsCheck(); FString Reason; TestTrue(TEXT("Setup saved"),FVBoRBuckAlignmentStore::Save(W.Path,W.Saved,Reason));
 	W.Button(B::Reapply); W.FinishSwitch(); TestTrue(TEXT("Flow started"),W.Runner->IsRunning()); TestEqual(TEXT("First step"),W.Runner->GetStepIndex(),0); return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4cReapplyStart,"vBoR.P4c.E8ReapplyStartAttempt",Flags)
+bool FP4cReapplyStart::RunTest(const FString&)
+{
+	struct FStartRecords : FOutputDevice
+	{
+		int32 Starts = 0, Fallbacks = 0;
+		FStartRecords() { GLog->FlushThreadedLogs(); GLog->AddOutputDevice(this); Starts = 0; Fallbacks = 0; }
+		~FStartRecords() { GLog->FlushThreadedLogs(); GLog->RemoveOutputDevice(this); }
+		virtual void Serialize(const TCHAR* Text, ELogVerbosity::Type, const FName& Category) override
+		{
+			if (Category != TEXT("LogP3Flow")) { return; }
+			const FString Line(Text);
+			Starts += Line.Contains(TEXT("시작 위치 |")) ? 1 : 0;
+			Fallbacks += Line.Contains(TEXT("시작 표시를 거치지 않음")) ? 1 : 0;
+		}
+	};
+	for (bool bVisitStart : {true,false})
+	{
+		FP5iWorld W(false); W.NeedsCheck();
+		FString Reason; TestTrue(TEXT("E8 A setup saved"),FVBoRBuckAlignmentStore::Save(W.Path,W.Saved,Reason));
+		TestFalse(TEXT("E8 A flow waits for alignment"),W.Runner->IsRunning());
+		TestFalse(TEXT("E8 A no attempt before start"),FP5iTestAccess::StartPending(W.Runner));
+		FStartRecords Records;
+		W.Button(B::Reapply); W.FinishSwitch();
+		TestTrue(TEXT("E8 A starts flow"),W.Runner->IsRunning());
+		TestEqual(TEXT("E8 A starts 01"),W.Runner->GetStepIndex(),0);
+		TestTrue(TEXT("E8 A arms start record"),FP5iTestAccess::StartPending(W.Runner));
+		if (bVisitStart)
+		{
+			// 시작 표시 위 합성 머리로 기록 조건을 통과함 (P4c R1-1, cm)
+			const FTransform Start(FRotator::ZeroRotator,W.Car->GetActorTransform().TransformPosition(FVector(485,0,160.5)));
+			W.Head->LocalHead = Start.GetRelativeTransform(W.Pawn->GetActorTransform());
+			W.Runner->ProcessFlow(0); W.Runner->ProcessFlow(0);
+			TestFalse(TEXT("E8 A records start once"),FP5iTestAccess::StartPending(W.Runner));
+		}
+		W.Button(B::Next); W.Button(B::Next); GLog->FlushThreadedLogs();
+		TestEqual(TEXT("E8 A start log count"),Records.Starts,bVisitStart ? 1 : 0);
+		TestEqual(TEXT("E8 A fallback log count"),Records.Fallbacks,bVisitStart ? 0 : 1);
+	}
+	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE17,"vBoR.P5i.E17ReapplyFailureUnfades",Flags)
