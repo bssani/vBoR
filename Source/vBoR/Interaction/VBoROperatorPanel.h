@@ -10,7 +10,7 @@ class SWindow;
 class SButton;
 
 enum class EVBoROperatorButton : uint8
-{ Confirm, Next, Previous, Restart, Ignore, Driver, Passenger, Rear, Reapply, Info, Free, Reload, Count };
+{ Confirm, Next, Previous, Restart, Ignore, Driver, Passenger, Rear, Reapply, Info, Free, Reload, FoldSeat, UnfoldSeat, Count };
 enum class EVBoROperatorStyle : uint8 { Primary, Secondary, Disabled, Current, Danger };
 enum class EVBoRDiscard : uint8 { None, Stale, Permission, Rule, Transition, Lock };
 

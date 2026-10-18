@@ -170,7 +170,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE5,"vBoR.P5i.E5DuringSeatFade",Flags)
 bool FP5iE5::RunTest(const FString&) { FP5iWorld W; W.Button(B::Passenger); Enabled(*this,W,{B::Info}); return true; }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE6,"vBoR.P5i.E6FreeMode",Flags)
-bool FP5iE6::RunTest(const FString&) { FP5iWorld W; W.Free(); Enabled(*this,W,{B::Driver,B::Passenger,B::Rear,B::Restart,B::Reload,B::Reapply,B::Info}); return true; }
+bool FP5iE6::RunTest(const FString&) { FP5iWorld W; W.Free(); Enabled(*this,W,{B::Driver,B::Passenger,B::Rear,B::Restart,B::Reload,B::Reapply,B::Info,B::FoldSeat}); return true; }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE7,"vBoR.P5i.E7DecisionAndDispatch",Flags)
 bool FP5iE7::RunTest(const FString&)

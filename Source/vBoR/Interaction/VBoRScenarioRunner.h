@@ -20,7 +20,7 @@ class SBorder;
 class AVBoRFloorRoute;
 class AVBoRKeyFob;
 
-enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel, ReapplyAlignment };
+enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel, ReapplyAlignment, FoldSeat, UnfoldSeat };
 enum class EVBoRCommandSource : uint8 { Participant, Operator };
 struct FVBoRFlowToken { int32 StepIndex = INDEX_NONE; uint64 Generation = 0; };
 struct FVBoRFlowCommand
@@ -88,6 +88,7 @@ private:
 	friend struct FP5iTestAccess;
 	friend struct FP3bTestAccess;
 	friend struct FP4cTestAccess;
+	friend struct FP4eTestAccess;
 	UPROPERTY() TObjectPtr<UVBoRVehicleAlignmentComponent> Alignment;
 	UPROPERTY() TObjectPtr<UVBoRApproachZoneComponent> Approach;
 	UPROPERTY() TObjectPtr<UVBoRSeatZoneComponent> Seat;
@@ -172,4 +173,5 @@ private:
 	void KeyOperatorInfo();
 	void KeyFreeMode(); void KeyReloadLevel();
 	void KeyReapply();
+	void KeyFoldSeat(); void KeyUnfoldSeat();
 };
