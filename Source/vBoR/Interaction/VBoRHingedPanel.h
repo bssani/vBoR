@@ -129,11 +129,9 @@ private:
 	void CollectHandleCandidates(TArray<AVBoRAxisPart*> (&Candidates)[2]) const;
 	TArray<AVBoRAxisPart*> GetHandleClaims() const;
 	bool IsHandleShared(const AVBoRAxisPart* Part) const;
-	void RememberHandleClaims();
+	bool CanConnectAxisHandle(AVBoRAxisPart* Part, TArray<FString>& Problems) const;
 	void ApplyAxisHandle(int32 Handle, AVBoRAxisPart* Part);
 	FBox MeshFaceBounds() const;
-	// 칸을 비운 뒤에도 최초 소유를 남김 (BeginPlay 순서로 중복 소유 판정이 바뀌지 않게, P2e E10)
-	TArray<TWeakObjectPtr<AVBoRAxisPart>> InitialHandleClaims;
 	UPROPERTY() TObjectPtr<AVBoRAxisPart> HoldingAxisPart;
 	int32 AxisHoldHand = INDEX_NONE, AxisHoldHandle = INDEX_NONE;
 	double AxisHoldStartSeconds = 0;

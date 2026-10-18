@@ -48,7 +48,8 @@ namespace
 		virtual void Serialize(const TCHAR* Message, ELogVerbosity::Type Verbosity, const FName& Category) override
 		{
 			if (Category != TEXT("LogAxisDoor")) { return; }
-			if (Verbosity == ELogVerbosity::Warning) { Warnings.Add(Message); }
+			// expected Warning 은 엔진이 Verbose 로 낮춤 (P2e 리뷰 메모)
+			if (Verbosity == ELogVerbosity::Warning || (Verbosity == ELogVerbosity::Verbose && FString(Message).Contains(TEXT("P2e setup:")))) { Warnings.Add(Message); }
 			if (FString(Message).Contains(TEXT("P2e attached"))) { Attachments.Add(Message); }
 		}
 		void Flush() { GLog->FlushThreadedLogs(); }
@@ -68,7 +69,7 @@ namespace
 		CastChecked<AVBoRAxisPart>(Child->GetChildActor())->DoorHandleSide = Side;
 		return Child;
 	}
-	void P2eCheckButton(FAutomationTestBase& Test, AVBoRHingedPanel* Panel)
+	void P2eCheckButton(FAutomationTestBase& Test, AVBoRHingedPanel* Panel, bool bExpectWarnings = true)
 	{
 		const FTransform PanelPose = Panel->GetActorTransform(), HingePose = Panel->HingePivot->GetComponentTransform();
 		AVBoRAxisPart* Outside = Panel->OutsideAxisHandle; AVBoRAxisPart* Inside = Panel->InsideAxisHandle;
@@ -84,7 +85,10 @@ namespace
 		{
 			Test.TestTrue(TEXT("E19 button does not move or reparent children"), Children[I]->GetActorTransform().Equals(Poses[I]) && Children[I]->GetRootComponent()->GetAttachParent() == Parents[I]);
 		}
-		for (const FString& Problem : Problems) { Test.AddExpectedMessagePlain(Problem, ELogVerbosity::Warning, EAutomationExpectedMessageFlags::Contains, 1); }
+		if (bExpectWarnings)
+		{
+			for (const FString& Problem : Problems) { Test.AddExpectedMessagePlain(Problem, ELogVerbosity::Warning, EAutomationExpectedMessageFlags::Contains, 1); }
+		}
 	}
 	FVBoRDoorHand P2eHand(FVector Point)
 	{
@@ -198,19 +202,33 @@ bool FP2eAmbiguous::RunTest(const FString& Parameters)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2eShared, "vBoR.P2e.Assembly.E10SharedOrderIndependent", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2eShared, "vBoR.P2e.Assembly.E10FirstConnectedKeepsHandle", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP2eShared::RunTest(const FString& Parameters)
 {
 	for (int32 Order = 0; Order < 2; ++Order)
 	{
 		FP2eWorld W; FP2eLogs Logs; AVBoRHingedPanel* A = W.World->SpawnActor<AVBoRHingedPanel>(); AVBoRHingedPanel* B = W.World->SpawnActor<AVBoRHingedPanel>();
 		AVBoRAxisPart* Part = P2eHandle(W.World, EVBoRDoorHandleSide::Outside, B->GetRootComponent()); A->OutsideAxisHandle = Part;
-		const FTransform Before = Part->GetActorTransform(); P2eCheckButton(*this, A); P2eCheckButton(*this, B);
+		const FTransform Before = Part->GetActorTransform(); P2eCheckButton(*this, A, false); P2eCheckButton(*this, B, false);
 		TestEqual(TEXT("A has shared claim problem"), FP2eTestAccess::Problems(A).Num(), 1); TestEqual(TEXT("B has shared claim problem"), FP2eTestAccess::Problems(B).Num(), 1);
-		W.World->InitializeActorsForPlay(FURL()); (Order == 0 ? A : B)->DispatchBeginPlay(); (Order == 0 ? B : A)->DispatchBeginPlay(); W.World->GetWorldSettings()->NotifyBeginPlay(); Logs.Flush();
-		TestNull(TEXT("A never links shared handle"), A->OutsideAxisHandle.Get()); TestNull(TEXT("B never links shared handle"), B->OutsideAxisHandle.Get()); TestNull(TEXT("Part has no linked panel"), FP2eTestAccess::Linked(Part));
-		TestTrue(TEXT("Shared handle not moved"), Part->GetActorTransform().Equals(Before) && Part->GetRootComponent()->GetAttachParent() == B->GetRootComponent());
-		TestEqual(TEXT("One warning for each panel"), Logs.Warnings.Num(), 2);
+		const FString SharedProblem = FP2eTestAccess::Problems(A)[0];
+		AddExpectedMessagePlain(SharedProblem, ELogVerbosity::Warning, EAutomationExpectedMessageFlags::Contains, Order == 0 ? 2 : 3);
+		AVBoRHingedPanel* First = Order == 0 ? A : B; AVBoRHingedPanel* Second = Order == 0 ? B : A;
+		W.World->InitializeActorsForPlay(FURL()); First->DispatchBeginPlay(); Logs.Flush();
+		TestEqual(TEXT("First BeginPlay warns once"), Logs.Warnings.Num(), 1);
+		TestTrue(TEXT("First panel links and keeps world pose"), First->OutsideAxisHandle == Part && FP2eTestAccess::Linked(Part) == First && Part->GetActorTransform().Equals(Before, 0.0001));
+		TestTrue(TEXT("First panel owns hinge parent"), Part->GetRootComponent()->GetAttachParent() == First->HingePivot);
+		TestEqual(TEXT("Current claims after first attachment"), FP2eTestAccess::Problems(Second).Num(), Order == 0 ? 0 : 1);
+		Second->DispatchBeginPlay(); W.World->GetWorldSettings()->NotifyBeginPlay(); Logs.Flush();
+		TestNull(TEXT("Second panel does not connect"), Second->OutsideAxisHandle.Get());
+		TestEqual(TEXT("Second panel retains fallback grab area"), Second->OutsideHandle->GetCollisionEnabled(), ECollisionEnabled::QueryOnly);
+		TestEqual(TEXT("Only still-visible claims cause a second warning"), Logs.Warnings.Num(), Order == 0 ? 1 : 2);
+		TestTrue(TEXT("No historical claims on either panel"), FP2eTestAccess::Problems(A).IsEmpty() && FP2eTestAccess::Problems(B).IsEmpty());
+		Second->SetAxisHandle(0, Part); Logs.Flush();
+		TestNull(TEXT("Runtime shared assignment is rejected"), Second->OutsideAxisHandle.Get());
+		TestEqual(TEXT("Runtime rejection warns once"), Logs.Warnings.Num(), Order == 0 ? 2 : 3);
+		TestTrue(TEXT("Rejected assignment preserves first link, hinge and pose"), First->OutsideAxisHandle == Part && FP2eTestAccess::Linked(Part) == First && Part->GetRootComponent()->GetAttachParent() == First->HingePivot && Part->GetActorTransform().Equals(Before, 0.0001));
+		TestEqual(TEXT("Only first panel reattaches"), Logs.Attachments.Num(), 1);
 	}
 	return true;
 }
@@ -231,11 +249,13 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2eMock, "vBoR.P2e.Assembly.E12MockUnchanged",
 bool FP2eMock::RunTest(const FString& Parameters)
 {
 	FP2eWorld W; FP2eLogs Logs; AP3VehicleMock* Car = W.World->SpawnActor<AP3VehicleMock>(); W.Play(); Logs.Flush();
-	TestEqual(TEXT("No new mock warning"), Logs.Warnings.Num(), 0); TestEqual(TEXT("No mock reattachment"), Logs.Attachments.Num(), 0);
+	TestEqual(TEXT("No new mock warning"), Logs.Warnings.Num(), 0); TestEqual(TEXT("One glovebox attachment"), Logs.Attachments.Num(), 1);
+	TestTrue(TEXT("Only glovebox handle attachment is logged"), Logs.Attachments.Num() == 1 && Logs.Attachments[0].Contains(FString::Printf(TEXT("handle=%s to HingePivot"), *Car->GloveboxHandle->GetName())));
 	TestTrue(TEXT("Door handles retain actor origin"), Car->OutsideAxisHandle->GetActorTransform().Equals(Car->GetActorTransform(), 0.001) && Car->InsideAxisHandle->GetActorTransform().Equals(Car->GetActorTransform(), 0.001));
 	TestTrue(TEXT("Door handles keep hinge parent"), Car->OutsideAxisHandle->GetRootComponent()->GetAttachParent() == Car->Door->HingePivot && Car->InsideAxisHandle->GetRootComponent()->GetAttachParent() == Car->Door->HingePivot);
 	TestTrue(TEXT("Door explicit links remain"), Car->Door->OutsideAxisHandle == Car->OutsideAxisHandle && Car->Door->InsideAxisHandle == Car->InsideAxisHandle);
 	TestTrue(TEXT("Glovebox handle link remains"), Car->Glovebox->OutsideAxisHandle == Car->GloveboxHandle);
+	TestTrue(TEXT("Glovebox handle keeps hinge parent and actor origin"), Car->GloveboxHandle->GetRootComponent()->GetAttachParent() == Car->Glovebox->HingePivot && Car->GloveboxHandle->GetActorTransform().Equals(Car->GetActorTransform(), 0.001));
 	TestNull(TEXT("Console keeps grab area"), Car->ConsoleLid->OutsideAxisHandle.Get());
 	for (AVBoRHingedPanel* Panel : {static_cast<AVBoRHingedPanel*>(Car->Door.Get()), Car->Glovebox.Get(), Car->ConsoleLid.Get()})
 	{
@@ -251,6 +271,7 @@ bool FP2eOpenSet::RunTest(const FString& Parameters)
 	AVBoRAxisPart* Part = P2eHandle(W.World, EVBoRDoorHandleSide::Outside); const FTransform Before = Part->GetActorTransform();
 	Panel->OutsideAxisHandle = Part; P2eCheckButton(*this, Panel); Panel->SetAxisHandle(0, Part); Logs.Flush();
 	TestTrue(TEXT("Open setter links and keeps world pose"), Panel->OutsideAxisHandle == Part && FP2eTestAccess::Linked(Part) == Panel && Part->GetActorTransform().Equals(Before, 0.0001));
+	Panel->SetAxisHandle(0, Part); Logs.Flush();
 	TestEqual(TEXT("One open-attachment warning"), Logs.Warnings.Num(), 1); TestEqual(TEXT("Attached once"), Logs.Attachments.Num(), 1);
 	return true;
 }
@@ -265,7 +286,7 @@ bool FP2eDefaultFace::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Construction box has identity rotation/scale"), Panel->PushFaceBox->GetRelativeRotation().IsNearlyZero() && Panel->PushFaceBox->GetRelativeScale3D().Equals(FVector::OneVector));
 	TestTrue(TEXT("Existing face min/max unchanged"), Panel->GetMotion().FaceMinCm.Equals(Bounds.Min) && Panel->GetMotion().FaceMaxCm.Equals(Bounds.Max));
 	TestEqual(TEXT("Existing thickness unchanged"), Panel->GetMotion().ThicknessCm, Bounds.GetSize().Y);
-	TestTrue(TEXT("Box hidden in game and visible in editor"), Panel->PushFaceBox->bHiddenInGame && Panel->PushFaceBox->IsVisible());
+	TestTrue(TEXT("Box hidden in game and visible in editor"), Panel->PushFaceBox->bHiddenInGame && Panel->PushFaceBox->GetVisibleFlag());
 	TestEqual(TEXT("Box has no collision"), Panel->PushFaceBox->GetCollisionEnabled(), ECollisionEnabled::NoCollision);
 	const FTransform BoxBefore = Panel->PushFaceBox->GetRelativeTransform(); const FVector ExtentBefore = Panel->PushFaceBox->GetUnscaledBoxExtent();
 	Panel->bUsePushFaceBox = true; Panel->OnConstruction(Panel->GetActorTransform());
@@ -322,6 +343,10 @@ bool FP2eThickFace::RunTest(const FString& Parameters)
 		Panel->MeshRestFromRoot.SetScale3D(FVector(1.1,0.25,1.05)); Panel->bUsePushFaceBox = bBox; Panel->OnConstruction(Panel->GetActorTransform());
 		P2eCheckButton(*this, Panel); TestEqual(TEXT("Thick bounds warning only when box disabled"), FP2eTestAccess::Problems(Panel).Num(), bBox ? 0 : 1);
 		W.Play(); Logs.Flush(); TestEqual(TEXT("E20 thickness warning once"), Logs.Warnings.Num(), bBox ? 0 : 1);
+		// 새 연결과 무관한 두께 문제를 setter 가 되풀이하지 않음 (P2e 리뷰 메모·E20)
+		AVBoRAxisPart* Part = P2eHandle(W.World, EVBoRDoorHandleSide::Outside);
+		Panel->SetAxisHandle(0, Part); Panel->SetAxisHandle(0, Part); Panel->SetAxisHandle(1, nullptr); Logs.Flush();
+		TestEqual(TEXT("Setters do not repeat unrelated setup warnings"), Logs.Warnings.Num(), bBox ? 0 : 1);
 	}
 	return true;
 }

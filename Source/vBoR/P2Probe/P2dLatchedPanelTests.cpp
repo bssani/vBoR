@@ -243,7 +243,9 @@ bool FP2dInsideBox::RunTest(const FString&)
 {
 	FP2dWorld W; AP3VehicleMock* Car = W.World->SpawnActor<AP3VehicleMock>();
 	AP2bTrackedDoor* TrackedDoor = W.World->SpawnActor<AP2bTrackedDoor>(); UIsdkGrabberComponent* Grab = P2dGrabber(W); W.Play();
-	TrackedDoor->SetAxisHandle(1,Car->InsideAxisHandle); TrackedDoor->Hands[0] = P2dHandAt(FVector(85,-9,50));
+	// 근사 차와 소유를 공유하지 않음 (연결된 잡는 자리 시험만 유지, P2e §3·Q1)
+	AVBoRAxisPart* TrackedHandle = W.World->SpawnActor<AVBoRAxisPart>();
+	TrackedDoor->SetAxisHandle(1,TrackedHandle); TrackedDoor->Hands[0] = P2dHandAt(FVector(85,-9,50));
 	P2dSelect(TrackedDoor->InsideGrab,Grab);
 	TestTrue(TEXT("Connected box rejects even a tracked hand"), TrackedDoor->GetMotion().bLocked);
 	TestEqual(TEXT("Connected box never starts grab"), TrackedDoor->GetMotion().GrabHand,INDEX_NONE);

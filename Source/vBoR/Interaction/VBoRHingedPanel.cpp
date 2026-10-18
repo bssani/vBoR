@@ -138,25 +138,11 @@ void AVBoRHingedPanel::OnConstruction(const FTransform& Transform)
 void AVBoRHingedPanel::SetAxisHandle(int32 Handle, AVBoRAxisPart* Part)
 {
 	if (Handle < 0 || Handle > 1) { return; }
-	AVBoRAxisPart* Previous = Handle == 0 ? OutsideAxisHandle.Get() : InsideAxisHandle.Get();
-	RememberHandleClaims();
-	if (Handle == 0) { OutsideAxisHandle = Part; } else { InsideAxisHandle = Part; }
-	RememberHandleClaims();
-	const FSetupAssessment Setup = EvaluateSetup();
-	for (const FString& Problem : Setup.Problems) { UE_LOG(LogAxisDoor, Warning, TEXT("%s P2e setup: %s"), *GetName(), *Problem); }
-	// 실행 중 새 칸 지정도 양쪽 연결을 막음 (기존 연결 쪽이 먼저 시작한 경우 포함, P2e D5⑤)
-	if (Part && IsHandleShared(Part) && Part->LinkedDoor && Part->LinkedDoor != this)
-	{
-		AVBoRHingedPanel* Other = Part->LinkedDoor;
-		Other->RememberHandleClaims();
-		for (int32 I = 0; I < 2; ++I)
-		{
-			if ((I == 0 ? Other->OutsideAxisHandle : Other->InsideAxisHandle) == Part) { Other->ApplyAxisHandle(I, nullptr); }
-		}
-		UE_LOG(LogAxisDoor, Warning, TEXT("%s P2e setup: shared handle %s; neither panel connects it."), *Other->GetName(), *Part->GetName());
-	}
-	if (Handle == 0) { OutsideAxisHandle = Previous; } else { InsideAxisHandle = Previous; }
-	ApplyAxisHandle(Handle, Part ? Setup.Handles[Handle] : nullptr);
+	// 이번 연결의 문제만 알림 (전체 설정 경고는 BeginPlay 한 번, P2e E20)
+	TArray<FString> Problems;
+	const bool bConnect = !Part || CanConnectAxisHandle(Part, Problems);
+	for (const FString& Problem : Problems) { UE_LOG(LogAxisDoor, Warning, TEXT("%s P2e setup: %s"), *GetName(), *Problem); }
+	ApplyAxisHandle(Handle, bConnect ? Part : nullptr);
 }
 
 FBox AVBoRHingedPanel::MeshFaceBounds() const
@@ -183,13 +169,7 @@ TArray<AVBoRAxisPart*> AVBoRHingedPanel::GetHandleClaims() const
 	TArray<AVBoRAxisPart*> Claims = Candidates[0];
 	for (AVBoRAxisPart* Part : Candidates[1]) { Claims.AddUnique(Part); }
 	for (AVBoRAxisPart* Part : {OutsideAxisHandle.Get(), InsideAxisHandle.Get()}) { if (Part) { Claims.AddUnique(Part); } }
-	for (const TWeakObjectPtr<AVBoRAxisPart>& Claim : InitialHandleClaims) { if (Claim.IsValid()) { Claims.AddUnique(Claim.Get()); } }
 	return Claims;
-}
-
-void AVBoRHingedPanel::RememberHandleClaims()
-{
-	for (AVBoRAxisPart* Part : GetHandleClaims()) { InitialHandleClaims.AddUnique(Part); }
 }
 
 bool AVBoRHingedPanel::IsHandleShared(const AVBoRAxisPart* Part) const
@@ -202,13 +182,35 @@ bool AVBoRHingedPanel::IsHandleShared(const AVBoRAxisPart* Part) const
 	return false;
 }
 
+bool AVBoRHingedPanel::CanConnectAxisHandle(AVBoRAxisPart* Part, TArray<FString>& Problems) const
+{
+	bool bConnect = true;
+	const bool bUnderHinge = Part->GetRootComponent()->IsAttachedTo(HingePivot);
+	if (Part->IsChildActor() && !bUnderHinge)
+	{
+		Problems.AddUnique(FString::Printf(TEXT("Child Actor %s: move its Child Actor component under HingePivot."), *Part->GetName()));
+		bConnect = false;
+	}
+	// 먼저 연결한 판은 건드리지 않음 (최초 후보 기록 없이 현재 연결만 확인, P2e D5⑤·Q3)
+	if (Part->LinkedDoor && Part->LinkedDoor != this)
+	{
+		Problems.AddUnique(FString::Printf(TEXT("shared handle %s; first connected panel keeps it."), *Part->GetName()));
+		bConnect = false;
+	}
+	if (bConnect && !bUnderHinge && Motion.AngleDeg > 0)
+	{
+		Problems.AddUnique(FString::Printf(TEXT("%s attaches to an open panel (%.2f deg); current world pose is kept."), *Part->GetName(), Motion.AngleDeg));
+	}
+	return bConnect;
+}
+
 AVBoRHingedPanel::FSetupAssessment AVBoRHingedPanel::EvaluateSetup() const
 {
 	FSetupAssessment Result;
 	TArray<AVBoRAxisPart*> Candidates[2]; CollectHandleCandidates(Candidates);
 	for (AVBoRAxisPart* Claim : GetHandleClaims())
 	{
-		if (IsHandleShared(Claim)) { Result.Problems.AddUnique(FString::Printf(TEXT("shared handle %s; neither panel connects it."), *Claim->GetName())); }
+		if (IsHandleShared(Claim)) { Result.Problems.AddUnique(FString::Printf(TEXT("shared handle %s; first connected panel keeps it."), *Claim->GetName())); }
 	}
 	for (int32 I = 0; I < 2; ++I)
 	{
@@ -235,22 +237,7 @@ AVBoRHingedPanel::FSetupAssessment AVBoRHingedPanel::EvaluateSetup() const
 			else if (Available.Num() > 1) { Result.Problems.Add(FString::Printf(TEXT("%s has multiple attached candidates; assign the slot explicitly."), Side)); }
 		}
 		if (!Part) { continue; }
-		bool bConnect = true;
-		const bool bUnderHinge = Part->GetRootComponent()->IsAttachedTo(HingePivot);
-		if (Part->IsChildActor() && !bUnderHinge)
-		{
-			Result.Problems.AddUnique(FString::Printf(TEXT("Child Actor %s: move its Child Actor component under HingePivot."), *Part->GetName()));
-			bConnect = false;
-		}
-		if (IsHandleShared(Part))
-		{
-			bConnect = false;
-		}
-		if (bConnect && !bUnderHinge && Motion.AngleDeg > 0)
-		{
-			Result.Problems.AddUnique(FString::Printf(TEXT("%s attaches to an open panel (%.2f deg); current world pose is kept."), *Part->GetName(), Motion.AngleDeg));
-		}
-		if (bConnect) { Result.Handles[I] = Part; }
+		if (CanConnectAxisHandle(Part, Result.Problems)) { Result.Handles[I] = Part; }
 	}
 	if (DoorMesh->GetStaticMesh() && DoorMesh->GetStaticMesh()->GetPathName() != TEXT("/Engine/BasicShapes/Cube.Cube") &&
 		MeshRestFromRoot.Equals(GetDefault<AVBoRHingedPanel>()->MeshRestFromRoot))
@@ -377,7 +364,6 @@ void AVBoRHingedPanel::BeginPlay()
 	StateOverlay = Material ? UMaterialInstanceDynamic::Create(Material, this) : nullptr;
 	OutsideGrab->GetInteractionPointerEventDelegate().AddUniqueDynamic(this, &AVBoRHingedPanel::HandleOutsidePointer);
 	InsideGrab->GetInteractionPointerEventDelegate().AddUniqueDynamic(this, &AVBoRHingedPanel::HandleInsidePointer);
-	RememberHandleClaims();
 	const FSetupAssessment Setup = EvaluateSetup();
 	for (const FString& Problem : Setup.Problems) { UE_LOG(LogAxisDoor, Warning, TEXT("%s P2e setup: %s"), *GetName(), *Problem); }
 	ApplyAxisHandle(0, Setup.Handles[0]); ApplyAxisHandle(1, Setup.Handles[1]);

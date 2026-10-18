@@ -2,7 +2,7 @@
 
 2026-10-18, Codex 앱. Claude 리뷰 전이며, 아래는 구현자가 남기는 질문과 검증 기록이다.
 브랜치 `codex/P2e-part-assembly`, 베이스 `main` `bd3d765`.
-상태: **Q1·Q2·Q3 답함(2026-10-18, Claude) — 명세 개정함. Codex가 같은 브랜치에서 이어서 구현한다.**
+상태: **Q1·Q2·Q3 답함 유지 — 개정 답과 리뷰 메모 반영 완료(2026-10-18, Codex). Claude 리뷰 대기.**
 
 ## 질문
 
@@ -89,7 +89,58 @@
 - **새 시험의 경고 계수기**(`FP2eLogs`): 엔진은 expected message로 등록한 Warning을 Verbose로 낮춰 넘긴다(`Runtime/Core/Private/Misc/AutomationTest.cpp:289-291`). 같은 문구의 Warning·Verbose를 세면 된다. P5l에서 같은 일을 이렇게 풀었다(`P3Probe/P5eRearviewMirrorTests.cpp:61-72`).
 - **E14 "게임에서 숨김 + 에디터에서 보임" 실패 원인:** `USceneComponent::IsVisible()`은 `bHiddenInGame`이 켜져 있으면 바로 거짓을 돌려준다(`Runtime/Engine/Private/Components/SceneComponent.cpp:3528-3536`, Claude 확인). 제품 코드 문제가 아니라 시험의 단언 문제다. "에디터에서 보임"은 `GetVisibleFlag()`(`Runtime/Engine/Classes/Components/SceneComponent.h:1640`)로 본다.
 
-## 검증 기록
+## 이번 Codex 결과 — 개정 반영 완료
+
+**완료 — P2e Q1·Q2·Q3 답과 리뷰 메모 반영 (2026-10-18, Codex 앱). Claude 리뷰 대기.**
+
+- 브랜치 `codex/P2e-part-assembly`, 시작 `6244d30`, 기존 WIP `579a56c` 보존. 새 커밋 제목: `fix: finish panel assembly ownership and diagnostics`.
+- Q1·Q2·Q3은 **답함 유지**, 새 질문 없음. 현재 칸·부착 후보만 검사하고, 먼저 연결한 판을 유지함. 최초 소유 기록과 다른 판의 연결 해제 제거.
+- 리뷰 메모: setter의 호출별 진단, Warning·Verbose 계수, E14 `GetVisibleFlag()` 모두 **반영함 (fix: finish panel assembly ownership and diagnostics)**.
+- 최종 non-unity·unity 각 1회 성공(exit 0), vBoR 컴파일·링크 warning/error 0. 전체 자동화 1회: 발견/완료/Success **382/382/382**, Fail 0, `TEST COMPLETE. EXIT CODE: 0`, 프로세스 exit 0. 기존 368개 + P2e 14개 모두 통과. P0Buck E8도 최초 실행에서 통과해 재실행 없음.
+- 하위 에이전트·자체 리뷰 루프·MCP·push·PR·merge 없음. 시작·자동화 종료 후 `UnrealEditor*` 프로세스 없음.
+
+① 바뀐 파일
+
+- `Source/vBoR/Interaction/VBoRHingedPanel.h`, `.cpp`: 최초 소유 기록 제거, 현재 연결을 기준으로 중복 지정 거절, 먼저 연결한 판 보존. 연결 가능 판정은 `CanConnectAxisHandle`을 버튼/BeginPlay의 `EvaluateSetup`과 setter가 공유함. setter는 이번 연결의 문제만 경고하고, 전체 설정 목록을 되풀이하지 않음.
+- `Source/vBoR/P2Probe/P2cHingedPanelTests.cpp`: E9의 15/25 deg 입력을 열린 손잡이의 월드 축 좌표로 변환함.
+- `Source/vBoR/P2Probe/P2dLatchedPanelTests.cpp`: E10의 시험용 문에 독립 손잡이를 준비함.
+- `Source/vBoR/P2Probe/P2ePartAssemblyTests.cpp`: E10 A 먼저/B 먼저·실행 중 거절·기존 연결/부모/월드 자세 보존·현재 후보 진단, E12 글러브박스 Log 1회·부모/자세, E13 재지정 중복 경고 없음, E14 visible flag, E20 무관한 문제 재경고 없음. expected Warning은 Verbose도 계수함.
+- `Docs/Reviews/P2e-part-assembly.md`: 이번 결과·검증 근거. `HANDOFF.md`는 git 무시 파일에 같은 보고를 남김.
+- 기존 WIP의 `VBoRAxisPart.h` D1과 판의 D2–D5 구현을 이번 수정과 함께 최종 검증함. 이번 커밋에서 명세·근사 차 소스·에셋·레벨·설정·플러그인은 바꾸지 않음.
+
+② 명세 §6 완료 조건별 결과
+
+1. §2의 1–3 구현 완료: 쪽 값, Play 후보 찾기·칸 우선, 경첩 부착, 미는 면 상자, 공통 설정 검사, 경계 자동화. Q1–Q3 개정 적용.
+2. §4 E1–E20을 묶은 P2e 14개와 E21의 기존 368개 모두 자동화 통과. E10은 두 BeginPlay 순서를 명시적으로 실행함. 연결/자세, 80% 넘김, 얇은 상자 밀기, 검사 버튼의 불변성과 Warning 횟수 포함.
+3. 최종 C++ 트리에서 non-unity(`-DisableUnity -Module=vBoR`)·unity 각각 성공. vBoR warning/error 0. 전체 시험은 끝에 한 번만 실행함.
+4. 보고 ①–⑤를 이 리뷰·HANDOFF·마지막 커밋 본문에 기록함.
+5. 기기·GUI 시험 상태 `not-tested` 유지.
+
+③ 명세와 다르게 한 것과 이유
+
+- 개정 명세와 다른 제품 동작 없음. Q1에서 허용한 P2c E9·P2d E10의 **시험 준비만** 변경했고, 기존 단언은 모두 그대로임.
+- Q2대로 근사 차 코드를 유지하고 E12 기대를 글러브박스 부착 Log 1회로 변경함. Q3대로 과거 후보를 저장하지 않고 그 순간의 칸·부착 후보로 진단함.
+- 공유 연결/Child Actor/열린 판의 연결 가능 판정을 작은 공통 함수로 옮겨 setter가 무관한 설정 문제를 다시 경고하지 않게 함. D5의 버튼·BeginPlay 공통 판정 유지.
+
+④ 헤더·소스 API 확인 (추정 없음)
+
+엔진 접두어: `C:/Program Files/Epic Games/UE_5.7/Engine/Source/`.
+
+- `Runtime/Engine/Classes/GameFramework/Actor.h:2018,3184,3554`: `AttachToComponent`, `IsChildActor`, `ForEachAttachedActors`. 현재 부착 자식 순회 구현 `Runtime/Engine/Private/Actor.cpp:2832`.
+- `Runtime/Engine/Classes/Components/SceneComponent.h:1302,1640`: `IsAttachedTo`, `GetVisibleFlag`. 같은 부모·소켓 재부착은 조기 반환함: `Runtime/Engine/Private/Components/SceneComponent.cpp:2316-2321`.
+- `Runtime/Engine/Classes/Components/BoxComponent.h:39,47`: `SetBoxExtent`, `GetUnscaledBoxExtent`. `Runtime/CoreUObject/Public/UObject/ObjectMacros.h:1005`: `CallInEditor`.
+- `Runtime/Core/Public/Misc/AutomationTest.h:1815`: `AddExpectedMessagePlain`. expected Warning을 Verbose로 낮추는 구현 `Runtime/Core/Private/Misc/AutomationTest.cpp:282-291` 확인.
+- 새 ISDK·MetaXR API 도입 없음. 유지한 API는 `Plugins/MetaXRInteraction/Source/OculusInteraction/Public/Interaction/IsdkGrabbableComponent.h:117,146,158`(collider/Palm/transformer), 같은 `Interaction/Grabbable/IsdkGrabTransformerComponent.h:130,171,199,266`(single/multi target·throw)로 재확인함.
+
+⑤ 로컬에서 확인할 것과 검증 근거
+
+- 빌드: `Saved/Logs/P2eResumeFinalNonUnityBuild.log`, `P2eResumeFinalUnityBuild.log`. 각 `Result: Succeeded`, exit 0, vBoR warning/error 0. 이번 두 로그에 별도 compiler warning/error도 없음. 로컬 도구의 optional-module 안내는 제품 진단과 구분함.
+- 자동화: `Saved/Logs/P2eResumeFinalAllAutomation.log`, console `P2eResumeFinalAllAutomationConsole.log`. `-abslog=C:\Git\vBoR\Saved\Logs\P2eResumeFinalAllAutomation.log`를 단일 인자로 전달함. 샘플·McpAutomationBridge·UnrealAgent 비활성화, `Automation RunTests vBoR;Quit`. 발견/완료 382, Success 382, Fail 0, 엔진/프로세스 exit 0. 알려진 XR 확장·샘플 InfoCard CDO·시험 월드 정리 로그는 Agent-Workflow §2.5 기준으로 합성 단언 결과와 구분함.
+- 에디터: 이번에는 열지 않았고 MCP/에셋 작업 없음. 명세 §7의 Outliner 배치·HingePivot 밑 Child Actor·Details 설정 검사 버튼/결과·미는 면 상자 편집/표시는 사용자 확인 필요, **not-tested**.
+- Quest 3 Link/VR Preview: 문을 열 때 손잡이 동행, 열린 문의 80% 넘김, 상자 면 접촉·밀기, 반복 조작·추적 손실/복구를 확인할 것. 계획서 **T-03·T-08·T-09 모두 not-tested**. 합성 자동화가 실제 기기/손 추적/사용성 증거를 대신하지 않음.
+- 자동화 후 `UnrealEditor*` 프로세스 없음. Claude 리뷰 대기, push·PR·merge 하지 않음.
+
+## 이전 WIP 검증 기록 (`579a56c`, 현재 결과 아님)
 
 - 빌드: non-unity(`-DisableUnity -Module=vBoR`)와 unity 각각 1회, `Result: Succeeded`, 프로세스 exit 0. vBoR 컴파일·링크 warning/error 0. 로컬 도구의 StructUtils 폐기 예정 안내 2줄은 각 로그에 별도로 있음.
 - 로그: `Saved/Logs/P2eFinalNonUnityBuild.log`, `P2eFinalUnityBuild.log`.
