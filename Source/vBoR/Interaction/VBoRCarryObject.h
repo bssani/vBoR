@@ -155,6 +155,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 private:
+	friend struct FP4dTestAccess;
 	friend class FP1cLevelTest;
 	friend class FP1cStackTest;
 	friend class FP1cLiftTest;

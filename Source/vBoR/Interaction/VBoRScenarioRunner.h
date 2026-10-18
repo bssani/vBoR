@@ -102,9 +102,10 @@ private:
 	UPROPERTY() TArray<TObjectPtr<AVBoRFloorRoute>> Routes;
 	UPROPERTY() TObjectPtr<USceneComponent> StartMarker;
 	double RouteDwellSeconds = 0;
-	bool bRouteArrived = false, bRouteAllowed = false;
+	bool bRouteArrived = false, bRouteAllowed = false, bRouteAreaUnknown = false;
 	FString FloorRouteNotice;
 	void BeginRoute();
+	void CheckRouteArea();
 	void SampleRoute(bool bTracked, const FTransform& Head, double DeltaSeconds);
 	void RecordStartFallback();
 	TMap<TWeakObjectPtr<AVBoRPokeButton>, int32> ButtonCounts;

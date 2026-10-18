@@ -1,4 +1,6 @@
 #include "VBoRScenarioRunner.h"
+#include "VBoRPoweredPanel.h"
+#include "VBoRBoxStand.h"
 #include "VBoRParticipantZones.h"
 #include "VBoRVehicleAlignmentComponent.h"
 #include "VBoRViewpointComponent.h"
@@ -216,6 +218,7 @@ bool AVBoRScenarioRunner::InitializeFlow()
 		case EVBoRStepRule::DoorUnlocked: case EVBoRStepRule::DoorOpened: case EVBoRStepRule::DoorLatched: Target = Cast<AVBoRHingedDoor>(P3Actor(Raw)); break;
 		case EVBoRStepRule::Viewpoint: Target = P3Component<UVBoRViewpointComponent>(Raw); break;
 		case EVBoRStepRule::KeyHeld: case EVBoRStepRule::KeyUnlockAndLock: Target = Cast<AVBoRKeyFob>(P3Actor(Raw)); break;
+		case EVBoRStepRule::PoweredOpen: case EVBoRStepRule::PoweredClosed: Target = Cast<AVBoRPoweredPanel>(P3Actor(Raw)); break;
 		}
 		if (Step.Rule != EVBoRStepRule::Confirm && !Target) { ValidationProblems += FString::Printf(TEXT("%s: 태그 %s 종류 불일치 또는 없음\n"), *Step.StepId.ToString(), *Step.TargetTag.ToString()); }
 		const FString Id = Step.StepId.ToString(); const int32 Number = FCString::Atoi(*Id);
@@ -297,6 +300,8 @@ bool AVBoRScenarioRunner::RuleSatisfied() const
 	case EVBoRStepRule::DoorLatched: { const auto* C = Cast<AVBoRHingedDoor>(Target); return C && C->GetMotion().bLocked && C->GetMotion().AngleDeg <= C->LatchAngleDeg; }
 	case EVBoRStepRule::Viewpoint: return Alignment && Alignment->IsAtViewpoint(Cast<UVBoRViewpointComponent>(Target));
 	case EVBoRStepRule::KeyHeld: { const auto* Key = Cast<AVBoRKeyFob>(Target); return Key && Key->GetHoldingHand() != INDEX_NONE; }
+	case EVBoRStepRule::PoweredOpen: { const auto* Gate = Cast<AVBoRPoweredPanel>(Target); return Gate && Gate->GetState() == EVBoRPoweredState::Open; }
+	case EVBoRStepRule::PoweredClosed: { const auto* Gate = Cast<AVBoRPoweredPanel>(Target); return Gate && Gate->GetState() == EVBoRPoweredState::Closed; }
 	case EVBoRStepRule::KeyUnlockAndLock:
 	{
 		const FIntPoint Counts = KeyCounts.FindRef(Cast<AVBoRKeyFob>(Target));
@@ -459,13 +464,19 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 	case EVBoRFlowCommand::Restart:
 		++RetryCount;
 		{
+			// 박스를 먼저 치워 닫힌 게이트 안에 남지 않게 함 (P4d D6)
+			for (TActorIterator<AVBoRBoxStand> It(GetWorld()); It; ++It) { It->ResetStand(); }
+			TSet<AVBoRPoweredPanel*> Gates;
+			for (UObject* Target : Targets) { if (auto* Gate = Cast<AVBoRPoweredPanel>(Target)) { Gates.Add(Gate); } }
+			for (TActorIterator<AVBoRPoweredPanel> It(GetWorld()); It; ++It) { if (It->ActorHasTag(TEXT("Car.Liftgate"))) { Gates.Add(*It); } }
+			for (auto* Gate : Gates) { Gate->ResetPanel(); }
 			TSet<AVBoRHingedDoor*> Doors;
 			for (UObject* Target : Targets) { if (auto* Door = Cast<AVBoRHingedDoor>(Target)) { Doors.Add(Door); } }
 			FString Problems;
 			if (auto* Door = Cast<AVBoRHingedDoor>(P3Actor(FindP3Tag(GetWorld(), TEXT("Car.DriverDoor"), Problems)))) { Doors.Add(Door); }
 			for (auto* Door : Doors) { Door->ResetDoor(); }
 		}
-		Record(TEXT("진행자 처음부터 — 문 닫힘·잠김, 기준 복귀"));
+		Record(TEXT("진행자 처음부터 — 문 닫힘·잠김, 리프트게이트 초기화·박스 받침 1개, 기준 복귀"));
 		bFreeMode = false;
 		bStartHeadPending = false;
 		if (!Alignment->IsBaseViewpoint()) { bRestartPending = Alignment->ReturnToBase(); bRunning = false; ++Generation; BeginRoute(); UpdateMarker(); }
@@ -672,12 +683,18 @@ void AVBoRScenarioRunner::UpdateMarker()
 void AVBoRScenarioRunner::BeginRoute()
 {
 	for (TActorIterator<AVBoRFloorRoute> It(GetWorld()); It; ++It) { It->SetRouteVisible(false); }
-	bRouteArrived = false; bRouteAllowed = false; RouteDwellSeconds = 0; FloorRouteNotice.Reset();
+	bRouteArrived = false; bRouteAllowed = false; bRouteAreaUnknown = false; RouteDwellSeconds = 0; FloorRouteNotice.Reset();
+	CheckRouteArea();
+}
+
+void AVBoRScenarioRunner::CheckRouteArea()
+{
 	AVBoRFloorRoute* Route = bRunning && !bFreeMode && Routes.IsValidIndex(StepIndex) ? Routes[StepIndex].Get() : nullptr;
 	if (!Route) { return; }
 	const FVector2D Bounds = UHeadMountedDisplayFunctionLibrary::GetPlayAreaBounds(EHMDTrackingOrigin::Stage);
 	const APawn* Pawn = UGameplayStatics::GetPlayerPawn(this, 0);
 	const bool bKnown = Pawn && !Bounds.ContainsNaN() && Bounds.X > 0 && Bounds.Y > 0;
+	bRouteAreaUnknown = !bKnown;
 	bool bInside = bKnown;
 	if (bKnown)
 	{
@@ -688,16 +705,18 @@ void AVBoRScenarioRunner::BeginRoute()
 		}
 	}
 	bRouteAllowed = bInside;
-	if (bInside) { Route->SetRouteVisible(true); }
+	if (bInside) { Route->SetRouteVisible(true); FloorRouteNotice.Reset(); }
 	else
 	{
-		FloorRouteNotice = bKnown ? TEXT("Floor route hidden — outside the play area") : TEXT("Floor route hidden — play area unknown");
-		Record(CurrentStep()->StepId.ToString() + TEXT(": ") + FloorRouteNotice);
+		const FString Notice = bKnown ? TEXT("Floor route hidden — outside the play area") : TEXT("Floor route hidden — play area unknown");
+		if (FloorRouteNotice != Notice) { FloorRouteNotice = Notice; Record(CurrentStep()->StepId.ToString() + TEXT(": ") + FloorRouteNotice); }
 	}
 }
 
 void AVBoRScenarioRunner::SampleRoute(bool bTracked, const FTransform& Head, double DeltaSeconds)
 {
+	// 모를 때만 재조회함. 알려진 영역 밖 판정은 단계 안에서 고정 (P4d D5)
+	if (bRouteAreaUnknown) { CheckRouteArea(); }
 	AVBoRFloorRoute* Route = bRunning && bRouteAllowed && !bRouteArrived && Routes.IsValidIndex(StepIndex) ? Routes[StepIndex].Get() : nullptr;
 	if (!Route || !bTracked) { return; }
 	if (FVector::DistSquared2D(Head.GetLocation(), P3RouteEnd(Route)) > FMath::Square(Route->RingRadiusCm)) { RouteDwellSeconds = 0; return; }
