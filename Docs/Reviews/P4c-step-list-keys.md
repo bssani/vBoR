@@ -1,7 +1,24 @@
 # P4c 단계 목록·키 규칙 — 리뷰
 
 명세: [P4c-step-list-keys.md](../Specs/P4c-step-list-keys.md) · 브랜치: `codex/P4c-step-list-keys` · 베이스 `main` `3b02f1e`
-상태: **R1-1 반영함 (fix: record start after alignment reapply). Claude 재리뷰 대기.**
+상태: **2회차 리뷰 통과(2026-10-18, Claude — `7ee397c`). 열린 항목 없음.**
+
+## 리뷰 2회차 (2026-10-18, Claude — `7ee397c`)
+
+**결과: 통과. 열린 항목 없음.** R1-1이 제안대로 들어갔다.
+- `Interaction/VBoRScenarioOperator.cpp:189`: 기다리던 흐름을 A로 시작할 때 `EnterStep(0, true)`로 부른다. 바뀐 제품 코드는 이 한 줄뿐이다.
+- 새 시험 `vBoR.P4c.E8ReapplyStartAttempt`(`P3Probe/P5iOperatorPanelTests.cpp:276-316`)는 P5i E16과 같은 준비로 두 경우를 본다.
+  - 표시를 지난 경우: "시작 위치" 1줄, "거치지 않음" 0줄.
+  - 안 지난 경우: "시작 위치" 0줄, 01을 떠날 때 "거치지 않음" 1줄.
+- 시험을 P5i 파일에 둔 것은 그 fixture(임시 저장 경로·Stage 합성 XR)를 다시 쓰기 위해서다(보고 ③). P5i E16의 함수·단언은 그대로다.
+
+**재현(에디터가 닫힌 것을 확인한 뒤, 바뀐 C++ 2개의 시각을 갱신):**
+- non-unity(`-DisableUnity -Module=vBoR`): `Result: Succeeded`, 경고·오류 0. 로그 `Saved/Logs/ReviewP4cR2NonUnity.log`.
+- unity: `Result: Succeeded`, 경고·오류 0. 로그 `ReviewP4cR2Unity.log`.
+- `vBoR.*`: **390/390**(P4c 8개 포함), `TEST COMPLETE. EXIT CODE: 0`. 로그 `ReviewP4cR2All.log`. 끝난 뒤 `UnrealEditor` 프로세스 없음.
+- Codex의 전체 실행은 389/390이었다. 실패 1건은 `vBoR.P0Buck.E8Persistence`의 기존 `OS error 5`(P0-c M1)였고, 그 시험만 다시 돌려 통과했다(보고 ⑤). 내 실행에서는 처음부터 통과했다. 무관한 기존 간헐 실패다.
+
+**Codex 토큰:** 3.71M(입력 3.70M 중 캐시 3.54M, 약 96%), 2026-10-18 14:32–14:38 UTC로 약 6분. 하위 에이전트는 0이다. P4c 전체로는 약 13.0M(3.70M + 5.62M + 3.71M)이다.
 
 ## 리뷰 1회차 (2026-10-18, Claude — `0a26f34`)
 
@@ -34,7 +51,7 @@
   - ←는 기본값(끔)이라 같은 시도를 유지한다(E8.1·E8.2).
 - **D4·D5 에셋:** MCP `inspect.set_property`로 `Steps`만 썼다. 고치기 전 사본·SHA256이 리뷰 파일에 있다. E9가 §0-1 표 전체(문구·규칙·태그·확인·`MarkerTag`·`RouteTag`·기준 시점·TV 문구·자리값)를 단언하고, E10이 근사 차와 맞춰 시작 차단 0·TV 전체 19를 본다.
 
-### R1-1 — 정렬 다시 적용(A)으로 흐름이 시작되면 시작 기록을 기다리지 않는다 — 반영함 (fix: record start after alignment reapply)
+### R1-1 — 정렬 다시 적용(A)으로 흐름이 시작되면 시작 기록을 기다리지 않는다 — 반영함 (`7ee397c`)
 
 **문제**
 - 위치: `Interaction/VBoRScenarioOperator.cpp:189`의 `FinishReapply`가 `EnterStep(0)`을 인자 없이 부른다. 기본값은 "새 시도 아님"이다(`Interaction/VBoRScenarioRunner.h:150`).
@@ -259,3 +276,4 @@ MCP `inspect.get_property`로 `/Game/P3/DA_P3_Scenario.DA_P3_Scenario`의 `Steps
 |---|---|---|
 | 2026-10-18 | 구현 중 질문 | Codex Q1(생성자 기본 단계 14개) → Claude 답: 명세 13 → 14 정정 |
 | 2026-10-18 | 1회차 | `0a26f34` 리뷰. 열림 1건 R1-1(A로 흐름 시작 때 시작 기록을 기다리지 않음 — 명세 D3 빈틈), 참고 1(VR 셋) |
+| 2026-10-18 | 2회차 | 통과(`7ee397c`), 열린 항목 없음. R1-1 반영함. 재현 390/390 |
