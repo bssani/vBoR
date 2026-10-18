@@ -1,8 +1,81 @@
 # P2e 부품 조립 — 리뷰
 
-2026-10-18, Codex 앱. Claude 리뷰 전이며, 아래는 구현자가 남기는 질문과 검증 기록이다.
-브랜치 `codex/P2e-part-assembly`, 베이스 `main` `bd3d765`.
-상태: **Q1·Q2·Q3 답함 유지 — 개정 답과 리뷰 메모 반영 완료(2026-10-18, Codex). Claude 리뷰 대기.**
+명세: [P2e-part-assembly.md](../Specs/P2e-part-assembly.md) · 브랜치: `codex/P2e-part-assembly` · 베이스 `main` `bd3d765`
+질문 Q1–Q3과 Codex 검증 기록은 Codex 앱이 남겼다(2026-10-18).
+상태: **1회차 리뷰 통과(2026-10-18, Claude — `de1e54c`). 열린 항목 없음.**
+
+## 리뷰 1회차 (2026-10-18, Claude — `de1e54c`)
+
+**결과: 통과. 열린 항목 없음.** D1–D5가 개정 명세(Q1·Q2·Q3 답)대로 들어갔다.
+- 기존 시험에서 바뀐 것은 §3이 허용한 두 곳의 준비뿐이다. 단언은 그대로다.
+  - P2c E9(`P2Probe/P2cHingedPanelTests.cpp:214-219`): 문을 30° 연 뒤 손잡이의 쉬는 축 좌표(`AxisPivot` 월드 변환)를 한 번 읽고, 15°·25° 입력을 그 좌표로 옮겨 넣는다.
+  - P2d E10(`P2Probe/P2dLatchedPanelTests.cpp:247-248`): 시험용 문에 따로 만든 손잡이를 연결한다.
+- 근사 차 소스·에셋·레벨·설정·플러그인은 바뀌지 않았다(diff 0).
+- WIP의 처음 소유 기록(`InitialHandleClaims`·`RememberHandleClaims`)과 "다른 판 연결 끊기"는 빠졌다(grep 0).
+- 리뷰 메모 셋은 모두 반영됐다(아래 "리뷰 메모").
+
+**재현(에디터가 닫힌 것을 확인한 뒤, 바뀐 C++ 6개의 시각을 갱신):**
+- non-unity(`-DisableUnity -Module=vBoR`): `Result: Succeeded`, 경고·오류 0. 로그 `Saved/Logs/ReviewP2eNonUnity.log`.
+- unity: `Result: Succeeded`, 경고·오류 0. 로그 `ReviewP2eUnity.log`.
+- `vBoR.*`: 382/382(P2e 14개 포함), `TEST COMPLETE. EXIT CODE: 0`. 로그 `ReviewP2eAll.log`. 끝난 뒤 `UnrealEditor` 프로세스 없음.
+
+**Codex 토큰:**
+- 이번 재개: 3.45M(입력 3.43M 중 캐시 3.29M, 약 96%), 2026-10-18 13:23–13:31 UTC로 약 7분.
+- P2e 전체: WIP 3.95M(10-17 16:21–16:34 UTC) + Q3 1.58M + 이번 3.45M = 약 9.0M이다.
+- 하위 에이전트는 0이다. 빌드와 전체 시험은 끝에 한 번씩 돌렸다. 규칙 안이다.
+
+**확인한 것:**
+- **D1**(`Interaction/VBoRAxisPart.h:26-32`, `:81`): enum은 없음·바깥·안쪽이고 기본은 없음이다. 1축 부품의 동작은 바뀌지 않았다(E11).
+- **D2 찾기**(`Interaction/VBoRHingedPanel.cpp:153-164`, `:207-241`):
+  - `ForEachAttachedActors`로 쪽 값이 있는 손잡이만 모은다.
+  - 칸에 지정한 손잡이가 먼저다. 칸이 비었으면 다른 칸에 지정한 손잡이를 빼고 후보가 하나일 때만 쓴다(`:235`).
+  - 엔진은 이 판의 컴포넌트에 직접 붙은 액터만 알려 준다. 손자 액터까지 내려가지 않는다(`Runtime/Engine/Private/Actor.cpp:2832-2877`, Claude 확인). 명세대로다.
+- **D3 붙이기**(`:265-283`):
+  - BeginPlay(`:369`)와 `SetAxisHandle`(`:145`)이 모두 이 함수를 지난다. 손잡이가 이미 경첩 밑이면 그대로 두고, 아니면 KeepWorld로 붙이고 Log를 1번 남긴다.
+  - 붙이기가 실패하면 연결하지 않는다(`:278`). 엔진이 붙이기를 거절하는 경우(순환, Static 부품을 움직이는 부모에 붙임)는 엔진이 직접 경고를 남긴다(`Runtime/Engine/Private/Components/SceneComponent.cpp:2340-2369`, Claude 확인).
+  - 칸의 손잡이를 바꿀 때 이전 손잡이의 연결을 지운다(`:268-271`). 전에는 남아 있었다. "지금 연결" 판정에 필요한 변경이다. 지우지 않으면 칸에서 뺀 손잡이를 다른 판이 영영 가질 수 없다. 범위 안이다.
+- **D4 미는 면 상자**(`:107-117`, `:129-134`):
+  - 끔: construction 때 상자를 메시 bounds에 맞춘다. 면은 지금과 같은 식이다(`MeshFaceBounds`, `:148-151`).
+  - 켬: 면은 상대 위치 ± extent × |scale|이다. 회전이 있으면 메시 bounds를 쓴다.
+  - E14가 끔 → 켬일 때 상자가 그대로임을 확인한다. E15는 상자 밖·메시 안의 점이 밀지 못하는 것을 확인한다.
+- **D5 판정**(`:185-256`):
+  - 판정 함수 하나(`EvaluateSetup`)를 버튼(`:258-263`)과 BeginPlay(`:367-369`)가 같이 쓴다.
+  - `SetAxisHandle`은 연결 가능 판정(`CanConnectAxisHandle`, `:185-205`)만 같이 쓰고, 그 호출에서 생긴 문제만 낸다(리뷰 메모 1, E18 끝).
+  - ⑤는 지금의 연결(`LinkedDoor`, `:195`)과 지금의 칸·붙은 후보(`:166-183`)만 본다. 처음 소유는 기록하지 않는다.
+  - 두 순서를 직접 따라가 봤다:
+    - A 먼저: A는 B 밑의 손잡이를 보고 ⑤ Warning을 낸다. 그다음 연결하고 경첩으로 옮긴다. B는 그 손잡이를 볼 수 없어서 경고하지 않는다.
+    - B 먼저: B는 A 칸의 손잡이를 보고 ⑤ Warning을 낸다. 그다음 연결하고 옮긴다. A는 칸에 남은 손잡이를 보지만, `LinkedDoor`가 B라서 거절한다.
+    - 두 문구가 같아서 `AddUnique`로 한 번만 나온다(`:197`, `:213`). E10이 두 순서의 Warning 수(먼저 판 1번, 뒤 판 0번/1번)와 실행 중 거절을 확인한다.
+- **E19 버튼:**
+  - 버튼은 칸·부모·자세를 바꾸지 않는다.
+  - 시험은 버튼이 낸 목록의 각 줄을 expected Warning 1번으로 등록한다(`P2Probe/P2ePartAssemblyTests.cpp:72-92`). 그래서 BeginPlay가 같은 목록을 한 번씩 냈는지까지 엔진이 확인한다.
+- **E12 근사 차:** 새 Warning은 0이다. 붙임 Log는 글러브박스 1번이다. 세 판 모두 판정 문제가 없다.
+
+### 참고 1 — 문 위로 끌어 놓은 손잡이 아닌 액터는 문을 따라 돌지 않는다 ("BP 만드는 법"에 넣을 것)
+
+- **위치:** 찾기는 쪽 값이 있는 손잡이만 경첩으로 옮긴다(`Interaction/VBoRHingedPanel.cpp:157-162`). Outliner에서 문 위로 끌어 놓은 액터는 문 root(`DoorOrigin`)에 붙는다. 그런데 도는 것은 root 밑의 `HingePivot`이다.
+- **영향:** 메시 액터(사이드 미러·트림)나 쪽 값이 "없음"인 부품을 문 위로 끌어 놓으면, 문을 열어도 제자리에 남는다.
+  - 명세대로다(E11, 범위 밖 표).
+  - 사용자 계획(문 부품은 merge해서 문 BP에 넣음)과도 맞는다.
+- **할 일:** 코드는 바꾸지 않는다. "BP 만드는 법"에 다음을 쓴다.
+  - 문과 같이 도는 메시는 문 BP의 `DoorMesh`(merge)에 넣거나, `HingePivot` 밑에 메시 컴포넌트를 더해 넣는다.
+  - 미는 면은 `DoorMesh` bounds만 본다. 그래서 더한 컴포넌트가 면 밖으로 나오면 미는 면 상자를 쓴다.
+  - 문에 달린 다른 상호작용 부품(예: 창문 스위치)이 생기면 그때 명세로 정한다.
+
+### 참고 2 — `SetAxisHandle`이 거절하면 그 판의 그 쪽 칸이 빈다
+
+- **위치:** 거절하면 `ApplyAxisHandle(Handle, nullptr)`로 간다(`Interaction/VBoRHingedPanel.cpp:143-145`).
+- **결과:** 그 쪽에 다른 손잡이가 연결돼 있었으면 그 연결도 풀린다(`:268-271`). 그 손잡이는 경첩에 붙은 채로 남는다.
+- **지금은 영향 없음:**
+  - `SetAxisHandle`은 Blueprint에서 부를 수 없다(UFUNCTION 아님, `.h:69`).
+  - 부르는 곳은 근사 차뿐이고, 근사 차에는 공유하는 손잡이가 없다.
+- **판단:** "거절하면 아무것도 바꾸지 않음"이 더 자연스럽다고 본다. 하지만 명세가 정하지 않았다. 실행 중에 손잡이를 바꾸는 기능이 생기면 그때 정한다.
+
+### 참고 3 — 에디터 확인 때 볼 것 (명세 §7에 더함)
+
+1. **"설정 검사" 결과 글이 영어다**("문제 없음"만 한국어, `:191-253`). Details에서 읽기 불편하면 한국어로 바꾼다. 글만 바꾸면 되고, 시험은 문구를 판정 함수에서 읽으므로 같이 바뀐다.
+2. **버튼을 누른 뒤 Details의 결과 글이 바로 바뀌는지** 본다. 자동화로는 볼 수 없다. 바로 안 바뀌면 다른 액터를 골랐다 다시 고르면 된다. 그래도 불편하면 Output Log를 쓴다(같은 글을 남김).
+3. **문 BP 안 Child Actor로 넣은 손잡이**의 "문의 어느 쪽"이 손잡이 BP 기본값대로 나오는지 본다.
 
 ## 질문
 
@@ -85,6 +158,8 @@
 
 ## 리뷰 메모 (Claude, WIP `579a56c`를 읽고 — 이어서 할 때 참고)
 
+상태: **반영함 (`de1e54c`)** — 셋 모두. 1회차 리뷰에서 확인했다.
+
 - **`SetAxisHandle`이 부를 때마다 판정 목록 전체를 Warning으로 낸다**(`Interaction/VBoRHingedPanel.cpp` WIP의 `SetAxisHandle`). 근사 차처럼 코드에서 여러 번 부르면 같은 문제가 되풀이된다(E20 "문제마다 1번"). 전체 목록은 BeginPlay에서 한 번만 내고, `SetAxisHandle`은 그 호출에서 생긴 문제만 낸다(⑤ 거절, ⑨ 열린 판).
 - **새 시험의 경고 계수기**(`FP2eLogs`): 엔진은 expected message로 등록한 Warning을 Verbose로 낮춰 넘긴다(`Runtime/Core/Private/Misc/AutomationTest.cpp:289-291`). 같은 문구의 Warning·Verbose를 세면 된다. P5l에서 같은 일을 이렇게 풀었다(`P3Probe/P5eRearviewMirrorTests.cpp:61-72`).
 - **E14 "게임에서 숨김 + 에디터에서 보임" 실패 원인:** `USceneComponent::IsVisible()`은 `bHiddenInGame`이 켜져 있으면 바로 거짓을 돌려준다(`Runtime/Engine/Private/Components/SceneComponent.cpp:3528-3536`, Claude 확인). 제품 코드 문제가 아니라 시험의 단언 문제다. "에디터에서 보임"은 `GetVisibleFlag()`(`Runtime/Engine/Classes/Components/SceneComponent.h:1640`)로 본다.
@@ -159,3 +234,4 @@
 | 2026-10-18 | 구현 중 질문 | Codex Q1·Q2(WIP `579a56c`) → Claude 답: 명세 D5⑤·E10·E12·§3 개정, 리뷰 메모 셋 |
 | 2026-10-18 | 재개 중 질문 | Codex Q3: A가 먼저 가져가면 B의 부착 후보가 사라짐. 최초 소유 기록 제거와 E10의 뒤 판 경고 요구 충돌. 코드 수정·추가 검증 전 중단 |
 | 2026-10-18 | Q3 답 | Claude: 판정은 그 순간의 칸·붙은 후보 기준, 처음 소유를 기억하지 않음. 명세 D5⑤·E10 개정 |
+| 2026-10-18 | 1회차 | 통과(`de1e54c`), 열린 항목 없음. 리뷰 메모 셋 반영함. 참고 1(문 위로 끌어 놓은 손잡이 아닌 액터는 돌지 않음 — BP 만드는 법에), 참고 2(`SetAxisHandle` 거절 때 그 쪽 칸 비움), 참고 3(에디터 확인 셋) |
