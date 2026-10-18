@@ -186,7 +186,7 @@ void AVBoRScenarioRunner::FinishReapply()
 	LastOperatorCommand = TEXT("Re-apply saved alignment — accepted (") + Result + TEXT(")");
 	Record(TEXT("진행자 정렬 다시 적용 — ") + Alignment->Describe());
 	if (!bRunning && !bFreeMode && ValidationProblems.IsEmpty() && Alignment->State == EVBoRAlignmentState::Applied)
-	{ bRunning = true; EnterStep(0); }
+	{ bRunning = true; EnterStep(0, true); }
 }
 
 FVBoROperatorStatus AVBoRScenarioRunner::GetOperatorStatus() const

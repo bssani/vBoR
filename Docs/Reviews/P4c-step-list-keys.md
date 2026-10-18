@@ -1,7 +1,7 @@
 # P4c 단계 목록·키 규칙 — 리뷰
 
 명세: [P4c-step-list-keys.md](../Specs/P4c-step-list-keys.md) · 브랜치: `codex/P4c-step-list-keys` · 베이스 `main` `3b02f1e`
-상태: **1회차 리뷰(2026-10-18, Claude — `0a26f34`) — 열림 1건(R1-1).**
+상태: **R1-1 반영함 (fix: record start after alignment reapply). Claude 재리뷰 대기.**
 
 ## 리뷰 1회차 (2026-10-18, Claude — `0a26f34`)
 
@@ -34,7 +34,7 @@
   - ←는 기본값(끔)이라 같은 시도를 유지한다(E8.1·E8.2).
 - **D4·D5 에셋:** MCP `inspect.set_property`로 `Steps`만 썼다. 고치기 전 사본·SHA256이 리뷰 파일에 있다. E9가 §0-1 표 전체(문구·규칙·태그·확인·`MarkerTag`·`RouteTag`·기준 시점·TV 문구·자리값)를 단언하고, E10이 근사 차와 맞춰 시작 차단 0·TV 전체 19를 본다.
 
-### R1-1 — 정렬 다시 적용(A)으로 흐름이 시작되면 시작 기록을 기다리지 않는다 — 열림
+### R1-1 — 정렬 다시 적용(A)으로 흐름이 시작되면 시작 기록을 기다리지 않는다 — 반영함 (fix: record start after alignment reapply)
 
 **문제**
 - 위치: `Interaction/VBoRScenarioOperator.cpp:189`의 `FinishReapply`가 `EnterStep(0)`을 인자 없이 부른다. 기본값은 "새 시도 아님"이다(`Interaction/VBoRScenarioRunner.h:150`).
@@ -62,6 +62,63 @@
 1. **R은 키를 테이블로 돌려놓지 않는다**(명세 범위 밖). R을 누를 때 참가자가 키를 쥐고 있으면, 01은 다음 frame에 바로 끝난다(E2와 같은 동작). 진행자가 R 뒤 01을 다시 보이고 싶으면 참가자에게 키를 내려놓게 한다. 불편하면 P4d·P4e 때 "R에서 키도 되돌림"을 정한다.
 2. **02는 앞 키만 센다**(대상 `Car.FrontKey`). 01은 앞 키를 쥐어야 끝나므로 보통 같은 키다. 참가자가 01 뒤 키를 내려놓고 뒤 키로 바꿔 누르면 02가 넘어가지 않는다. 그때는 진행자가 →로 넘긴다.
 3. **01 표시 고리가 키 아래 바닥에 생긴다**(`MarkerTag` `Car.FrontKey`). 화살표는 키 위 160 cm다. 키가 테이블 위(약 75 cm)에 있으니 화살표 끝이 약 235 cm에 있다. 테이블이 잘 보이는지 본다.
+
+## Codex R1-1 반영 결과 (2026-10-18)
+
+**완료 — P4c R1-1 반영 (2026-10-18, Codex 앱). Claude 재리뷰 대기.**
+
+- 브랜치 `codex/P4c-step-list-keys`, 시작 HEAD `cfcbe51` 위 새 커밋.
+- 커밋 제목: `fix: record start after alignment reapply`.
+- R1-1: **반영함 (fix: record start after alignment reapply)**. 질문 없음.
+- 빌드 둘 성공. 전체 자동화 최초 389/390 성공·기존 P0Buck 간헐 실패 1건, 해당 시험 단독 재실행 1/1 성공. 상세 종료 코드는 ⑤에 기록함.
+- 하위 에이전트·자체 리뷰 루프·에디터 MCP·에셋 작업 없음. push·PR·머지 없음.
+
+### ① 바뀐 파일
+
+- `Source/vBoR/Interaction/VBoRScenarioOperator.cpp:189`: 대기 중 A로 흐름을 시작할 때 `EnterStep(0, true)`로 새 시도를 시작함.
+- `Source/vBoR/P3Probe/P5iOperatorPanelTests.cpp:276`: `vBoR.P4c.E8ReapplyStartAttempt` 추가. 정렬 확인 필요 → A → 전환 완료 → 01 진입·기록 대기, 시작 표시 방문 시 시작 위치 1줄·fallback 0줄, 미방문 시 01 이탈 fallback 1줄·시작 위치 0줄을 확인함.
+- `Docs/Reviews/P4c-step-list-keys.md`: R1-1 반영 상태·이번 결과.
+- `HANDOFF.md`는 git 무시 파일에 결과를 별도 기록함. 이번 에셋·레벨 변경 없음.
+
+### ② 명세 §6 완료 조건별 결과
+
+1. **충족:** 기존 P4c 구현에 개정 D3의 A 시작 경로를 반영함.
+2. **R1-1 시험 충족 / 최초 전체 실행 실패 이력 있음:** 새 P4c E8과 기존 P5i E16 성공, P4c 8/8 성공. 전체 발견·완료 390, 성공 389, 실패 1(P0Buck E8Persistence의 기존 OS error 5). HANDOFF 지시대로 해당 시험만 한 번 재실행해 1/1 성공함. 전체 390/390 성공 실행으로 표기하지 않음.
+3. **충족:** 최종 C++ 트리의 non-unity·unity 각 1회 Succeeded·프로세스 exit 0, vBoR 컴파일·링크 경고/오류 0.
+4. **충족:** 보고 ①–⑤를 이 리뷰·HANDOFF 및 마지막 커밋 본문에 기록함.
+5. **유지:** Quest 3 Link/VR·T-06·T-10은 `not-tested`.
+
+### ③ 명세와 다르게 한 것과 이유
+
+- 제품 동작 이탈 없음. 제안대로 호출 한 줄만 바꿈.
+- 리뷰의 “E8에 추가 또는 새 시험” 중 새 P4c E8 시험을 택함. 기존 `FP5iWorld`의 임시 저장 파일·Stage 합성 XR 준비를 재사용하려고 `P5iOperatorPanelTests.cpp`에 배치함. P5i E16의 함수·단언은 HEAD와 동일함을 문자열 비교로 확인함.
+- 기존 P4c E8·그 밖의 단언은 변경 없음. 사용자 BuckEye.json 대신 기존 시험 fixture의 임시 경로만 사용함.
+- AGENTS.md에 따라 의도적 실패 빌드·red 실행은 하지 않음. 빌드·전체 시험은 최종 트리에서 각각 한 번, 알려진 실패의 단독 재실행만 추가함.
+
+### ④ API·헤더 확인
+
+새 ISDK·MetaXR API 없음. 실제 로컬 파일과 빌드로 확인했으며 추정 API 없음.
+
+- 프로젝트 `Source/vBoR/Interaction/VBoRScenarioRunner.h:150`, `.cpp:321,327`: EnterStep의 새 시도 인자가 시작 기록 대기를 켬.
+- `Source/vBoR/Interaction/VBoRScenarioRunner.h:88`: 기존 FP5iTestAccess friend.
+- `Source/vBoR/Interaction/VBoRVehicleAlignmentComponent.h:30,46`: RequestReapply·AdvanceSwitch, `P3Probe/P5iTestFixture.h:14-16`: 시험별 저장 경로 override.
+- `Source/vBoR/Interaction/VBoRBuckAlignment.h:69`: Save.
+- 엔진 기준 `C:/Program Files/Epic Games/UE_5.7/Engine/Source/`:
+  - `Runtime/Core/Public/Misc/OutputDevice.h:145`: Serialize.
+  - `Runtime/Core/Public/Misc/OutputDeviceRedirector.h:70,77,88`: AddOutputDevice·RemoveOutputDevice·FlushThreadedLogs.
+  - `Runtime/Core/Public/Math/TransformVectorized.h:555`: GetRelativeTransform.
+
+### ⑤ 검증 기록 / 로컬에서 확인할 것
+
+- `Saved/Logs/P4cR1NonUnityBuild.log`: `-DisableUnity -Module=vBoR`, 7 actions·변경 cpp 2개 개별 compile, Succeeded·프로세스 exit 0.
+- `Saved/Logs/P4cR1UnityBuild.log`: 49 actions·Module.vBoR.4.cpp/6.cpp compile, Succeeded·프로세스 exit 0.
+- 두 빌드 로그의 warning/error 검색 0.
+- `Saved/Logs/P4cR1AllAutomation.log`: 샘플·로컬 도구 2개 비활성, 발견 390·완료 390·성공 389·실패 1. `P0Buck.E8Persistence`의 반복 교체 30번째 OS error 5만 실패. 시험 exit -1·프로세스 exit 255.
+- `Saved/Logs/P4cR1PersistenceRetry.log`: 해당 시험만 한 번 재실행, 발견·완료·성공 1·실패 0, 시험/프로세스 exit 0. 기존 저장 코드 수정 없음.
+- 새 `P4c.E8ReapplyStartAttempt` 및 기존 `P5i.E16ReapplyStartsWaitingFlow` 성공. OpenXR 확장·샘플 InfoCard CDO·MetaXR empty engine version 잡음은 Workflow §2.5와 같고 시험 실패와 구분함.
+- 시작·빌드 전·자동화 종료 뒤 UnrealEditor 프로세스 0. 에디터·MCP·Blueprint·에셋·레벨 작업 없음.
+- 사용자 확인: 정렬 확인 필요 상태에서 A로 01을 시작한 뒤 시작 표시 방문/미방문 기록, 명세 §7의 키 01·02 및 TV 진행 표시 확인. 실제 Quest 3 Link/VR·TV 외관·T-06·T-10은 `not-tested`.
+
 
 ## 질문
 
