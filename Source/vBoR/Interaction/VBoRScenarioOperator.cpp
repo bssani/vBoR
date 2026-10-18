@@ -1,4 +1,5 @@
 #include "VBoRScenarioRunner.h"
+#include "VBoRFoldingSeat.h"
 #include "VBoRVehicleAlignmentComponent.h"
 #include "VBoRViewpointComponent.h"
 #include "../Spectator/VBoRSpectatorModel.h"
@@ -25,6 +26,8 @@ namespace
 		case EVBoROperatorButton::Reapply: return EVBoRFlowCommand::ReapplyAlignment;
 		case EVBoROperatorButton::Free: return EVBoRFlowCommand::EnterFreeMode;
 		case EVBoROperatorButton::Reload: return EVBoRFlowCommand::ReloadLevel;
+		case EVBoROperatorButton::FoldSeat: return EVBoRFlowCommand::FoldSeat;
+		case EVBoROperatorButton::UnfoldSeat: return EVBoRFlowCommand::UnfoldSeat;
 		default: return EVBoRFlowCommand::Confirm;
 		}
 	}
@@ -115,6 +118,18 @@ FVBoRCommandDecision AVBoRScenarioRunner::EvaluateCommand(const FVBoRFlowCommand
 		return {};
 	}
 	if (Alignment && Alignment->IsSwitching()) { return Reject(EVBoRDiscard::Transition, TEXT("View transition in progress"), TEXT("명령 버림 — 전환 중")); }
+	if (Action == EVBoRFlowCommand::FoldSeat || Action == EVBoRFlowCommand::UnfoldSeat)
+	{
+		bool bFound = false;
+		const auto Required = Action == EVBoRFlowCommand::FoldSeat ? EVBoRFoldingSeatState::Standing : EVBoRFoldingSeatState::Folded;
+		for (TActorIterator<AVBoRFoldingSeat> It(GetWorld()); It; ++It)
+		{
+			bFound = true;
+			if (It->GetState() == Required) { return {}; }
+		}
+		return bFound ? Reject(EVBoRDiscard::None, TEXT("No seat ready for this action"), TEXT("")) :
+			Reject(EVBoRDiscard::Rule, TEXT("No folding seat"), TEXT("명령 버림 — 접히는 시트 없음"));
+	}
 	if (Action == EVBoRFlowCommand::Confirm)
 	{
 		const auto* Step = CurrentStep();

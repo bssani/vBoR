@@ -1,5 +1,6 @@
 #include "VBoRScenarioRunner.h"
 #include "VBoRPoweredPanel.h"
+#include "VBoRFoldingSeat.h"
 #include "VBoRBoxStand.h"
 #include "VBoRParticipantZones.h"
 #include "VBoRVehicleAlignmentComponent.h"
@@ -165,6 +166,8 @@ void AVBoRScenarioRunner::BeginPlay()
 		InputComponent->BindKey(EKeys::O, IE_Pressed, this, &AVBoRScenarioRunner::KeyIgnore);
 		InputComponent->BindKey(EKeys::I, IE_Pressed, this, &AVBoRScenarioRunner::KeyOperatorInfo);
 		InputComponent->BindKey(EKeys::A, IE_Pressed, this, &AVBoRScenarioRunner::KeyReapply);
+		InputComponent->BindKey(EKeys::F, IE_Pressed, this, &AVBoRScenarioRunner::KeyFoldSeat);
+		InputComponent->BindKey(EKeys::U, IE_Pressed, this, &AVBoRScenarioRunner::KeyUnfoldSeat);
 	}
 	PlacePanel(); ShowOperatorWindow();
 }
@@ -441,6 +444,11 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 
 	switch (Command.Action)
 	{
+	case EVBoRFlowCommand::FoldSeat:
+	case EVBoRFlowCommand::UnfoldSeat:
+		for (TActorIterator<AVBoRFoldingSeat> It(GetWorld()); It; ++It)
+		{ if (Command.Action == EVBoRFlowCommand::FoldSeat) { It->Fold(); } else { It->Unfold(); } }
+		Record(Command.Action == EVBoRFlowCommand::FoldSeat ? TEXT("진행자 시트 접기") : TEXT("진행자 시트 펴기")); break;
 	case EVBoRFlowCommand::ReapplyAlignment:
 		bReapplyPending = Alignment->RequestReapply(); ++ReapplyCount;
 		Record(TEXT("진행자 정렬 다시 적용 — 암전 시작")); break;
@@ -470,13 +478,14 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 			for (UObject* Target : Targets) { if (auto* Gate = Cast<AVBoRPoweredPanel>(Target)) { Gates.Add(Gate); } }
 			for (TActorIterator<AVBoRPoweredPanel> It(GetWorld()); It; ++It) { if (It->ActorHasTag(TEXT("Car.Liftgate"))) { Gates.Add(*It); } }
 			for (auto* Gate : Gates) { Gate->ResetPanel(); }
+			for (TActorIterator<AVBoRFoldingSeat> It(GetWorld()); It; ++It) { It->ResetSeat(); }
 			TSet<AVBoRHingedDoor*> Doors;
 			for (UObject* Target : Targets) { if (auto* Door = Cast<AVBoRHingedDoor>(Target)) { Doors.Add(Door); } }
 			FString Problems;
 			if (auto* Door = Cast<AVBoRHingedDoor>(P3Actor(FindP3Tag(GetWorld(), TEXT("Car.DriverDoor"), Problems)))) { Doors.Add(Door); }
 			for (auto* Door : Doors) { Door->ResetDoor(); }
 		}
-		Record(TEXT("진행자 처음부터 — 문 닫힘·잠김, 리프트게이트 초기화·박스 받침 1개, 기준 복귀"));
+		Record(TEXT("진행자 처음부터 — 문 닫힘·잠김, 리프트게이트 초기화·박스 받침 1개·시트 세움, 기준 복귀"));
 		bFreeMode = false;
 		bStartHeadPending = false;
 		if (!Alignment->IsBaseViewpoint()) { bRestartPending = Alignment->ReturnToBase(); bRunning = false; ++Generation; BeginRoute(); UpdateMarker(); }
@@ -705,7 +714,7 @@ void AVBoRScenarioRunner::CheckRouteArea()
 		}
 	}
 	bRouteAllowed = bInside;
-	if (bInside) { Route->SetRouteVisible(true); FloorRouteNotice.Reset(); }
+	if (bInside) { Route->SetRouteVisible(true); FloorRouteNotice.Reset(); UpdateMarker(); }
 	else
 	{
 		const FString Notice = bKnown ? TEXT("Floor route hidden — outside the play area") : TEXT("Floor route hidden — play area unknown");
@@ -768,6 +777,8 @@ void AVBoRScenarioRunner::KeyRestart() { QueueLive(EVBoRFlowCommand::Restart, EV
 void AVBoRScenarioRunner::KeyFreeMode() { QueueLive(EVBoRFlowCommand::EnterFreeMode, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyReloadLevel() { QueueLive(EVBoRFlowCommand::ReloadLevel, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyReapply() { QueueLive(EVBoRFlowCommand::ReapplyAlignment, EVBoRCommandSource::Operator); }
+void AVBoRScenarioRunner::KeyFoldSeat() { QueueLive(EVBoRFlowCommand::FoldSeat, EVBoRCommandSource::Operator); }
+void AVBoRScenarioRunner::KeyUnfoldSeat() { QueueLive(EVBoRFlowCommand::UnfoldSeat, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyIgnore() { QueueLive(EVBoRFlowCommand::IgnoreAlignment, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyOperatorInfo()
 {

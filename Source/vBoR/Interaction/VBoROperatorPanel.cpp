@@ -23,7 +23,9 @@ const TArray<FVBoROperatorShortcut>& VBoROperator::Shortcuts()
 		{EVBoROperatorButton::Reapply, EKeys::A, TEXT("Re-apply saved alignment"), TEXT("A")},
 		{EVBoROperatorButton::Info, EKeys::I, TEXT("In-VR operator info"), TEXT("I")},
 		{EVBoROperatorButton::Free, EKeys::End, TEXT("Enter free mode"), TEXT("End")},
-		{EVBoROperatorButton::Reload, EKeys::F6, TEXT("Reload level"), TEXT("F6")}};
+		{EVBoROperatorButton::Reload, EKeys::F6, TEXT("Reload level"), TEXT("F6")},
+		{EVBoROperatorButton::FoldSeat, EKeys::F, TEXT("Fold rear seat"), TEXT("F")},
+		{EVBoROperatorButton::UnfoldSeat, EKeys::U, TEXT("Unfold rear seat"), TEXT("U")}};
 	return Values;
 }
 
@@ -195,6 +197,8 @@ void SVBoROperatorPanel::Construct(const FArguments& Args)
 							.Text_Lambda([this]() { return FText::FromString(Snapshot.ReapplyHelp); })]
 						+ SVerticalBox::Slot().AutoHeight()[Button(EVBoROperatorButton::Info)]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0,8,0,0)[WrappedText(TEXT("If the Quest tracking space moved, save again in the P0-c Buck setup level."),12,TEXT("9aa6b8"))])]]
+				+ SVerticalBox::Slot().AutoHeight().Padding(24,16,24,0)
+				[Section(TEXT("Seat folding"),Pair(EVBoROperatorButton::FoldSeat,EVBoROperatorButton::UnfoldSeat))]
 				+ SVerticalBox::Slot().AutoHeight().Padding(24,16,24,0)
 				[Section(TEXT("Free mode"),SNew(SVerticalBox)
 					+ SVerticalBox::Slot().AutoHeight()[Pair(EVBoROperatorButton::Free,EVBoROperatorButton::Reload)]

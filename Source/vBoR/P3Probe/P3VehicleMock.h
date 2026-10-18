@@ -25,6 +25,7 @@ class AP1TrunkMock;
 class AVBoRPoweredPanel;
 class AVBoRLoadTarget;
 class AVBoRBoxStand;
+class AVBoRFoldingSeat;
 
 UCLASS(Blueprintable)
 class VBOR_API AP3VehicleMock : public AActor
@@ -37,6 +38,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector DriverEyeCm = FVector(-20,-37,115);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector PassengerEyeCm = FVector(-20,37,115);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector RearEyeCm = FVector(-100,-37,118);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 2열", meta=(Units="cm", ClampMin="1")) FVector RearCushionSizeCm = FVector(48,177,10);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 2열", meta=(Units="cm", ClampMin="1")) FVector RearBackSizeCm = FVector(8,177,60);
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<UStaticMeshComponent> RearCushion;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRFoldingSeat> RearSeat;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector DoorHingeCm = FVector(35,-92.5,35);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector ReachButtonCm = FVector(40,25,90);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector DashboardCenterCm;

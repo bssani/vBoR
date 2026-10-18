@@ -1,6 +1,7 @@
 #include "P3VehicleMock.h"
 #include "../P1Probe/P1TrunkMock.h"
 #include "../Interaction/VBoRPoweredPanel.h"
+#include "../Interaction/VBoRFoldingSeat.h"
 #include "../Interaction/VBoRLoadTarget.h"
 #include "../Interaction/VBoRBoxStand.h"
 #include "../Interaction/VBoRFloorRoute.h"
@@ -107,6 +108,19 @@ void AP3VehicleMock::BeginPlay()
 	FrontKeyTable = CreateKeyTable(FrontKeyTableCm, TEXT("Car.FrontKey"), TEXT("Car.FrontKey.Unlock"), TEXT("Car.FrontKey.Lock"));
 	RearKeyTable = CreateKeyTable(RearKeyTableCm, TEXT("Car.RearKey"), TEXT("Car.RearKey.Unlock"), TEXT("Car.RearKey.Lock"));
 	CreateRearSection();
+	// 운전석과 같은 eye 기준 높이. 차 안쪽 폭 한 판으로 둠 (P4e D2, 근사 cm)
+	RearCushion = NewObject<UStaticMeshComponent>(this, TEXT("ApproximateRearCushion"));
+	RearCushion->SetupAttachment(RootComponent);
+	RearCushion->SetStaticMesh(Plates[9]->GetStaticMesh());
+	RearCushion->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	RearCushion->SetRelativeLocation(FVector(RearEyeCm.X,0,RearEyeCm.Z-70));
+	RearCushion->SetRelativeScale3D(RearCushionSizeCm/100);
+	RearCushion->RegisterComponent();
+	RearSeat = GetWorld()->SpawnActorDeferred<AVBoRFoldingSeat>(AVBoRFoldingSeat::StaticClass(), GetActorTransform(), this);
+	RearSeat->Tags.Add(TEXT("Car.RearSeat"));
+	RearSeat->HingeLocationCm = FVector(RearEyeCm.X-28,0,RearEyeCm.Z-40-RearBackSizeCm.Z/2);
+	RearSeat->MeshRestFromRoot = FTransform(FQuat::Identity, FVector(RearEyeCm.X-28,0,RearEyeCm.Z-40), RearBackSizeCm/100);
+	RearSeat->FinishSpawning(GetActorTransform()); RearSeat->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	AroundCarRoute = GetWorld()->SpawnActorDeferred<AVBoRFloorRoute>(AVBoRFloorRoute::StaticClass(), GetActorTransform(), this);
 	AroundCarRoute->Tags.Add(TEXT("Route.AroundCar"));
 	AroundCarRoute->Spline->SetSplinePoints(AroundCarRoutePointsCm, ESplineCoordinateSpace::Local);
@@ -288,6 +302,8 @@ void AP3VehicleMock::PlaceReachButton()
 
 void AP3VehicleMock::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	if (RearSeat) { RearSeat->Destroy(); }
+	if (RearCushion) { RearCushion->DestroyComponent(); }
 	if (BoxStand) { BoxStand->Destroy(); }
 	if (Liftgate) { Liftgate->Destroy(); }
 	if (LoadTarget) { LoadTarget->Destroy(); }

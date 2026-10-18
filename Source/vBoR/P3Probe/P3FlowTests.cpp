@@ -6,6 +6,7 @@
 #include "../Interaction/VBoRCarryObject.h"
 #include "../Interaction/VBoRLoadTarget.h"
 #include "../Interaction/VBoRPoweredPanel.h"
+#include "../Interaction/VBoRFoldingSeat.h"
 #include "P3FlowGameMode.h"
 #include "../Interaction/VBoRScenarioRunner.h"
 #include "../Interaction/VBoRFloorRoute.h"
@@ -1233,6 +1234,182 @@ bool FP4dFlowTest::RunTest(const FString&)
 	E.Command(EVBoRFlowCommand::Confirm); TestEqual(TEXT("E13 06"),E.Runner->GetStepIndex(),5);
 	E.Car->Liftgate->RequestClose(); E.Car->Liftgate->Tick(6); E.Runner->ProcessFlow(0);
 	TestTrue(TEXT("E13 07 route visible"),E.Runner->GetStepIndex() == 6 && !E.Car->DriverDoorRoute->IsHidden());
+	return true;
+}
+struct FP4eTestAccess
+{
+	static void BeforeStart(AVBoRScenarioRunner* R) { R->bRunning = false; }
+	static void Reload(AVBoRScenarioRunner* R) { R->bReloadPending = true; }
+	static void Lock(AVBoRScenarioRunner* R) { R->ConfirmLockRemaining = 1; }
+	static void Dispatch(AVBoRScenarioRunner* R, EVBoRFlowCommand Action) { R->Dispatch({Action, EVBoRCommandSource::Operator, R->GetToken()}); }
+};
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4eMotionTest, "vBoR.P4e.E1E2Motion", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4eMotionTest::RunTest(const FString&)
+{
+	FP3World E; auto* S = E.Car->RearSeat.Get();
+	TestTrue(TEXT("Standing accepts fold"), S->Fold()); S->Tick(1);
+	TestEqual(TEXT("45 deg per second"), S->GetAngleDeg(), 45.0f);
+	S->Tick(100); TestEqual(TEXT("Large tick clamps to 80 deg"), S->GetAngleDeg(), 80.0f);
+	TestTrue(TEXT("Folded endpoint"), S->GetState() == EVBoRFoldingSeatState::Folded);
+	TestTrue(TEXT("Folded accepts unfold"), S->Unfold()); S->Tick(1);
+	TestEqual(TEXT("Unfold at same speed"), S->GetAngleDeg(), 35.0f);
+	S->Tick(100); TestEqual(TEXT("Clamps to zero"), S->GetAngleDeg(), 0.0f);
+	TestTrue(TEXT("Standing endpoint"), S->GetState() == EVBoRFoldingSeatState::Standing);
+	S->FoldAngleDeg = 50; S->SpeedDegPerSecond = 20; S->Fold(); S->Tick(1);
+	TestEqual(TEXT("Edited speed"), S->GetAngleDeg(), 20.0f); S->Tick(10);
+	TestEqual(TEXT("Edited fold angle"), S->GetAngleDeg(), 50.0f);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4eIgnoreTest, "vBoR.P4e.E3IgnoreRepeatedCommands", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4eIgnoreTest::RunTest(const FString&)
+{
+	FP3World E; auto* S = E.Car->RearSeat.Get();
+	TestFalse(TEXT("Standing ignores unfold"), S->Unfold()); S->Fold(); S->Tick(0.5);
+	TestFalse(TEXT("Folding ignores fold"), S->Fold()); TestFalse(TEXT("Folding ignores reversal"), S->Unfold());
+	S->Tick(0.5); TestEqual(TEXT("Repeated commands preserve motion"), S->GetAngleDeg(), 45.0f);
+	S->Tick(10); TestFalse(TEXT("Folded ignores fold"), S->Fold()); S->Unfold(); S->Tick(0.5);
+	TestFalse(TEXT("Unfolding ignores fold"), S->Fold()); TestFalse(TEXT("Unfolding ignores unfold"), S->Unfold());
+	S->Tick(0.5); TestEqual(TEXT("Unfold continues"), S->GetAngleDeg(), 35.0f);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4ePivotTest, "vBoR.P4e.E4PivotAndMeshRest", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4ePivotTest::RunTest(const FString&)
+{
+	FP3World E;
+	const FTransform ActorPose(FRotator(0,37,0), FVector(200,-80,12));
+	auto* S = E.World->SpawnActorDeferred<AVBoRFoldingSeat>(AVBoRFoldingSeat::StaticClass(), ActorPose);
+	S->HingeLocationCm = FVector(-128,0,48);
+	S->MeshRestFromRoot = FTransform(FRotator(4,12,2), FVector(-128,0,78), FVector(0.08,1.7,0.6));
+	S->FinishSpawning(ActorPose);
+	TestTrue(TEXT("CAD root rest pose preserved"), S->SeatMesh->GetComponentTransform().Equals(S->MeshRestFromRoot * ActorPose, 0.001));
+	const FVector AxisBefore = S->HingePivot->GetComponentTransform().TransformPosition(FVector(0,30,0));
+	const FVector TopBefore = S->HingePivot->GetComponentTransform().TransformPosition(FVector(0,0,60));
+	S->Fold(); S->Tick(1);
+	const FVector AxisAfter = S->HingePivot->GetComponentTransform().TransformPosition(FVector(0,30,0));
+	const FVector TopAfter = S->HingePivot->GetComponentTransform().TransformPosition(FVector(0,0,60));
+	TestTrue(TEXT("Hinge axis stays fixed"), AxisAfter.Equals(AxisBefore, 0.001));
+	TestTrue(TEXT("Top moves forward in actor +X"), FVector::DotProduct(TopAfter - TopBefore, S->GetActorForwardVector()) > 40);
+	TestTrue(TEXT("Top lowers"), TopAfter.Z < TopBefore.Z);
+	S->ResetSeat(); TestTrue(TEXT("Reset restores mesh world rest"), S->SeatMesh->GetComponentTransform().Equals(S->MeshRestFromRoot * ActorPose, 0.001));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4eMockTest, "vBoR.P4e.E5RearSeatAssembly", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4eMockTest::RunTest(const FString&)
+{
+	FP3World E; auto* S = E.Car->RearSeat.Get(); int32 Tagged = 0;
+	for (TActorIterator<AActor> It(E.World); It; ++It) { if (It->ActorHasTag(TEXT("Car.RearSeat"))) { ++Tagged; } }
+	TestEqual(TEXT("One tagged folding seat"), Tagged, 1);
+	TestTrue(TEXT("Rear viewpoint unchanged"), E.Car->RearView->GetRelativeLocation().Equals(FVector(-100,-37,118)));
+	TestTrue(TEXT("Cushion uses rear eye height"), E.Car->RearCushion->GetRelativeLocation().Equals(FVector(-100,0,48)));
+	TestTrue(TEXT("Approximate plates have no collision"), S->SeatMesh->GetCollisionEnabled() == ECollisionEnabled::NoCollision && E.Car->RearCushion->GetCollisionEnabled() == ECollisionEnabled::NoCollision);
+	const FBox Body(FVector(-235,-92.5,0), FVector(235,92.5,145));
+	const FTransform CarInverse = E.Car->GetActorTransform().Inverse();
+	const FBox Loading = E.Car->LoadTarget->LoadingRegion->Bounds.GetBox();
+	for (bool bFolded : {false,true})
+	{
+		if (bFolded) { S->Fold(); S->Tick(10); }
+		const FBox Local = S->SeatMesh->GetStaticMesh()->GetBoundingBox().TransformBy(S->SeatMesh->GetComponentTransform() * CarInverse);
+		TestTrue(TEXT("Seat inside body at both endpoints"), Body.IsInsideOrOn(Local.Min) && Body.IsInsideOrOn(Local.Max));
+		TestFalse(TEXT("Seat does not overlap loading region"), S->SeatMesh->Bounds.GetBox().Intersect(Loading));
+	}
+	E.Car->Destroy(); TestFalse(TEXT("Car cleanup destroys seat"), IsValid(S));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4eCommandTest, "vBoR.P4e.E6E8CommandsAndStep16", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4eCommandTest::RunTest(const FString&)
+{
+	FP3World E; E.Steps({P3Step(TEXT("16"), EVBoRStepRule::Confirm, TEXT(""), EVBoRConfirmBy::Operator)});
+	auto* S = E.Car->RearSeat.Get(); auto* Untagged = E.World->SpawnActor<AVBoRFoldingSeat>();
+	FP4eTestAccess::Lock(E.Runner);
+	FP3FlowTestAccess::NewInputFrame(E.Runner); E.Runner->HandleOperatorKey(EKeys::F); E.Runner->ProcessFlow(0);
+	TestTrue(TEXT("F folds tagged and untagged seats despite confirm lock"), S->GetState() == EVBoRFoldingSeatState::Folding && Untagged->GetState() == EVBoRFoldingSeatState::Folding);
+	S->Tick(10); Untagged->Tick(10); E.Runner->ProcessFlow(10);
+	TestTrue(TEXT("16 still waits for operator confirmation"), E.Runner->GetStepIndex() == 0 && E.Runner->IsRunning());
+	FP3FlowTestAccess::NewInputFrame(E.Runner); E.Runner->PressOperatorButton(EVBoROperatorButton::UnfoldSeat); E.Runner->ProcessFlow(0);
+	TestTrue(TEXT("Button unfolds both seats"), S->GetState() == EVBoRFoldingSeatState::Unfolding && Untagged->GetState() == EVBoRFoldingSeatState::Unfolding);
+	S->Tick(10); Untagged->Tick(10); E.Command(EVBoRFlowCommand::EnterFreeMode);
+	FP3FlowTestAccess::NewInputFrame(E.Runner); E.Runner->PressOperatorButton(EVBoROperatorButton::FoldSeat); E.Runner->ProcessFlow(0); S->Tick(10); Untagged->Tick(10);
+	FP3FlowTestAccess::NewInputFrame(E.Runner); E.Runner->HandleOperatorKey(EKeys::U); E.Runner->ProcessFlow(0);
+	TestTrue(TEXT("U unfolds in free mode"), E.Runner->IsFreeMode() && S->GetState() == EVBoRFoldingSeatState::Unfolding);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4eDecisionTest, "vBoR.P4e.E7DecisionAndDiscards", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4eDecisionTest::RunTest(const FString&)
+{
+	using B = EVBoROperatorButton;
+	for (int32 State = 0; State < 9; ++State)
+	{
+		FP3World E; E.Steps({P3Step(TEXT("16"))}); auto* S = E.Car->RearSeat.Get();
+		if (State == 0) { FP4eTestAccess::BeforeStart(E.Runner); }
+		if (State == 1) { E.Command(EVBoRFlowCommand::Passenger); }
+		if (State == 2) { E.Command(EVBoRFlowCommand::EnterFreeMode); FP4eTestAccess::Reload(E.Runner); }
+		if (State == 3) { S->Destroy(); }
+		if (State == 4) { S->Fold(); S->Tick(10); }
+		if (State == 5) { S->Fold(); S->Tick(0.5); }
+		if (State == 6) { FP4eTestAccess::Lock(E.Runner); }
+		if (State == 7) { E.Command(EVBoRFlowCommand::EnterFreeMode); }
+		if (State == 8) { E.Car->Alignment->RequestReapply(); }
+		for (B Button : {B::FoldSeat, B::UnfoldSeat})
+		{
+			const auto D = E.Runner->EvaluateOperatorButton(Button);
+			const bool bAccept = (State == 4 && Button == B::UnfoldSeat) || ((State == 6 || State == 7) && Button == B::FoldSeat);
+			TestEqual(TEXT("Accepted in correct state"), D.bAccepted, bAccept);
+			TestEqual(TEXT("Snapshot shares decision"), E.Runner->GetOperatorSnapshot().Buttons[static_cast<int32>(Button)].Decision.bAccepted, bAccept);
+			TestTrue(TEXT("Button style shares decision"), E.Runner->GetOperatorStyle(Button) == (bAccept ? EVBoROperatorStyle::Secondary : EVBoROperatorStyle::Disabled));
+			if (!bAccept)
+			{
+				const auto Expected = State == 1 || State == 2 || State == 8 ? EVBoRDiscard::Transition : State == 0 || State == 3 ? EVBoRDiscard::Rule : EVBoRDiscard::None;
+				TestTrue(TEXT("Correct discard kind"), D.Discard == Expected); TestFalse(TEXT("English reason provided"), D.Reason.IsEmpty());
+				const int32 Rules = E.Runner->RuleDiscards, Transitions = E.Runner->TransitionDiscards;
+				const FString Record = E.Runner->LastRecord;
+				FP4eTestAccess::Dispatch(E.Runner, Button == B::FoldSeat ? EVBoRFlowCommand::FoldSeat : EVBoRFlowCommand::UnfoldSeat);
+				TestEqual(TEXT("Rule count"), E.Runner->RuleDiscards, Rules + (Expected == EVBoRDiscard::Rule ? 1 : 0));
+				TestEqual(TEXT("Transition count"), E.Runner->TransitionDiscards, Transitions + (Expected == EVBoRDiscard::Transition ? 1 : 0));
+				if (Expected == EVBoRDiscard::None) { TestTrue(TEXT("No-op has no record"), D.Record.IsEmpty() && E.Runner->LastRecord == Record); }
+				if (State == 3) { TestEqual(TEXT("Missing seat reason"), D.Reason, FString(TEXT("No folding seat"))); }
+			}
+		}
+	}
+	FP3World E; E.Steps({P3Step(TEXT("16"))});
+	TestTrue(TEXT("Participant cannot fold"), E.Runner->EvaluateCommand({EVBoRFlowCommand::FoldSeat, EVBoRCommandSource::Participant, E.Runner->GetToken()}).Discard == EVBoRDiscard::Permission);
+	auto Old = E.Runner->GetToken(); --Old.Generation;
+	TestTrue(TEXT("Stale fold rejected"), E.Runner->EvaluateCommand({EVBoRFlowCommand::FoldSeat, EVBoRCommandSource::Operator, Old}).Discard == EVBoRDiscard::Stale);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4eResetTest, "vBoR.P4e.E9RestartResetsSeats", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4eResetTest::RunTest(const FString&)
+{
+	for (bool bFinished : {false,true})
+	{
+		FP3World E; FP3bRecords Records; E.Steps({P3Step(TEXT("16"))}); auto* S = E.Car->RearSeat.Get();
+		auto* Untagged = E.World->SpawnActor<AVBoRFoldingSeat>(); S->Fold(); Untagged->Fold(); S->Tick(bFinished ? 10 : 0.5); Untagged->Tick(0.5);
+		E.Command(EVBoRFlowCommand::Restart);
+		TestTrue(TEXT("R immediately stands all seats"), S->GetState() == EVBoRFoldingSeatState::Standing && Untagged->GetState() == EVBoRFoldingSeatState::Standing);
+		TestEqual(TEXT("Reset angle zero"), S->GetAngleDeg(), 0.0f); S->Tick(10); TestEqual(TEXT("No pending motion"), S->GetAngleDeg(), 0.0f);
+		TestEqual(TEXT("Reset record includes seat"), Records.Count(TEXT("시트 세움")), 1);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4eMarkerTest, "vBoR.P4e.E10RecoveredRouteMarker", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP4eMarkerTest::RunTest(const FString&)
+{
+	FP3World E; auto* R = E.Car->AroundCarRoute.Get();
+	E.HeadXR->PlayArea = FVector2D::ZeroVector;
+	E.Steps({P3bStep(TEXT("03"), TEXT("Route.AroundCar"))});
+	for (const auto& Part : FP3bTestAccess::Ring(E.Runner)) { TestFalse(TEXT("Fallback marker ring initially visible"), Part->bHiddenInGame); }
+	E.HeadXR->PlayArea = FVector2D(10000,10000); E.Runner->ProcessFlow(0);
+	const FVector End = R->Spline->GetLocationAtSplinePoint(R->Spline->GetNumberOfSplinePoints()-1, ESplineCoordinateSpace::World);
+	TestFalse(TEXT("Recovered arrow visible"), FP3bTestAccess::Arrow(E.Runner)->bHiddenInGame);
+	TestTrue(TEXT("Arrow above route end +160 cm"), FP3bTestAccess::Arrow(E.Runner)->GetComponentLocation().Equals(End + FVector(0,0,160), 0.001));
+	for (const auto& Part : FP3bTestAccess::Ring(E.Runner)) { TestTrue(TEXT("Fallback marker ring hidden after recovery"), Part->bHiddenInGame); }
 	return true;
 }
 #endif
