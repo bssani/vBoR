@@ -91,6 +91,7 @@
 
 ## 구조 원칙
 
+- **에셋 폴더(2026-10-20 사용자 정리):** 산출물은 `Content/Main/`(`L_Main`, `Core/` Pawn·GameMode BP, `Data/DA_Main_Scenario`)에 둔다. 개발 시험대 레벨은 `Content/Development/P0`–`P3`에 둔다. 산출물이 `Development/` 에셋을 참조하지 않게 한다. C++ 시험대·근사 차는 `Source/vBoR/P0Probe`–`P3Probe` 그대로다.
 - **손 또는 키보드 입력 → 같은 기능 명령 → 차량 상태 변경 → 단계 완료 판정.** 입력 경로가 둘이어도 명령은 하나다.
 - **상호작용 부품은 C++ 부모 Actor로 만들고, 실제 부품은 그 자식(Blueprint)으로 완성한다(2026-10-09 사용자 결정).** 부모에는 지금 필요한 기능만 넣는다(예: 버튼 — 눌렸다가 돌아옴). 자식은 메시·값만 바꾸면 바로 적용돼야 한다. 부모는 필요해질 때 하나씩 만든다. 부모는 `Source/vBoR/Interaction/`에 두고 ISDK·MetaXR에만 의존한다.
   - 실제 차 CAD에서는 움직이거나 상호작용하는 부품만 Blueprint로 만들고, 나머지 메시는 월드에 그대로 둔다. 문처럼 다른 부품을 싣고 도는 부품은 손잡이를 자기 밑에 넣으면(Outliner 또는 Child Actor) Play 때 찾아 연결하고 붙인다(U-14, P2e).
