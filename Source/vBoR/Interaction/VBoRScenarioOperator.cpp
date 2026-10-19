@@ -187,6 +187,7 @@ void AVBoRScenarioRunner::PressOperatorButton(EVBoROperatorButton Button)
 
 bool AVBoRScenarioRunner::HandleOperatorKey(FKey Key, bool bRepeat)
 {
+	if (HandleHomeShiftKey(Key, bRepeat)) { return true; }
 	for (const auto& Shortcut : VBoROperator::Shortcuts())
 	{
 		if (Shortcut.Key == Key) { if (!bRepeat) { PressOperatorButton(Shortcut.Button); } return true; }
@@ -219,6 +220,12 @@ FVBoROperatorStatus AVBoRScenarioRunner::GetOperatorStatus() const
 	S.Alignment = S.bApplied ? TEXT("Applied") : S.bNeedsCheck ? TEXT("Needs check — ") + Alignment->EnglishReason() : FString(TEXT("No saved alignment"));
 	if (bAlignmentIgnored) { S.Alignment += TEXT(" · started without alignment"); }
 	S.Seat = Alignment ? Alignment->SeatName() : FString(TEXT("Driver"));
+	if (IsHomeShiftEnabled())
+	{
+		const FVector2D Offset = Alignment ? Alignment->GetHomeShiftCm() : FVector2D::ZeroVector;
+		// cm → m 표시만 바꿈 (P3c D6)
+		S.Seat += FString::Printf(TEXT(" · Home shift ON · %+.1f m front · %+.1f m side"), Offset.X / 100, Offset.Y / 100);
+	}
 	S.Counts = FString::Printf(TEXT("Previous %d · Retry %d · Skipped %d · End %d · Re-apply %d"), PreviousCount, RetryCount, SkipCount, EndCount, ReapplyCount);
 	S.Discards = FString::Printf(TEXT("Discarded — stale %d · permission %d · rule %d · transition %d · lock %d"), StaleDiscards, PermissionDiscards, RuleDiscards, TransitionDiscards, ConfirmLockDiscards);
 	S.LastCommand = LastOperatorCommand.IsEmpty() ? FString(TEXT("None")) : LastOperatorCommand;
