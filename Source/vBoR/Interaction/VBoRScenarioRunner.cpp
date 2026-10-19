@@ -34,6 +34,8 @@ namespace
 {
 	TAutoConsoleVariable<int32> CVarHomeShift(TEXT("vBoR.HomeShift"), 0,
 		TEXT("Home testing only: enable keypad 8/2/4/6 to shift by 1 m in car axes, 5 to reset."));
+	TAutoConsoleVariable<int32> CVarRouteIgnorePlayArea(TEXT("vBoR.RouteIgnorePlayArea"), 0,
+		TEXT("Home testing only: 1 = draw floor routes even outside the play area or when it is unknown. Car footprint check unchanged. Applies when a step starts."));
 	FVector P3RouteEnd(const AVBoRFloorRoute* Route)
 	{
 		return Route->Spline->GetLocationAtSplinePoint(Route->Spline->GetNumberOfSplinePoints() - 1, ESplineCoordinateSpace::World);
@@ -642,7 +644,11 @@ FString AVBoRScenarioRunner::GetOperatorText() const
 		if (Alignment && !Alignment->IsBaseViewpoint()) { Text += TEXT(" | Home 운전석으로"); }
 		if (Step->ConfirmBy == EVBoRConfirmBy::Participant) { Text = TEXT("참가자 확인 대기 — → 건너뛰기") + (Alignment && !Alignment->IsBaseViewpoint() ? FString(TEXT(" | Home 운전석으로")) : FString()); }
 	}
-	if (!FloorRouteNotice.IsEmpty()) { Text += FloorRouteNotice.Contains(TEXT("unknown")) ? TEXT("\n바닥 경로 숨김 — 영역 모름") : TEXT("\n바닥 경로 숨김 — 플레이 영역 밖"); }
+	if (!FloorRouteNotice.IsEmpty())
+	{
+		Text += FloorRouteNotice.Contains(TEXT("check off")) ? TEXT("\n바닥 경로 표시 — 영역 검사 끔 (집 시험)")
+			: FloorRouteNotice.Contains(TEXT("unknown")) ? TEXT("\n바닥 경로 숨김 — 영역 모름") : TEXT("\n바닥 경로 숨김 — 플레이 영역 밖");
+	}
 	if (!bOperatorInfo) { return Text; }
 	Text += TEXT("\n") + (Alignment ? Alignment->Describe() : FString(TEXT("정렬 컴포넌트 없음")));
 	Text += FString::Printf(TEXT(" | 정렬 무시 %s\n이전 %d 재시도 %d 건너뛰기 %d | 버림 단계 %d 권한 %d 규칙 %d 전환 %d 잠금 %d"), bAlignmentIgnored ? TEXT("예") : TEXT("아니오"), PreviousCount, RetryCount, SkipCount, StaleDiscards, PermissionDiscards, RuleDiscards, TransitionDiscards, ConfirmLockDiscards);
@@ -761,8 +767,17 @@ void AVBoRScenarioRunner::CheckRouteArea()
 			if (FMath::Abs(Stage.X) > Bounds.X * 0.5 - 30 || FMath::Abs(Stage.Y) > Bounds.Y * 0.5 - 30) { bInside = false; break; }
 		}
 	}
-	bRouteAllowed = bInside;
+	// 집 시험 스위치는 플레이 영역 검사만 끔. 차체 영역 검사(흐름 시작)는 그대로, 끈 사실은 진행자에게 알림 (P3b D6-b 예외, 사용자 2026-10-19)
+	const bool bIgnoreArea = !bInside && CVarRouteIgnorePlayArea.GetValueOnGameThread() == 1;
+	if (bIgnoreArea) { bRouteAreaUnknown = false; } // 영역 모름이어도 매 frame 재조회하지 않게
+	bRouteAllowed = bInside || bIgnoreArea;
 	if (bInside) { Route->SetRouteVisible(true); FloorRouteNotice.Reset(); UpdateMarker(); }
+	else if (bIgnoreArea)
+	{
+		Route->SetRouteVisible(true); UpdateMarker();
+		const FString Notice = TEXT("Floor route shown — play area check off (home test)");
+		if (FloorRouteNotice != Notice) { FloorRouteNotice = Notice; Record(CurrentStep()->StepId.ToString() + TEXT(": ") + FloorRouteNotice); }
+	}
 	else
 	{
 		const FString Notice = bKnown ? TEXT("Floor route hidden — outside the play area") : TEXT("Floor route hidden — play area unknown");

@@ -1,5 +1,6 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
+#include "HAL/IConsoleManager.h"
 #include "P3VehicleMock.h"
 #include "../P1Probe/P1TrunkMock.h"
 #include "../Interaction/VBoRBoxStand.h"
@@ -719,6 +720,35 @@ bool FP3bBoundsTest::RunTest(const FString&)
 	E.Pawn->SetActorLocationAndRotation(FVector(200,-300,0),FRotator::ZeroRotator); E.HeadXR->PlayArea=FVector2D(510,1000);
 	E.Steps({P3bStep(TEXT("07"),TEXT("Route.Bounds"))}); TestTrue(TEXT("End ring outside inset rejected even if spline inside"),R->IsHidden());
 	E.HeadXR->PlayArea=FVector2D(520,1000); E.Steps({P3bStep(TEXT("07"),TEXT("Route.Bounds"))}); TestFalse(TEXT("Ring exactly at 30 cm inset accepted"),R->IsHidden());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3bHomeRouteTest, "vBoR.P3b.E11HomeIgnorePlayArea", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP3bHomeRouteTest::RunTest(const FString&)
+{
+	IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("vBoR.RouteIgnorePlayArea"));
+	if (!TestNotNull(TEXT("Home route switch registered"),Variable)) { return false; }
+	const int32 Previous = Variable->GetInt();
+	FP3World E; auto* R = P3bRoute(E,TEXT("Route.Bounds"));
+	for (bool bUnknown : {false,true})
+	{
+		Variable->Set(1, ECVF_SetByConsole);
+		E.HeadXR->PlayArea = bUnknown ? FVector2D::ZeroVector : FVector2D(200,250);
+		FP3bRecords Records; E.Steps({P3bStep(TEXT("07"),TEXT("Route.Bounds"))});
+		TestFalse(TEXT("Switch draws route outside or without play area"),R->IsHidden());
+		TestEqual(TEXT("English operator notice says check is off"),E.Runner->GetOperatorStatus().FloorRouteNotice,FString(TEXT("Floor route shown — play area check off (home test)")));
+		TestTrue(TEXT("Korean VR notice says check is off"),E.Runner->GetOperatorText().Contains(TEXT("바닥 경로 표시 — 영역 검사 끔 (집 시험)")));
+		TestTrue(TEXT("Route marker replaces target ring"),FP3bTestAccess::Ring(E.Runner)[0]->bHiddenInGame);
+		E.Runner->ProcessFlow(0.1); E.Runner->ProcessFlow(0.1);
+		TestEqual(TEXT("Notice recorded once per entry, no per-frame requery"),Records.Count(TEXT("play area check off")),1);
+		E.Head(FTransform(FRotator::ZeroRotator,FVector(400,-300,160))); E.Runner->ProcessFlow(0.6);
+		TestTrue(TEXT("Arrival still hides route"),FP3bTestAccess::Arrived(E.Runner) && R->IsHidden());
+	}
+	Variable->Set(0, ECVF_SetByConsole); E.HeadXR->PlayArea = FVector2D(200,250); E.Steps({P3bStep(TEXT("07"),TEXT("Route.Bounds"))});
+	TestTrue(TEXT("Switch off hides unsafe route again"),R->IsHidden() && E.Runner->GetOperatorStatus().FloorRouteNotice == TEXT("Floor route hidden — outside the play area"));
+	Variable->Set(1, ECVF_SetByConsole); E.HeadXR->PlayArea = FVector2D(10000,10000); E.Steps({P3bStep(TEXT("07"),TEXT("Route.Bounds"))});
+	TestTrue(TEXT("Safe route needs no notice even with switch on"),!R->IsHidden() && E.Runner->GetOperatorStatus().FloorRouteNotice.IsEmpty());
+	Variable->Set(Previous, ECVF_SetByConsole);
 	return true;
 }
 
