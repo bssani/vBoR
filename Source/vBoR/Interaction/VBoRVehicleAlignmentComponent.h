@@ -55,7 +55,7 @@ public:
 	FString PointStatus() const;
 	void AdvancePointCapture();
 	UPROPERTY(EditAnywhere, Category="점 정렬", meta=(Units="s", ClampMin="0.01")) double PointCaptureSeconds = 1;
-	UPROPERTY(EditAnywhere, Category="점 정렬", meta=(ClampMin="0", ClampMax="1")) int32 PointHand = 0;
+	UPROPERTY(EditAnywhere, Category="점 정렬", meta=(ClampMin="0", ClampMax="1", ToolTip="Index fingertip used for point capture: 0 = left, 1 = right")) int32 PointHand = 0;
 	UPROPERTY(EditAnywhere, Category="점 정렬", meta=(Units="mm", ClampMin="0")) double PointSpreadLimitMm = 10;
 	UPROPERTY(EditAnywhere, Category="점 정렬", meta=(Units="cm", ClampMin="0")) double PointMinSpanCm = 20;
 	UPROPERTY(EditAnywhere, Category="점 정렬", meta=(Units="cm", ClampMin="0")) double PointFitLimitCm = 2;
@@ -92,7 +92,7 @@ private:
 	void HandleRecenter();
 	bool RequestSwitch(UVBoRViewpointComponent* Viewpoint);
 	void LoadSetupAlignment();
-	FTransform PawnFor(const FTransform& Eye) const;
+	bool PawnFor(const UVBoRViewpointComponent* Viewpoint, FTransform& Out, FString& Failure) const;
 	bool BasePawn(FTransform& Out, FString& Failure) const;
 	USceneComponent* DriverSeatReference(FString& Failure) const;
 	FString FindAlignPoints(TArray<UVBoRAlignPointComponent*>& Out) const;

@@ -221,6 +221,26 @@ bool FP4hSeats::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4hSeatReference,"vBoR.P4h.E9bMissingSeatReferenceAndFailedBase",P4hFlags)
+bool FP4hSeatReference::RunTest(const FString&)
+{
+	// 기준 좌석점 없으면 좌석 전환 거절, 전환 중 기준을 못 구하면 Pawn 그대로 (P4h 리뷰 R1-1)
+	FP4hWorld W; auto S = W.SavedPoints(); W.A->BaseEye = nullptr;
+	W.A->InitializeAlignment(W.Pawn,&S,W.A->Origin,W.A->Area); const FTransform Base = W.Pawn->GetActorTransform();
+	TestTrue(TEXT("Applied without eye point"),W.A->State == EVBoRAlignmentState::Applied);
+	TestEqual(TEXT("Seat switch needs a reference"),W.A->SwitchRejection(W.Car->PassengerView),FString(TEXT("Driver seat reference missing")));
+	TestFalse(TEXT("Seat switch rejected"),W.A->SwitchViewpoint(W.Car->PassengerView));
+	TestTrue(TEXT("Return to base still allowed"),W.A->SwitchRejection(nullptr,true).IsEmpty());
+	TestTrue(TEXT("Pawn stays at base"),W.Pawn->GetActorTransform().Equals(Base));
+	W.A->BaseEye = W.Car->DriverEye; W.A->InitializeAlignment(W.Pawn,&S,W.A->Origin,W.A->Area);
+	TestTrue(TEXT("Switch starts"),W.A->SwitchViewpoint(W.Car->PassengerView));
+	W.Car->AlignPoints[0]->AddLocalOffset(FVector(30,0,0)); W.FinishFade();
+	TestTrue(TEXT("Failed base keeps the pawn"),W.Pawn->GetActorTransform().Equals(Base));
+	TestTrue(TEXT("Failed base needs check"),W.A->State == EVBoRAlignmentState::NeedsCheck && W.A->Reason == TEXT("alignment points moved"));
+	TestFalse(TEXT("Switch discarded"),W.A->IsSwitching() || W.A->IsAtViewpoint(W.Car->PassengerView));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4hCommands,"vBoR.P4h.E10CommandRules",P4hFlags)
 bool FP4hCommands::RunTest(const FString&)
 {
@@ -306,16 +326,27 @@ bool FP4hMock::RunTest(const FString&)
 	for (int32 I = 0; I < W.Car->AlignPoints.Num(); ++I)
 	{
 		auto* P = W.Car->AlignPoints[I].Get(); TestEqual(TEXT("Order"),P->Order,I+1); TestTrue(TEXT("Mock label"),P->Label.StartsWith(TEXT("Mock seat"))); TestTrue(TEXT("Position cm"),P->GetRelativeLocation().Equals(Expected[I]));
-		TestEqual(TEXT("No tags"),P->ComponentTags.Num(),0); TestFalse(TEXT("Hidden by default"),P->GetVisibleFlag());
+		TestEqual(TEXT("No tags"),P->ComponentTags.Num(),0);
+		// 에디터에서 보이고 게임에서만 숨음 (P4h 리뷰 R1-2)
+		TestTrue(TEXT("Visible in the editor for placement"),P->GetVisibleFlag()); TestFalse(TEXT("Hidden in game by default"),P->IsVisible());
 		TArray<USceneComponent*> Children; P->GetChildrenComponents(true,Children);
+		TestEqual(TEXT("Sphere and number"),Children.Num(),2);
 		for (auto* Child : Children)
 		{
 			TestEqual(TEXT("No child tags"),Child->ComponentTags.Num(),0);
+			TestTrue(TEXT("Child visible in the editor"),Child->GetVisibleFlag()); TestFalse(TEXT("Child hidden in game"),Child->IsVisible());
 			if (const auto* Primitive = Cast<UPrimitiveComponent>(Child)) { TestTrue(TEXT("No collision"),Primitive->GetCollisionEnabled() == ECollisionEnabled::NoCollision); }
 		}
 	}
-	W.Button(PB::CapturePoint); for (UVBoRAlignPointComponent* P : W.Car->AlignPoints) { TestTrue(TEXT("Shown during capture"),P->GetVisibleFlag()); }
-	W.Button(PB::CancelPoints); for (UVBoRAlignPointComponent* P : W.Car->AlignPoints) { TestFalse(TEXT("Hidden on cancel"),P->GetVisibleFlag()); }
+	// 자식(구·번호)까지 게임 보임이 같이 바뀜 (P4h 리뷰 R1-3)
+	const auto AllShown = [](UVBoRAlignPointComponent* P, bool bShown)
+	{
+		TArray<USceneComponent*> Parts; P->GetChildrenComponents(true,Parts); Parts.Add(P);
+		for (auto* Part : Parts) { if (Part->IsVisible() != bShown) { return false; } }
+		return true;
+	};
+	W.Button(PB::CapturePoint); for (UVBoRAlignPointComponent* P : W.Car->AlignPoints) { TestTrue(TEXT("Shown during capture"),AllShown(P,true)); }
+	W.Button(PB::CancelPoints); for (UVBoRAlignPointComponent* P : W.Car->AlignPoints) { TestTrue(TEXT("Hidden on cancel"),AllShown(P,false)); TestTrue(TEXT("Still visible in the editor"),P->GetVisibleFlag()); }
 	return true;
 }
 #endif

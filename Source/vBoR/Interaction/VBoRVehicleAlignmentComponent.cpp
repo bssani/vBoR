@@ -31,14 +31,16 @@ void UVBoRVehicleAlignmentComponent::BeginPlay()
 FString UVBoRVehicleAlignmentComponent::SavedAlignmentPath() const
 { return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Calibration/BuckEye.json")); }
 
-FTransform UVBoRVehicleAlignmentComponent::PawnFor(const FTransform& Eye) const
+bool UVBoRVehicleAlignmentComponent::PawnFor(const UVBoRViewpointComponent* Viewpoint, FTransform& Out, FString& Failure) const
 {
-	FTransform Base; FString Failure;
-	if (!BasePawn(Base,Failure)) { return FTransform::Identity; }
+	if (!BasePawn(Out,Failure)) { return false; }
+	if (!Viewpoint) { return true; }
 	const USceneComponent* Reference = DriverSeatReference(Failure);
+	// 기준 좌석점 없으면 전환 안 함 (차이 없이 기준에 머무는 것 방지, P4h 리뷰 R1-1)
+	if (!Reference) { if (Failure.IsEmpty()) { Failure = TEXT("Driver seat reference missing"); } return false; }
 	// 시점의 Yaw 대신 좌석점 차이만 더함 (P4h D6, SgRP 차이, cm)
-	if (Reference) { Base.AddToTranslation(Eye.GetLocation() - Reference->GetComponentLocation()); }
-	return Base;
+	Out.AddToTranslation(Viewpoint->GetComponentLocation() - Reference->GetComponentLocation());
+	return true;
 }
 
 void UVBoRVehicleAlignmentComponent::LoadSetupAlignment()
@@ -148,6 +150,8 @@ FString UVBoRVehicleAlignmentComponent::SwitchRejection(const UVBoRViewpointComp
 	if (!bReturnBase && !IsValid(Viewpoint)) { return TEXT("Seat not found"); }
 	if (bSwitching) { return TEXT("View transition in progress"); }
 	if (!bHasSaved || !AlignmentPawn || (Saved.Version == 1 && !BaseEye) || State != EVBoRAlignmentState::Applied) { return TEXT("Saved alignment required"); }
+	FString Failure;
+	if (!bReturnBase && !DriverSeatReference(Failure)) { return Failure.IsEmpty() ? FString(TEXT("Driver seat reference missing")) : Failure; }
 	return FString();
 }
 
@@ -220,9 +224,10 @@ void UVBoRVehicleAlignmentComponent::AdvanceSwitch(double DeltaSeconds)
 		else
 		{
 			// 매번 Stage 저장값에서 직접 계산함 (전환 오차 누적 방지, P3 E11)
-			FString Failure; USceneComponent* Reference = DriverSeatReference(Failure);
-			const FTransform Eye = PendingViewpoint ? PendingViewpoint->GetComponentTransform() : Reference ? Reference->GetComponentTransform() : FTransform::Identity;
-			AlignmentPawn->SetActorTransform(PawnFor(Eye), false, nullptr, ETeleportType::TeleportPhysics);
+			FTransform Target; FString Failure;
+			// 못 구하면 Pawn 그대로 두고 확인 필요로 바꿈. 다음 Tick 에 전환 버림 (원점으로 튀지 않게, P4h 리뷰 R1-1)
+			if (!PawnFor(PendingViewpoint, Target, Failure)) { State = EVBoRAlignmentState::NeedsCheck; Reason = Failure; return; }
+			AlignmentPawn->SetActorTransform(Target, false, nullptr, ETeleportType::TeleportPhysics);
 			HomeShiftCm = FVector2D::ZeroVector;
 			CurrentViewpoint = PendingViewpoint;
 		}
