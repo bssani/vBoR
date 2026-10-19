@@ -10,7 +10,7 @@ class SWindow;
 class SButton;
 
 enum class EVBoROperatorButton : uint8
-{ Confirm, Next, Previous, Restart, Ignore, Driver, Passenger, Rear, Reapply, Info, Free, Reload, FoldSeat, UnfoldSeat, Count };
+{ Confirm, Next, Previous, Restart, Ignore, Driver, Passenger, Rear, Reapply, Info, Free, Reload, FoldSeat, UnfoldSeat, CapturePoint, SavePoints, CancelPoints, Count };
 enum class EVBoROperatorStyle : uint8 { Primary, Secondary, Disabled, Current, Danger };
 enum class EVBoRDiscard : uint8 { None, Stale, Permission, Rule, Transition, Lock };
 
@@ -23,7 +23,7 @@ struct FVBoRCommandDecision
 
 struct FVBoROperatorStatus
 {
-	FString Mode, Title, Mission, Progress, Waiting, Alignment, Seat, Counts, Discards, LastCommand, FloorRouteNotice;
+	FString Mode, Title, Mission, Progress, Waiting, Alignment, Seat, Counts, Discards, LastCommand, FloorRouteNotice, PointAlignment;
 	bool bNeedsCheck = false, bApplied = false;
 };
 

@@ -56,6 +56,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 private:
+	friend struct FP4hTestAccess;
 	friend struct FP0BuckTestAccess;
 	UPROPERTY() TObjectPtr<APawn> AlignmentPawn;
 	UPROPERTY() TObjectPtr<APlayerController> InputController;

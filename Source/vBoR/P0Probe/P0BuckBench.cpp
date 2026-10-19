@@ -139,10 +139,12 @@ void AP0BuckBench::LoadAndApply(const FVBoRBuckHeadFrame& Frame)
 {
 	FString Reason;
 	FVBoRBuckSavedAlignment Loaded;
-	if (!FVBoRBuckAlignmentStore::Load(SavePath, Loaded, Reason))
+	const bool bLoaded = FVBoRBuckAlignmentStore::Load(SavePath, Loaded, Reason);
+	if (bLoaded && Loaded.Version == 2) { Reason = TEXT("point alignment save (version 2); use the vehicle level, or hold C for head alignment"); }
+	if (!bLoaded || Loaded.Version == 2)
 	{
 		bHasSaved = false;
-		State = bNeedsCheck ? State : TEXT("No saved alignment: ") + Reason;
+		State = bNeedsCheck && !(bLoaded && Loaded.Version == 2) ? State : TEXT("No saved alignment: ") + Reason;
 		Record(State);
 		return;
 	}

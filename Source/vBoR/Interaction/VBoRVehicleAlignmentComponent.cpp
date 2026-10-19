@@ -33,18 +33,19 @@ FString UVBoRVehicleAlignmentComponent::SavedAlignmentPath() const
 
 FTransform UVBoRVehicleAlignmentComponent::PawnFor(const FTransform& Eye) const
 {
-	// 끄면 저장 때 머리 높이를 그대로 씀 (지그에 헤드셋을 올린 U-07 원래 방식)
-	return bHeightFromFloor ? FVBoRBuckAlignment::CalculatePawnOnFloor(Saved.Capture, Eye, BaseEye->GetComponentTransform(), FloorWorldZCm)
-		: FVBoRBuckAlignment::CalculatePawn(Saved.Capture, Eye);
+	FTransform Base; FString Failure;
+	if (!BasePawn(Base,Failure)) { return FTransform::Identity; }
+	const USceneComponent* Reference = DriverSeatReference(Failure);
+	// 시점의 Yaw 대신 좌석점 차이만 더함 (P4h D6, SgRP 차이, cm)
+	if (Reference) { Base.AddToTranslation(Eye.GetLocation() - Reference->GetComponentLocation()); }
+	return Base;
 }
 
 void UVBoRVehicleAlignmentComponent::LoadSetupAlignment()
 {
 	FVBoRBuckSavedAlignment Loaded; FString LoadReason;
 	const bool bLoaded = FVBoRBuckAlignmentStore::Load(SavedAlignmentPath(), Loaded, LoadReason);
-	int32 Origin = INDEX_NONE;
-	if (GEngine && GEngine->XRSystem.IsValid()) { Origin = GEngine->XRSystem->GetTrackingOrigin(); }
-	const FVector2D Bounds = UHeadMountedDisplayFunctionLibrary::GetPlayAreaBounds(EHMDTrackingOrigin::Stage);
+	int32 Origin; FVector2D Bounds; ReadPointEnvironment(Origin,Bounds);
 	InitializeAlignment(AlignmentPawn, bLoaded ? &Loaded : nullptr, Origin, Bounds);
 	if (!bLoaded) { Reason += TEXT(" — ") + LoadReason; }
 }
@@ -65,28 +66,33 @@ void UVBoRVehicleAlignmentComponent::InitializeAlignment(APawn* Pawn, const FVBo
 	AlignmentPawn = Pawn; bHasSaved = Value != nullptr;
 	CurrentViewpoint = nullptr; PendingViewpoint = nullptr; bSwitching = false; bReapplying = false;
 	State = EVBoRAlignmentState::NoSavedValue;
-	if (!Value) { Reason = TEXT("저장값 없음 — P0-c 레벨에서 C로 저장"); }
+	if (!Value) { Reason = TEXT("저장값 없음 — 진행자 창 P로 점 정렬 또는 P0-c 레벨에서 C로 저장"); }
 	else
 	{
 		Saved = *Value;
 		const auto Decision = FVBoRBuckAlignment::CheckEnvironment(Saved, Origin, PlayArea, PlayAreaToleranceCm);
 		State = EVBoRAlignmentState::NeedsCheck; Reason = Decision.Reason;
-		if (!AlignmentPawn || !BaseEye || AlignmentPawn->bUseControllerRotationYaw ||
+		FTransform Base; FString Failure;
+		if (!AlignmentPawn || (Saved.Version == 1 && !BaseEye) || AlignmentPawn->bUseControllerRotationYaw ||
 			!FMath::IsNearlyEqual(GetWorld()->GetWorldSettings()->WorldToMeters, 100.0f))
 		{ Reason = TEXT("Pawn·eye point·WorldToMeters 확인 필요"); }
+		else if (!BasePawn(Base,Failure)) { Reason = Failure; }
 		else if (Decision.bApply)
 		{
 			// 참가자의 현재 머리 자세를 읽지 않음 (체격 차이 유지, P3 D2)
-			AlignmentPawn->SetActorTransform(PawnFor(BaseEye->GetComponentTransform()), false, nullptr, ETeleportType::TeleportPhysics);
+			AlignmentPawn->SetActorTransform(Base, false, nullptr, ETeleportType::TeleportPhysics);
 			HomeShiftCm = FVector2D::ZeroVector;
 			State = Decision.bNeedsCheck ? EVBoRAlignmentState::NeedsCheck : EVBoRAlignmentState::Applied;
 		}
 	}
+	FString SeatFailure; DriverSeatReference(SeatFailure);
+	if (!SeatFailure.IsEmpty()) { State = EVBoRAlignmentState::NeedsCheck; Reason = SeatFailure; }
 	UE_LOG(LogP3Flow, Log, TEXT("정렬 %s"), *Describe());
 }
 
 void UVBoRVehicleAlignmentComponent::HandleRecenter()
 {
+	CancelPoints(TEXT("Recenter — points cleared"));
 	State = EVBoRAlignmentState::NeedsCheck; Reason = TEXT("재중심 — 설치 정렬 확인 필요");
 	UE_LOG(LogP3Flow, Log, TEXT("정렬 %s; Pawn 유지"), *Describe());
 }
@@ -100,6 +106,7 @@ void UVBoRVehicleAlignmentComponent::TickComponent(float DeltaTime, ELevelTick T
 			UHeadMountedDisplayFunctionLibrary::GetPlayAreaBounds(EHMDTrackingOrigin::Stage), PlayAreaToleranceCm);
 		if (Check.bNeedsCheck) { State = EVBoRAlignmentState::NeedsCheck; Reason = Check.Reason; UE_LOG(LogP3Flow, Log, TEXT("정렬 %s; Pawn 유지"), *Describe()); }
 	}
+	AdvancePointCapture();
 	AdvanceSwitch(DeltaTime);
 }
 
@@ -110,7 +117,7 @@ bool UVBoRVehicleAlignmentComponent::SwitchViewpoint(UVBoRViewpointComponent* Vi
 		++SwitchRequests; ++SwitchDiscards;
 		UE_LOG(LogP3Flow, Log, TEXT("시점 버림 — %s"), !IsValid(Viewpoint) ? TEXT("대상 없음") : bSwitching ? TEXT("전환 중") : TEXT("정렬 필요")); return false;
 	}
-	return RequestSwitch(Viewpoint);
+	return RequestSwitch(Viewpoint->ComponentHasTag(TEXT("Car.DriverView")) ? nullptr : Viewpoint);
 }
 
 bool UVBoRVehicleAlignmentComponent::ReturnToBase() { return RequestSwitch(nullptr); }
@@ -140,12 +147,13 @@ FString UVBoRVehicleAlignmentComponent::SwitchRejection(const UVBoRViewpointComp
 {
 	if (!bReturnBase && !IsValid(Viewpoint)) { return TEXT("Seat not found"); }
 	if (bSwitching) { return TEXT("View transition in progress"); }
-	if (!bHasSaved || !AlignmentPawn || !BaseEye || State != EVBoRAlignmentState::Applied) { return TEXT("Saved alignment required"); }
+	if (!bHasSaved || !AlignmentPawn || (Saved.Version == 1 && !BaseEye) || State != EVBoRAlignmentState::Applied) { return TEXT("Saved alignment required"); }
 	return FString();
 }
 
 FString UVBoRVehicleAlignmentComponent::ReapplyRejection() const
 {
+	if (bPointSession) { return TEXT("Point alignment in progress"); }
 	if (bSwitching) { return TEXT("View transition in progress"); }
 	if (!IsBaseViewpoint()) { return TEXT("Return to the driver seat first"); }
 	return FString();
@@ -163,7 +171,7 @@ bool UVBoRVehicleAlignmentComponent::RequestReapply()
 
 FString UVBoRVehicleAlignmentComponent::EnglishReason() const
 {
-	if (Reason.StartsWith(TEXT("저장값 없음"))) { return TEXT("Save the Buck alignment in P0-c"); }
+	if (Reason.StartsWith(TEXT("저장값 없음"))) { return TEXT("Capture points with P, or save the Buck alignment in P0-c"); }
 	if (Reason.StartsWith(TEXT("재중심"))) { return TEXT("Recenter detected; check the setup alignment"); }
 	if (Reason.StartsWith(TEXT("Pawn"))) { return TEXT("Check Pawn, eye point and WorldToMeters"); }
 	return Reason;
@@ -212,7 +220,8 @@ void UVBoRVehicleAlignmentComponent::AdvanceSwitch(double DeltaSeconds)
 		else
 		{
 			// 매번 Stage 저장값에서 직접 계산함 (전환 오차 누적 방지, P3 E11)
-			const FTransform Eye = PendingViewpoint ? PendingViewpoint->GetComponentTransform() : BaseEye->GetComponentTransform();
+			FString Failure; USceneComponent* Reference = DriverSeatReference(Failure);
+			const FTransform Eye = PendingViewpoint ? PendingViewpoint->GetComponentTransform() : Reference ? Reference->GetComponentTransform() : FTransform::Identity;
 			AlignmentPawn->SetActorTransform(PawnFor(Eye), false, nullptr, ETeleportType::TeleportPhysics);
 			HomeShiftCm = FVector2D::ZeroVector;
 			CurrentViewpoint = PendingViewpoint;

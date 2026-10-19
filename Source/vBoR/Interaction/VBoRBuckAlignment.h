@@ -21,9 +21,26 @@ struct VBOR_API FVBoRBuckCaptureResult
 	int32 DiscardedFrames = 0;
 };
 
+struct VBOR_API FVBoRAlignPointSample
+{
+	int32 Order = 1;
+	FVector StageCm = FVector::ZeroVector;
+	double SpreadMm = 0;
+	int32 Frames = 0;
+};
+
+struct VBOR_API FVBoRPointFit
+{
+	FTransform Pawn;
+	TArray<double> XYCm, HeightCm;
+	double MaxXYCm = 0, SpanCm = 0;
+};
+
 struct VBOR_API FVBoRBuckSavedAlignment
 {
 	static constexpr int32 FormatVersion = 1;
+	int32 Version = FormatVersion;
+	TArray<FVBoRAlignPointSample> Points;
 	FString SavedAt;
 	int32 TrackingOrigin = 0;
 	FVector2D PlayAreaCm = FVector2D::ZeroVector;
@@ -39,6 +56,7 @@ struct VBOR_API FVBoRBuckApplyDecision
 
 struct VBOR_API FVBoRBuckAlignment
 {
+	static bool FitPoints(const TArray<FVector>& Stage, const TArray<FVector>& World, double FloorZCm, FVBoRPointFit& Out);
 	static bool ProjectYaw(const FQuat& Orientation, double MinHorizontalLength, double& OutYawDeg);
 	static FTransform CalculatePawn(const FVBoRBuckCaptureResult& Capture, const FTransform& EyeWorld);
 	static FTransform CalculatePawnOnFloor(const FVBoRBuckCaptureResult& Capture, const FTransform& EyeWorld, const FTransform& BaseEyeWorld, double FloorWorldZCm);

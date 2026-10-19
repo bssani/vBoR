@@ -15,6 +15,9 @@ namespace
 	{
 		switch (Button)
 		{
+		case EVBoROperatorButton::CapturePoint: return EVBoRFlowCommand::CapturePoint;
+		case EVBoROperatorButton::SavePoints: return EVBoRFlowCommand::SavePoints;
+		case EVBoROperatorButton::CancelPoints: return EVBoRFlowCommand::CancelPoints;
 		case EVBoROperatorButton::Confirm: return EVBoRFlowCommand::Confirm;
 		case EVBoROperatorButton::Next: return EVBoRFlowCommand::Next;
 		case EVBoROperatorButton::Previous: return EVBoRFlowCommand::Previous;
@@ -87,6 +90,16 @@ FVBoRCommandDecision AVBoRScenarioRunner::EvaluateCommand(const FVBoRFlowCommand
 	if (!bOperator && Action != EVBoRFlowCommand::Confirm && Action != EVBoRFlowCommand::Viewpoint && Action != EVBoRFlowCommand::ReturnBase &&
 		!(bFreeMode && (Action == EVBoRFlowCommand::Passenger || Action == EVBoRFlowCommand::Rear)))
 	{ return Reject(EVBoRDiscard::Permission, TEXT("Operator only"), TEXT("명령 버림 — 확인 권한 없음")); }
+	if (Action == EVBoRFlowCommand::CapturePoint || Action == EVBoRFlowCommand::SavePoints || Action == EVBoRFlowCommand::CancelPoints)
+	{
+		FString Reason;
+		if (Action == EVBoRFlowCommand::CapturePoint && (bRunning || bFreeMode)) { Reason = TEXT("Before the flow starts only"); }
+		else if (!Alignment) { Reason = TEXT("Alignment component missing"); }
+		else if (Action == EVBoRFlowCommand::CapturePoint) { Reason = Alignment->CapturePointRejection(); }
+		else if (Action == EVBoRFlowCommand::SavePoints) { Reason = Alignment->SavePointsRejection(); }
+		else if (!Alignment->IsPointAligning()) { Reason = TEXT("No point alignment in progress"); }
+		return Reason.IsEmpty() ? FVBoRCommandDecision{} : FVBoRCommandDecision{false,EVBoRDiscard::Rule,Reason,TEXT("Point alignment — ") + Reason};
+	}
 	if (Action == EVBoRFlowCommand::ReapplyAlignment)
 	{
 		const FString Reason = Alignment ? Alignment->ReapplyRejection() : FString(TEXT("Alignment component missing"));
@@ -198,11 +211,17 @@ bool AVBoRScenarioRunner::HandleOperatorKey(FKey Key, bool bRepeat)
 void AVBoRScenarioRunner::FinishReapply()
 {
 	bReapplyPending = false;
+	if (bPointSavePending)
+	{
+		bPointSavePending = false;
+		LastOperatorCommand = TEXT("Save points — accepted (") + (Alignment->State == EVBoRAlignmentState::Applied ? FString(TEXT("Applied")) : Alignment->EnglishReason()) + TEXT(")");
+		Record(LastOperatorCommand); return;
+	}
 	const FString Result = Alignment->State == EVBoRAlignmentState::Applied ? FString(TEXT("Applied")) : Alignment->State == EVBoRAlignmentState::NoSavedValue ? FString(TEXT("no saved alignment")) : TEXT("still needs check: ") + Alignment->EnglishReason();
 	LastOperatorCommand = TEXT("Re-apply saved alignment — accepted (") + Result + TEXT(")");
 	Record(TEXT("진행자 정렬 다시 적용 — ") + Alignment->Describe());
 	if (!bRunning && !bFreeMode && ValidationProblems.IsEmpty() && Alignment->State == EVBoRAlignmentState::Applied)
-	{ bRunning = true; EnterStep(0, true); }
+	{ Alignment->FlowStarted(); bRunning = true; EnterStep(0, true); }
 }
 
 FVBoROperatorStatus AVBoRScenarioRunner::GetOperatorStatus() const
@@ -229,6 +248,7 @@ FVBoROperatorStatus AVBoRScenarioRunner::GetOperatorStatus() const
 	S.Counts = FString::Printf(TEXT("Previous %d · Retry %d · Skipped %d · End %d · Re-apply %d"), PreviousCount, RetryCount, SkipCount, EndCount, ReapplyCount);
 	S.Discards = FString::Printf(TEXT("Discarded — stale %d · permission %d · rule %d · transition %d · lock %d"), StaleDiscards, PermissionDiscards, RuleDiscards, TransitionDiscards, ConfirmLockDiscards);
 	S.LastCommand = LastOperatorCommand.IsEmpty() ? FString(TEXT("None")) : LastOperatorCommand;
+	S.PointAlignment = Alignment ? Alignment->PointStatus() : FString();
 	S.FloorRouteNotice = FloorRouteNotice;
 	return S;
 }

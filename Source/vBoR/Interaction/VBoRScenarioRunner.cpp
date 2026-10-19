@@ -171,6 +171,9 @@ void AVBoRScenarioRunner::BeginPlay()
 		InputComponent->BindKey(EKeys::O, IE_Pressed, this, &AVBoRScenarioRunner::KeyIgnore);
 		InputComponent->BindKey(EKeys::I, IE_Pressed, this, &AVBoRScenarioRunner::KeyOperatorInfo);
 		InputComponent->BindKey(EKeys::A, IE_Pressed, this, &AVBoRScenarioRunner::KeyReapply);
+		InputComponent->BindKey(EKeys::P, IE_Pressed, this, &AVBoRScenarioRunner::KeyCapturePoint);
+		InputComponent->BindKey(EKeys::S, IE_Pressed, this, &AVBoRScenarioRunner::KeySavePoints);
+		InputComponent->BindKey(EKeys::X, IE_Pressed, this, &AVBoRScenarioRunner::KeyCancelPoints);
 		InputComponent->BindKey(EKeys::F, IE_Pressed, this, &AVBoRScenarioRunner::KeyFoldSeat);
 		InputComponent->BindKey(EKeys::U, IE_Pressed, this, &AVBoRScenarioRunner::KeyUnfoldSeat);
 		for (const FKey Key : {EKeys::NumPadEight, EKeys::NumPadTwo, EKeys::NumPadFour, EKeys::NumPadSix, EKeys::NumPadFive})
@@ -189,7 +192,7 @@ void AVBoRScenarioRunner::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{ if (Entry.Key.IsValid()) { Entry.Key->OnButtonPressed.RemoveDynamic(this, &AVBoRScenarioRunner::HandleTargetPoke); } }
 	if (ConfirmButton) { ConfirmButton->Destroy(); }
 	if (ActionButton) { ActionButton->Destroy(); }
-	if (Alignment) { Alignment->OnPawnMoved.RemoveAll(this); }
+	if (Alignment) { Alignment->OnPawnMoved.RemoveAll(this); Alignment->OnPointRecord.RemoveAll(this); }
 	Panel->SetSlateWidget(nullptr); PanelText.Reset(); PanelBorder.Reset();
 	OperatorPanel->SetSlateWidget(nullptr); OperatorText.Reset();
 	for (auto& Label : ButtonLabels) { Label->SetSlateWidget(nullptr); } ButtonLabelTexts.Reset();
@@ -207,7 +210,7 @@ bool AVBoRScenarioRunner::InitializeFlow()
 	for (const auto& Entry : ButtonCounts)
 	{ if (Entry.Key.IsValid()) { Entry.Key->OnButtonPressed.RemoveDynamic(this, &AVBoRScenarioRunner::HandleTargetPoke); } }
 	ButtonCounts.Reset();
-	if (Alignment) { Alignment->OnPawnMoved.RemoveAll(this); }
+	if (Alignment) { Alignment->OnPawnMoved.RemoveAll(this); Alignment->OnPointRecord.RemoveAll(this); }
 	Alignment = nullptr; Approach = nullptr; Seat = nullptr;
 	int32 AlignmentCount = 0;
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
@@ -277,6 +280,7 @@ bool AVBoRScenarioRunner::InitializeFlow()
 	{
 		AddTickPrerequisiteComponent(Alignment);
 		Alignment->OnPawnMoved.AddUObject(this, &AVBoRScenarioRunner::HandlePawnMoved);
+		Alignment->OnPointRecord.AddUObject(this, &AVBoRScenarioRunner::Record);
 		if (!Seat) { Seat = Alignment->GetOwner()->FindComponentByClass<UVBoRSeatZoneComponent>(); }
 	}
 	if (Approach) { AddTickPrerequisiteComponent(Approach); }
@@ -288,7 +292,7 @@ bool AVBoRScenarioRunner::InitializeFlow()
 	}
 	if (!ValidationProblems.IsEmpty()) { Record(TEXT("시작 차단:\n") + ValidationProblems); RefreshPanel(); return false; }
 	if (Alignment->State != EVBoRAlignmentState::Applied && !bAlignmentIgnored)
-	{ Record(TEXT("정렬 필요 — P0-c 레벨에서 C로 저장; O로 무시 가능 | ") + Alignment->Describe()); RefreshPanel(); return false; }
+	{ Record(TEXT("정렬 필요 — 진행자 창 P로 점 정렬 또는 P0-c 레벨에서 C로 저장; O로 무시 가능 | ") + Alignment->Describe()); RefreshPanel(); return false; }
 	bRunning = true; EnterStep(0, true); RefreshPanel(); return true;
 }
 
@@ -337,6 +341,7 @@ bool AVBoRScenarioRunner::CanParticipantConfirm() const
 
 void AVBoRScenarioRunner::EnterStep(int32 Index, bool bNewAttempt)
 {
+	if (Alignment) { Alignment->FlowStarted(); }
 	if (StepIndex == 0 && Index != 0) { RecordStartFallback(); }
 	OperatorCompletedSteps = FMath::Max(0, Index);
 	StepIndex = Index; ++Generation; StepElapsed = 0; ConfirmLockRemaining = FMath::Max(0.0f, ConfirmLockSeconds); bSeatHeadRecorded = false;
@@ -357,6 +362,7 @@ void AVBoRScenarioRunner::EnterStep(int32 Index, bool bNewAttempt)
 
 void AVBoRScenarioRunner::EnterFreeMode(bool bCompleted)
 {
+	if (Alignment) { Alignment->FlowStarted(); }
 	if (StepIndex == 0) { RecordStartFallback(); }
 	const FString Reason = bCompleted ? FString(TEXT("안내 완료"))
 		: FString::Printf(TEXT("진행자 End, 단계 %s 에서"), *CurrentStep()->StepId.ToString());
@@ -441,7 +447,7 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 	const bool bOperator = Command.Source == EVBoRCommandSource::Operator;
 	if (Command.Action == EVBoRFlowCommand::IgnoreAlignment)
 	{
-		bAlignmentIgnored = true; Record(TEXT("진행자 정렬 무시하고 시작")); bRunning = true; EnterStep(0, true); return;
+		Alignment->FlowStarted(); bAlignmentIgnored = true; Record(TEXT("진행자 정렬 무시하고 시작")); bRunning = true; EnterStep(0, true); return;
 	}
 	if (Command.Action == EVBoRFlowCommand::Viewpoint || Command.Action == EVBoRFlowCommand::Passenger || Command.Action == EVBoRFlowCommand::Rear || Command.Action == EVBoRFlowCommand::ReturnBase)
 	{
@@ -453,6 +459,17 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 
 	switch (Command.Action)
 	{
+	case EVBoRFlowCommand::CapturePoint:
+		Alignment->CapturePoint(); break;
+	case EVBoRFlowCommand::SavePoints:
+	{
+		FString Failure;
+		bPointSavePending = Alignment->SavePoints(Failure); bReapplyPending = bPointSavePending;
+		if (!bPointSavePending) { LastOperatorCommand = TEXT("Save points — discarded (") + Failure + TEXT(")"); Record(LastOperatorCommand); }
+		break;
+	}
+	case EVBoRFlowCommand::CancelPoints:
+		Alignment->CancelPoints(); break;
 	case EVBoRFlowCommand::FoldSeat:
 	case EVBoRFlowCommand::UnfoldSeat:
 		for (TActorIterator<AVBoRFoldingSeat> It(GetWorld()); It; ++It)
@@ -635,7 +652,7 @@ FString AVBoRScenarioRunner::GetOperatorText() const
 	FString Text;
 	if (bFreeMode) { Text = TEXT("자유모드 | 1 동승석 · 2 2열 · Home 운전석 · R 처음부터 · F6 레벨 다시 열기"); }
 	else if (!bRunning && !bFinished)
-	{ Text = ValidationProblems.IsEmpty() ? TEXT("정렬 필요 — P0-c 레벨에서 C로 저장 (O: 무시)") : ValidationProblems; }
+	{ Text = ValidationProblems.IsEmpty() ? TEXT("정렬 필요 — 진행자 창 P로 점 정렬 또는 P0-c 레벨에서 C로 저장 (O: 무시)") : ValidationProblems; }
 	else if (bRunning && CurrentStep())
 	{
 		const auto* Step = CurrentStep();
@@ -851,3 +868,7 @@ void AVBoRScenarioRunner::KeyOperatorInfo()
 	bOperatorInfo = !bOperatorInfo; HeadLogElapsed = 0;
 	Record(bOperatorInfo ? TEXT("진행자 정보 켬 (I)\n") + GetOperatorText() : TEXT("진행자 정보 끔 (I)")); RefreshPanel();
 }
+
+void AVBoRScenarioRunner::KeyCapturePoint() { QueueLive(EVBoRFlowCommand::CapturePoint, EVBoRCommandSource::Operator); }
+void AVBoRScenarioRunner::KeySavePoints() { QueueLive(EVBoRFlowCommand::SavePoints, EVBoRCommandSource::Operator); }
+void AVBoRScenarioRunner::KeyCancelPoints() { QueueLive(EVBoRFlowCommand::CancelPoints, EVBoRCommandSource::Operator); }
