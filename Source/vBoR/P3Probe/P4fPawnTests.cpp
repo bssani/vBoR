@@ -82,6 +82,11 @@ bool FP4fDefault::RunTest(const FString&)
 	TestFalse(TEXT("No mesh overrides"), Pawn->LeftHandMesh || Pawn->RightHandMesh);
 	TestFalse(TEXT("No material overrides"), Pawn->LeftHandMaterial || Pawn->RightHandMaterial);
 	P4fCheckVisuals(*this, Pawn, 0, P4fDefaultMesh(0)); P4fCheckVisuals(*this, Pawn, 1, P4fDefaultMesh(1));
+	// Pawn Tick 은 부모 기본 그대로 (BP 자식 Event Tick 유지, P4f 리뷰 R1-1)
+	const FActorTickFunction& BaseTick = GetDefault<AVBoRHandRigPawn>()->PrimaryActorTick;
+	TestTrue(TEXT("Actor tick settings stay as the base pawn"), Pawn->PrimaryActorTick.bCanEverTick == BaseTick.bCanEverTick
+		&& Pawn->PrimaryActorTick.bStartWithTickEnabled == BaseTick.bStartWithTickEnabled && Pawn->PrimaryActorTick.TickGroup == BaseTick.TickGroup);
+	TestTrue(TEXT("Actor tick stays enabled after BeginPlay"), Pawn->IsActorTickEnabled());
 	return true;
 }
 
@@ -164,6 +169,7 @@ bool FP4fBlueprints::RunTest(const FString&)
 		TestTrue(TEXT("Blueprint visual attaches to its own instance"), Parent && Parent->GetOwner() == Instance);
 	}
 	W.Play();
+	TestTrue(TEXT("Blueprint pawn keeps actor tick for Event Tick"), Instance->IsActorTickEnabled());
 	P4fCheckVisuals(*this, Instance, 0, P4fDefaultMesh(0)); P4fCheckVisuals(*this, Instance, 1, P4fDefaultMesh(1)); return true;
 }
 #endif

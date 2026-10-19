@@ -12,10 +12,6 @@ DEFINE_LOG_CATEGORY_STATIC(LogVBoRPawn, Log, All);
 AVBoRPawn::AVBoRPawn()
 {
 	bAllowPalmGrab = true;
-	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.bStartWithTickEnabled = false;
-	// 손 표시의 PrePhysics 매핑 뒤에 확인함 (P4f D3)
-	PrimaryActorTick.TickGroup = TG_PostPhysics;
 }
 
 void AVBoRPawn::PreRegisterAllComponents()
@@ -62,18 +58,12 @@ void AVBoRPawn::PreInitializeComponents()
 void AVBoRPawn::BeginPlay()
 {
 	Super::BeginPlay();
-	CheckHandMeshMappings();
-}
-
-void AVBoRPawn::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
+	// 손 표시 BeginPlay 에서 매핑이 Valid 나 Invalid 로 끝남 (IsdkHandMeshComponent.cpp:161-164·205-224). Actor Tick 안 씀 (BP 자식 Event Tick 유지, P4f 리뷰 R1-1)
 	CheckHandMeshMappings();
 }
 
 void AVBoRPawn::CheckHandMeshMappings()
 {
-	bool bMappingPending = false;
 	for (int32 Hand = 0; Hand < 2; ++Hand)
 	{
 		USkeletalMesh* Mesh = Hand == 0 ? LeftHandMesh.Get() : RightHandMesh.Get();
@@ -96,11 +86,5 @@ void AVBoRPawn::CheckHandMeshMappings()
 			UE_LOG(LogVBoRPawn, Warning, TEXT("%s: %s hand mesh %s bones do not match XRHand_* - using default hand"),
 				*GetName(), Hand == 0 ? TEXT("Left") : TEXT("Right"), *Mesh->GetName());
 		}
-		else if (Tracked == EIsdkSkeletonMappingState::None || Synthetic == EIsdkSkeletonMappingState::None)
-		{
-			bMappingPending = true;
-		}
 	}
-	// 매핑이 끝나면 매 frame 확인할 필요 없음 (P4f D3)
-	SetActorTickEnabled(bMappingPending);
 }

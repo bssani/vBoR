@@ -16,7 +16,6 @@ public:
 	virtual void PreRegisterAllComponents() override;
 	virtual void PreInitializeComponents() override;
 	virtual void BeginPlay() override;
-	virtual void Tick(float DeltaSeconds) override;
 
 	UPROPERTY(EditAnywhere, Category = "손 표시")
 	TObjectPtr<USkeletalMesh> LeftHandMesh;
