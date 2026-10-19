@@ -43,6 +43,8 @@ public:
 	UPROPERTY(EditAnywhere, Category="정렬", meta=(Units="s", ClampMin="0.01")) float FadeSeconds = 0.3;
 	UPROPERTY(EditAnywhere, Category="집 시험", meta=(Units="cm", ClampMin="0")) float HomeShiftStepCm = 100;
 	UPROPERTY(EditAnywhere, Category="정렬", meta=(Units="cm", ClampMin="0")) float PlayAreaToleranceCm = 1;
+	UPROPERTY(EditAnywhere, Category="정렬", meta=(ToolTip="Pawn height from the virtual floor, not from the saved head height (physical seat at real car height, U-17)")) bool bHeightFromFloor = true;
+	UPROPERTY(EditAnywhere, Category="정렬", meta=(Units="cm", EditCondition="bHeightFromFloor")) float FloorWorldZCm = 0;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="정렬") EVBoRAlignmentState State = EVBoRAlignmentState::NoSavedValue;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="정렬") FString Reason;
 	int32 SwitchRequests = 0, SwitchCompletions = 0, SwitchDiscards = 0;
@@ -65,4 +67,5 @@ private:
 	void HandleRecenter();
 	bool RequestSwitch(UVBoRViewpointComponent* Viewpoint);
 	void LoadSetupAlignment();
+	FTransform PawnFor(const FTransform& Eye) const;
 };
