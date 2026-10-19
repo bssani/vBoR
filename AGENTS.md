@@ -5,6 +5,8 @@
 
 결정의 **근거**(확인한 플러그인 헤더·버전, 검토했지만 채택하지 않은 것, P0 실측 항목)는 [Docs/Research-Log.md](Docs/Research-Log.md)에 있다. 같은 조사를 다시 하기 전에 먼저 볼 것.
 
+**회사 PC(실제 차 CAD가 있는 PC)에서 처음 열었다면 [Docs/Company-PC-Guide.md](Docs/Company-PC-Guide.md)부터 읽을 것.** `HANDOFF.md`는 git에 없어서 그 PC에는 없다. 지금 상태와 CAD에서 뽑을 값 목록이 그 문서에 있다.
+
 > 이 리포는 private이고 계획서는 INTERNAL이다. 계획서 내용(프로그램명·일정·회의)을 커밋 메시지·PR·공개 장소에 옮기지 않는다.
 
 이 파일은 Codex와 Claude Code가 함께 읽는 규칙의 원본이다. `CLAUDE.md`는 이 파일을 가져오고 Claude 전용 내용만 덧붙인다. 규칙을 바꿀 때는 이 파일을 고친다.
