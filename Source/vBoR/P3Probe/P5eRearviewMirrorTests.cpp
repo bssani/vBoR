@@ -229,9 +229,10 @@ bool FP5eEdges::RunTest(const FString&)
 		for (int32 Sign : {-1,1})
 		{
 			FP5eWorld W; auto* Part=W.Part(); W.Play(); P5ePush(Part,Y,Sign*3.5);
-			TestTrue(TEXT("Top or bottom push turns normal toward the touched edge"),Sign*Part->GetPitchDeg()<0);
-			TestTrue(TEXT("Corner combines axes"),Y==0 ? FMath::IsNearlyZero(Part->GetYawDeg(),0.001f) : Part->GetYawDeg()<0);
-			TestTrue(TEXT("Pushed edge retreats behind its rest plane"),FP5eTestAccess::Motion(Part).Rotation().RotateVector(FVector(-4,Y,Sign*3.5)).X > -4);
+			TestEqual(TEXT("Top or bottom push preserves pitch"),Part->GetPitchDeg(),0.f);
+			TestTrue(TEXT("Only corner push changes yaw"),Y==0 ? FMath::IsNearlyZero(Part->GetYawDeg(),0.001f) : Part->GetYawDeg()<0);
+			const double EdgeX = FP5eTestAccess::Motion(Part).Rotation().RotateVector(FVector(-4,Y,Sign*3.5)).X;
+			TestTrue(TEXT("Center stays still; corner retreats"),Y==0 ? FMath::IsNearlyEqual(EdgeX,-4.0,0.001) : EdgeX > -4);
 		}
 	} return true;
 }
@@ -356,10 +357,10 @@ bool FP5eSplitPoints::RunTest(const FString&)
 	for (int32 HandIndex : {0,1})
 	{
 		FVBoRTwoAxisMotion Motion; FVBoRDoorHand Hands[2];
-		P5ePoint(Hands[HandIndex],FVector(-5,0,2.5)); Hands[HandIndex].Points[2]=FVector(-5,0,-2.5); Motion.AdvancePush(Hands);
+		P5ePoint(Hands[HandIndex],FVector(-5,10,2.5)); Hands[HandIndex].Points[2]=FVector(-5,10,-2.5); Motion.AdvancePush(Hands);
 		Hands[HandIndex].Points[1].X=-3.5; Hands[HandIndex].Points[2].X=-3.5; Motion.AdvancePush(Hands);
 		TestEqual(TEXT("Split points start one push"),Motion.PushHand,HandIndex);
-		TestTrue(TEXT("First push changes pitch"),FMath::Abs(Motion.PitchDeg)>1);
+		TestTrue(TEXT("First push changes yaw only"),Motion.YawDeg < -1 && Motion.PitchDeg == 0);
 		const double Yaw=Motion.YawDeg, Pitch=Motion.PitchDeg;
 		for (int32 Frame=0; Frame<8; ++Frame)
 		{
@@ -493,8 +494,8 @@ bool FP5lRearPush::RunTest(const FString&)
 		P5ePoint(Part->Hands[0],Edge+FVector(-1,0,0)); Part->Tick(0.016f);
 		P5ePoint(Part->Hands[0],Edge+FVector(-2.5,0,0)); Part->Tick(0.016f);
 		const FQuat Before=FP5eTestAccess::Motion(Part).Rotation();
-		TestTrue(TEXT("Rear edge moves toward driver"),Before.RotateVector(Edge+FVector(-2,0,0)).X<-2);
-		TestTrue(TEXT("Rear finger stays on back plane"),FMath::IsNearlyEqual(Before.UnrotateVector(Part->Hands[0].Points[1]).X,-2.0,0.001));
+		TestTrue(TEXT("Rear center stays still, side edge moves toward driver"),Vertical ? Before.Equals(FQuat::Identity,0.001) && FMath::IsNearlyEqual(Before.RotateVector(Edge+FVector(-2,0,0)).X,-2.0,0.001) : Before.RotateVector(Edge+FVector(-2,0,0)).X<-2);
+		TestTrue(TEXT("Rear center finger passes through, side finger stays on plane"),FMath::IsNearlyEqual(Before.UnrotateVector(Part->Hands[0].Points[1]).X,Vertical?-2.5:-2.0,0.001));
 		for (int32 I=0; I<5; ++I) { Part->Tick(0.016f); }
 		TestTrue(TEXT("Rear stopped finger stays still"),FP5eTestAccess::Motion(Part).Rotation().Equals(Before,0.001));
 		P5ePoint(Part->Hands[0],Before.RotateVector(Edge+FVector(1,0,0))); Part->Tick(0.016f);
@@ -595,5 +596,106 @@ bool FP5lMockMaterial::RunTest(const FString&)
 	FLinearColor Color; Material->GetVectorParameterValue(FMaterialParameterInfo(TEXT("ColorParam")),Color);
 	TestTrue(TEXT("Approximate color retained"),Color.Equals(FLinearColor(0.15,0.3,0.4,1)));
 	TestTrue(TEXT("Approximate no reflection label retained"),Part->GetDebugText().Contains(TEXT("Approximate geometry")) && Part->GetDebugText().Contains(TEXT("no reflection"))); return true;
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5nMirrorPush,"vBoR.P5n.E7E8MirrorFaces",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5nMirrorPush::RunTest(const FString&)
+{
+	for (bool Rear : {false,true})
+	{
+		for (double Y : {-10.0,0.0,10.0})
+		{
+			for (double Z : {-3.5,0.0,3.5})
+			{
+				if (Y==0 && Z==0) { continue; }
+				FP5eWorld W; auto* Part=W.Part(); W.Play();
+				const double Face=Rear?-2:-4, Direction=Rear?-1:1;
+				P5ePoint(Part->Hands[0],FVector(Face-Direction,Y,Z)); Part->Tick(0.016f);
+				const FVector Hand(Face+Direction*0.5,Y,Z);
+				P5ePoint(Part->Hands[0],Hand); Part->Tick(0.016f);
+				const auto& M=FP5eTestAccess::Motion(Part);
+				TestEqual(TEXT("E8 both faces retain pushing hand even in center band"),M.PushHand,0);
+				TestEqual(TEXT("E7/E8 push never changes pitch"),Part->GetPitchDeg(),0.f);
+				if (Y==0) { TestEqual(TEXT("E8 center has no yaw"),Part->GetYawDeg(),0.f); }
+				else
+				{
+					TestTrue(TEXT("E7/E8 yaw follows pushed side"),Part->GetYawDeg()*Y*Direction<0);
+					TestTrue(TEXT("E7/E8 hand lies on retained face"),FMath::IsNearlyEqual(M.Rotation().UnrotateVector(Hand).X,Face,0.001));
+					TestTrue(TEXT("E7/E8 touched edge retreats in push direction"),Direction*(M.Rotation().RotateVector(FVector(Face,Y,Z)).X-Face)>0);
+				}
+			}
+		}
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5nMirrorBand,"vBoR.P5n.E8bMirrorBandBoundary",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5nMirrorBand::RunTest(const FString&)
+{
+	for (bool Rear : {false,true})
+	{
+		for (double Y : {-4.1,-3.9,3.9,4.1})
+		{
+			FP5eWorld W; auto* Part=W.Part(); W.Play();
+			TestEqual(TEXT("Default band copied to motion"),FP5eTestAccess::Motion(Part).PushMinLeverCm,4.0);
+			const double Face=Rear?-2:-4, Direction=Rear?-1:1;
+			P5ePoint(Part->Hands[0],FVector(Face-Direction,Y,0)); Part->Tick(0.016f);
+			const FVector Hand(Face+Direction*0.5,Y,0);
+			P5ePoint(Part->Hands[0],Hand); Part->Tick(0.016f);
+			auto& M=FP5eTestAccess::Motion(Part);
+			TestEqual(TEXT("E8b band retains ownership"),M.PushHand,0);
+			TestEqual(TEXT("E8b no pitch"),M.PitchDeg,0.0);
+			if (FMath::Abs(Y)<4) { TestEqual(TEXT("E8b inside band stays still"),M.YawDeg,0.0); }
+			else
+			{
+				TestTrue(TEXT("E8b outside band turns about seven deg without hitting limit"),FMath::Abs(M.YawDeg)>6 && FMath::Abs(M.YawDeg)<9);
+				TestTrue(TEXT("E8b contact lies on face"),FMath::IsNearlyEqual(M.Rotation().UnrotateVector(Hand).X,Face,0.001));
+			}
+		}
+	}
+	// 띠 안에서 시작해도 같은 손·점·면으로 띠 밖에서 계속 밂 (P5n D3)
+	FP5eWorld W; auto* Part=W.Part(); W.Play();
+	P5ePoint(Part->Hands[0],FVector(-1,3.9,0)); Part->Tick(0.016f);
+	P5ePoint(Part->Hands[0],FVector(-2.5,3.9,0)); Part->Tick(0.016f);
+	P5ePoint(Part->Hands[0],FVector(-2.5,4.1,0)); Part->Tick(0.016f);
+	const auto& M=FP5eTestAccess::Motion(Part);
+	TestTrue(TEXT("E8b same push resumes outside band"),M.PushHand==0 && M.PushPoint==1 && M.PushFace==1 && M.YawDeg>6);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5nMirrorPitched,"vBoR.P5n.E8cE9PitchedMirror",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5nMirrorPitched::RunTest(const FString&)
+{
+	for (bool Pinch : {false,true})
+	{
+		for (bool Rear : {false,true})
+		{
+			for (double Y : {-10.0,10.0})
+			{
+				FP5eWorld W; auto* Part=W.Part();
+				auto* Owner=W.World->SpawnActor<AActor>(); auto* G=NewObject<UIsdkGrabberComponent>(Owner); Owner->SetRootComponent(G);
+				G->InteractorTags.AddTag(IsdkGameplayTags::TAG_Isdk_Type_Device_Left); G->SetWorldLocation(FVector(1000));
+				G->SetGrabDetectionTypeAllowed(EIsdkGrabDetectorType::DistanceGrab,false); G->SetGrabDetectionTypeAllowed(EIsdkGrabDetectorType::RayGrab,false);
+				G->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm,true); G->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch,true);
+				G->RegisterComponent(); W.Play(); G->Activate(true);
+				G->SetWorldLocation(Part->GrabBox->GetComponentLocation()); G->TickComponent(0.016f,LEVELTICK_All,nullptr);
+				if (Pinch) { G->PinchGrab(); } else { G->PalmGrab(); }
+				TestTrue(TEXT("E9 actual SDK selection"),G->GetGrabbedComponent()==Part->Grabbable);
+				TestEqual(TEXT("E9 SDK method retained"),FP5eTestAccess::Pinch(Part),Pinch);
+				P5eMove(Part,0,10);
+				TestTrue(TEXT("E9 palm and pinch still follow grab point pitch"),FMath::IsNearlyEqual(Part->GetPitchDeg(),10.f,0.001f));
+				if (Pinch) { G->PinchRelease(); } else { G->PalmRelease(); }
+				const FQuat Before=FP5eTestAccess::Motion(Part).Rotation();
+				const double Face=Rear?-2:-4, Direction=Rear?-1:1;
+				P5ePoint(Part->Hands[0],Before.RotateVector(FVector(Face-Direction,Y,0))); Part->Tick(0.016f);
+				const FVector Hand=Before.RotateVector(FVector(Face+Direction*0.5,Y,0));
+				P5ePoint(Part->Hands[0],Hand); Part->Tick(0.016f);
+				const auto& M=FP5eTestAccess::Motion(Part);
+				TestTrue(TEXT("E8c pitch stays at grabbed ten deg"),FMath::IsNearlyEqual(M.PitchDeg,10.0,0.001));
+				TestTrue(TEXT("E8c only yaw changes with correct sign"),M.YawDeg*Y*Direction<0);
+				TestTrue(TEXT("E8c hand remains on tilted face"),FMath::IsNearlyEqual(M.Rotation().UnrotateVector(Hand).X,Face,0.001));
+			}
+		}
+	}
+	return true;
 }
 #endif

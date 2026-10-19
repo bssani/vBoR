@@ -93,6 +93,8 @@ public:
 	bool bUsePlacementAssist = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Landing")
 	bool bLevelOnRelease = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Landing")
+	bool bSnapYawInLoadRegion = true;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Landing", meta = (Units = "cm", ClampMin = "0"))
 	float LevelLiftMaxCm = 15;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Carry|Landing")
@@ -157,6 +159,7 @@ protected:
 private:
 	friend struct FP4dTestAccess;
 	friend class FP1cLevelTest;
+	friend class FP5nBoxSnapTest;
 	friend class FP1cStackTest;
 	friend class FP1cLiftTest;
 	friend class FP1cLevelBlockedTest;

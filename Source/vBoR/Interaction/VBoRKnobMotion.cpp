@@ -16,7 +16,8 @@ void FVBoRKnobMotion::AdvanceGrab(bool bTracked, const FQuat& Palm)
 	if (bPaused) { RecoveryDiscardDeg = FMath::Abs(TwistDeg); }
 	else if (FMath::Abs(TwistDeg) <= JumpThresholdDeg + 1.e-6)
 	{
-		AngleDeg += TwistDeg;
+		// 튐·복구 판정은 실제 손 각, 움직임에만 배율 적용 (P5n D2, deg)
+		AngleDeg += TwistDeg * TwistGain;
 		if (StepDeg > 0)
 		{
 			// H=0 의 정확한 경계에서도 같은 frame 에 왕복 알림이 나지 않게 방향별 처리함 (P5f D4)

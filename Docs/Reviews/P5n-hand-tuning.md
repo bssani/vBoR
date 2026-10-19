@@ -2,7 +2,10 @@
 
 명세: [P5n-hand-tuning.md](../Specs/P5n-hand-tuning.md) · 브랜치: `codex/P5n-hand-tuning` · 베이스: `main@b044d62`
 
-상태: **Q1·Q2 답함 — 명세 개정 2(2026-10-19, Claude). 구현 재개.**
+상태: **개정 2 구현 완료(2026-10-19, Codex). Q1·Q2 답 반영, Claude 리뷰 대기.**
+
+- Q1 구현 상태: **반영함 (`fix: tune hand controls and box yaw`)** — E10 중앙/모서리 기대 변경.
+- Q2 구현 상태: **반영함 (`fix: tune hand controls and box yaw`)** — 가운데 띠·P5l E9·경계/기운 미러 시험 반영. 새 질문 없음.
 
 ## 질문
 
@@ -62,6 +65,29 @@
   - P1c 미리 보기 시험은 미리 보기와 놓은 결과가 둘 다 맞춰지므로 통과한다.
 
 **3. 새 시험:** E8을 앞·뒷면으로 나눴다. E8b(띠 경계 3.9/4.1 cm, 깊이 0.5 cm)와 E8c(잡기로 Pitch 10°인 상태에서 좌우 밀기)를 더했다.
+
+## Codex 보고 ①–⑤ — 개정 2 구현 완료 (2026-10-19)
+
+1. **바뀐 파일:** 제품 코드 12개: `Source/vBoR/Interaction/VBoRCarryLanding.cpp`, `VBoRCarryObject.h`, `VBoRKnob.cpp/.h`, `VBoRKnobMotion.cpp/.h`, `VBoRTwoAxisMotion.cpp/.h`, `VBoRTwoAxisPart.cpp/.h`, `Source/vBoR/P3Probe/P3VehicleMock.cpp/.h`. 시험 6개: `Source/vBoR/P1Probe/P1cCarrySettleTests.cpp`, `Source/vBoR/P3Probe/P5bGearLeverTests.cpp`, `P5cTurnSignalTests.cpp`, `P5eRearviewMirrorTests.cpp`, `P5fKnobTests.cpp`, `P5mLeverTests.cpp`. 이 리뷰 파일에 완료 보고 추가. `HANDOFF.md` 결과 갱신(git 무시). Content·Config·플러그인 변경 없음.
+2. **명세 §6 완료 조건별 결과:**
+   - §6-1: D1 두 레버 길이 22 cm·근사 차 밀기 여유 1.5 cm, D2 부모 TwistGain 1·근사 차 2·배율 전 튐/복구 판정, D3 앞·뒤 면 밀기 Yaw만·현재 거울 좌표 |Y| < 4 cm 회전 없음·손/점/면 소유 유지·잡기는 두 축, D4 영역 위 놓기 Yaw 90° 맞춤·막히면 원래 Yaw로 세움·그것도 막히면 원래 기울기·미리 보기 공통 계산 구현.
+   - §6-2: 새 `vBoR.P5n` 7개 시험으로 E1–E14(추가 E8b·E8c 포함) 확인. E6·E9·E15는 기존 P5f/미러 잡기/전체 시험도 함께 확인. 최종 전체 발견 423, Success 423, Fail 0, 프로세스 exit 0, `TEST COMPLETE. EXIT CODE: 0`.
+   - §6-3: 최종 non-unity(`-DisableUnity -Module=vBoR`)·unity 모두 Result: Succeeded, exit 0, 경고·오류 0건. 최종 소스 트리 검증 완료.
+   - §6-4: 이 보고를 리뷰 파일·마지막 커밋 본문에 남기고 HANDOFF 결과 갱신.
+   - §6-5: Blueprint/Details·Quest 3 Link/VR Preview·물리 시험은 `not-tested` 유지.
+3. **명세와 다르게 한 것과 이유:** 기능 범위 차이 없음. §5 재량으로 수평 면 식에서 고정 Pitch의 Z 항을 빼고 Yaw만 풂. D4 정확한 ±45°는 양의 방향으로 맞춤(예: 영역 30°일 때 월드 75° → 120°, −15° → 30°). quaternion 왕복 오차 1.e-9 deg 이내는 같은 반 칸으로 처리.
+   - 기존 단언 변경은 §3 허용 목록만: P5c 길이 1곳, P5e E10·E20 SplitPoints·P5l E9, P1c LevelAndYaw의 맞춤 끔. 목록 밖 기존 단언은 변경하지 않았고 기존 416개 모두 최종 통과.
+   - 최초 완료 후보 전체 실행에서 새 BoxYawSnap 시험만 실패(422/423, Fail 1, 로그 exit −1·프로세스 255). Rest Yaw와 tilt를 함께 주면 기존 P1c 세우기가 월드 Yaw도 조금 바꾸는데 새 시험이 이를 정확한 반 칸과 섞었음. 반 칸 시험을 수평 자세로 분리하고, 제품의 반 칸 반올림에 quaternion 오차 처리를 추가함. 기존 제품 세우기/기존 단언은 바꾸지 않음.
+   - 최초 검증은 고의 red 실행이 아님. 실제 실패 수정으로 소스가 바뀌어 필요한 빌드를 다시 실행한 뒤 P5n 7/7로 먼저 확인하고 최종 트리의 전체 시험 423/423을 한 번 실행함. 초기 실패 로그도 보존. 하위 에이전트·자체 리뷰 루프·에디터·MCP 작업 없음.
+4. **API·헤더 확인:** 추정으로 새 플러그인 API를 추가하지 않음. 엔진 루트 `C:/Program Files/Epic Games/UE_5.7/Engine/Source/`.
+   - `Runtime/Core/Public/Math/Quat.h:473,481`: RotateVector/UnrotateVector. `Runtime/Core/Public/Math/TransformVectorized.h:543,570`: RemoveScaling/InverseTransformPosition. `Runtime/Engine/Classes/Components/BoxComponent.h:43,75`: GetScaledBoxExtent. `Runtime/Core/Public/Math/UnrealMathUtility.h:897`: FindDeltaAngleDegrees. `Runtime/Core/Public/GenericPlatform/GenericPlatformMath.h:296`: FloorToDouble.
+   - 새 잡기 확인 시험은 기존 SDK 경로 사용: `Plugins/MetaXRInteraction/Source/OculusInteraction/Public/Interaction/IsdkGrabberComponent.h:69,75,81,87`의 PinchGrab/PalmGrab/PinchRelease/PalmRelease, `:185,206`의 입력 허용/활성 조회를 헤더로 확인.
+   - 기존 적재 영역 선언 `Source/vBoR/Interaction/VBoRLoadTarget.h:31`, 새 맞춤·복귀 `VBoRCarryLanding.cpp:48-72`, 노브 배율 적용 `VBoRKnobMotion.cpp:16-20`, 미러 소유 유지·수평 풀이 `VBoRTwoAxisMotion.cpp:89-117`를 소스로 확인. 실제 non-unity/unity 컴파일도 통과.
+5. **로컬 확인과 남은 사용자 시험:**
+   - 로그(모두 `C:/Git/vBoR/Saved/Logs/`): 최초 `P5nFinalNonUnity.log`·`P5nFinalUnity.log`(둘 다 exit 0·경고/오류 0), `P5nFinalAutomation.log`(422/423, 위 실패). 수정 후 `P5nVerifiedNonUnity.log`·`P5nVerifiedUnity.log`(둘 다 exit 0·경고/오류 0), `P5nBoundaryAutomation.log`(발견/Success 7, Fail 0, exit 0), `P5nVerifiedAutomation.log`(발견/Success 423, Fail 0, exit 0).
+   - 샘플 비활성화에 따른 IsdkInfoCardComponent CDO·OpenXR 확장·MetaXR empty engine version 등은 Agent-Workflow §2.5의 기존 환경 잡음. 자동화 단언과 빌드 진단을 따로 판정함. P0Buck OS error 5 재실행은 필요 없었음.
+   - C++ 로컬 빌드·합성 자동화만 확인. 에디터 작업은 배정 없음. BP 자식 프로퍼티/Details·레버 끝 조작과 휠 간섭·노브 2배 체감·미러 양면 밀기/두 축 잡기·박스 여러 개의 가로/세로 적재는 사용자 확인 필요. 계획서 T-02·T-04·T-05·T-08 및 Quest 3 Link/VR Preview 상태 `not-tested`.
+   - 시작·종료 시 UnrealEditor 계열 프로세스 없음. 질문 Q1·Q2 답 반영, Q3 없음. push·PR·머지 없음.
 
 ## Codex 보고 ①–⑤ (Q2 중단, 2026-10-19)
 

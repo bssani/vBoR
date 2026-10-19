@@ -64,9 +64,11 @@ void AVBoRKnob::OnConstruction(const FTransform& Transform)
 void AVBoRKnob::PreInitializeComponents()
 {
 	Motion.StepDeg = StepDeg; Motion.StepHysteresisDeg = StepHysteresisDeg; Motion.JumpThresholdDeg = JumpThresholdDeg;
+	Motion.TwistGain = TwistGain;
 	bValid = KnobMesh->GetStaticMesh() && !MeshRestFromRoot.ContainsNaN() && !Pivot->GetRelativeTransform().ContainsNaN() && !MarkerRestFromPivot.ContainsNaN();
 	for (float Value : {StepDeg,StepHysteresisDeg,JumpThresholdDeg,GrabMarginCm}) { bValid = bValid && FMath::IsFinite(Value) && Value >= 0; }
 	bValid = bValid && (StepDeg == 0 || StepHysteresisDeg < StepDeg/2);
+	bValid = bValid && FMath::IsFinite(TwistGain) && TwistGain >= 0.1f;
 	// 저장된 레벨도 실행 때 검사함. construction 은 배치만 맡음 (P5f §2·E12)
 	if (!bValid) { UE_LOG(LogKnob,Warning,TEXT("%s: Missing mesh or invalid knob settings; grabbing disabled | approximate geometry | not-tested"),*GetName()); }
 	if (bValid) { Layout(); }

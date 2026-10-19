@@ -16,34 +16,58 @@ bool AVBoRCarryObject::CalculateReleaseDrop(FTransform& DropStart, FTransform& L
 		const FQuat Relative = DropStart.GetRotation() * Rest.Inverse();
 		FTransform Level = DropStart;
 		Level.SetRotation((FRotator(0, Relative.Rotator().Yaw, 0).Quaternion() * Rest).GetNormalized());
-		if (!IsPoseClear(Level))
+		auto FindClearLevel = [this](FTransform& Pose)
 		{
+			if (IsPoseClear(Pose)) { return true; }
 			// 매 frame 질의를 줄이도록 +Z 만 1 cm 간격으로 찾고 경계를 0.001 cm 안으로 좁힘 (P1c R1-1)
-			const FVector Origin = Level.GetLocation();
+			const FVector Origin = Pose.GetLocation();
 			const double MaxLift = FMath::IsFinite(LevelLiftMaxCm) ? FMath::Max(0.0, double(LevelLiftMaxCm)) : 0.0;
 			double BlockedLift = 0;
-			bool bFound = false;
 			for (double Lift = FMath::Min(1.0, MaxLift); MaxLift > 0; Lift = FMath::Min(Lift + 1.0, MaxLift))
 			{
-				Level.SetLocation(Origin + FVector(0, 0, Lift));
-				if (IsPoseClear(Level))
+				Pose.SetLocation(Origin + FVector(0, 0, Lift));
+				if (IsPoseClear(Pose))
 				{
 					double ClearLift = Lift;
 					while (ClearLift - BlockedLift > 0.001)
 					{
 						const double Middle = (ClearLift + BlockedLift) * 0.5;
-						Level.SetLocation(Origin + FVector(0, 0, Middle));
-						if (IsPoseClear(Level)) { ClearLift = Middle; }
+						Pose.SetLocation(Origin + FVector(0, 0, Middle));
+						if (IsPoseClear(Pose)) { ClearLift = Middle; }
 						else { BlockedLift = Middle; }
 					}
-					Level.SetLocation(Origin + FVector(0, 0, ClearLift));
-					bFound = true;
-					break;
+					Pose.SetLocation(Origin + FVector(0, 0, ClearLift));
+					return true;
 				}
 				BlockedLift = Lift;
 				if (Lift >= MaxLift) { break; }
 			}
-			bLevelBlocked = !bFound;
+			return false;
+		};
+		const FTransform Unsnapped = Level;
+		if (bSnapYawInLoadRegion && LoadTarget)
+		{
+			FTransform Region = LoadTarget->LoadingRegion->GetComponentTransform();
+			Region.RemoveScaling();
+			const FVector Center = Region.InverseTransformPosition(DropStart.GetLocation());
+			const FVector Half = LoadTarget->LoadingRegion->GetScaledBoxExtent().GetAbs();
+			if (FMath::Abs(Center.X) <= Half.X && FMath::Abs(Center.Y) <= Half.Y)
+			{
+				const double RegionYaw = Region.Rotator().Yaw;
+				const double WorldYaw = Level.Rotator().Yaw;
+				const double Delta = FMath::FindDeltaAngleDegrees(RegionYaw,WorldYaw);
+				// 반 칸은 + 쪽. quaternion 왕복 오차 1.e-9 deg 이내도 같은 경계로 봄 (P5n D4)
+				const double SnappedYaw = RegionYaw + 90.0*FMath::FloorToDouble((Delta+45.0+1.e-9)/90.0);
+				Level.SetRotation((FQuat(FVector::ZAxisVector,FMath::DegreesToRadians(SnappedYaw-WorldYaw))*Level.GetRotation()).GetNormalized());
+			}
+		}
+		const bool bChangedYaw = !Level.GetRotation().Equals(Unsnapped.GetRotation(),1.e-6);
+		bLevelBlocked = !FindClearLevel(Level);
+		if (bLevelBlocked && bChangedYaw)
+		{
+			// 맞춤보다 충돌 없는 세운 자세 우선. 원래 높이에서 다시 찾음 (P5n D4)
+			Level = Unsnapped;
+			bLevelBlocked = !FindClearLevel(Level);
 		}
 		if (!bLevelBlocked) { DropStart = Level; }
 	}
