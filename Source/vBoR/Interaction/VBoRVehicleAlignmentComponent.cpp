@@ -31,6 +31,13 @@ void UVBoRVehicleAlignmentComponent::BeginPlay()
 FString UVBoRVehicleAlignmentComponent::SavedAlignmentPath() const
 { return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Calibration/BuckEye.json")); }
 
+FTransform UVBoRVehicleAlignmentComponent::PawnFor(const FTransform& Eye) const
+{
+	// 끄면 저장 때 머리 높이를 그대로 씀 (지그에 헤드셋을 올린 U-07 원래 방식)
+	return bHeightFromFloor ? FVBoRBuckAlignment::CalculatePawnOnFloor(Saved.Capture, Eye, BaseEye->GetComponentTransform(), FloorWorldZCm)
+		: FVBoRBuckAlignment::CalculatePawn(Saved.Capture, Eye);
+}
+
 void UVBoRVehicleAlignmentComponent::LoadSetupAlignment()
 {
 	FVBoRBuckSavedAlignment Loaded; FString LoadReason;
@@ -70,7 +77,7 @@ void UVBoRVehicleAlignmentComponent::InitializeAlignment(APawn* Pawn, const FVBo
 		else if (Decision.bApply)
 		{
 			// 참가자의 현재 머리 자세를 읽지 않음 (체격 차이 유지, P3 D2)
-			AlignmentPawn->SetActorTransform(FVBoRBuckAlignment::CalculatePawn(Saved.Capture, BaseEye->GetComponentTransform()), false, nullptr, ETeleportType::TeleportPhysics);
+			AlignmentPawn->SetActorTransform(PawnFor(BaseEye->GetComponentTransform()), false, nullptr, ETeleportType::TeleportPhysics);
 			HomeShiftCm = FVector2D::ZeroVector;
 			State = Decision.bNeedsCheck ? EVBoRAlignmentState::NeedsCheck : EVBoRAlignmentState::Applied;
 		}
@@ -206,7 +213,7 @@ void UVBoRVehicleAlignmentComponent::AdvanceSwitch(double DeltaSeconds)
 		{
 			// 매번 Stage 저장값에서 직접 계산함 (전환 오차 누적 방지, P3 E11)
 			const FTransform Eye = PendingViewpoint ? PendingViewpoint->GetComponentTransform() : BaseEye->GetComponentTransform();
-			AlignmentPawn->SetActorTransform(FVBoRBuckAlignment::CalculatePawn(Saved.Capture, Eye), false, nullptr, ETeleportType::TeleportPhysics);
+			AlignmentPawn->SetActorTransform(PawnFor(Eye), false, nullptr, ETeleportType::TeleportPhysics);
 			HomeShiftCm = FVector2D::ZeroVector;
 			CurrentViewpoint = PendingViewpoint;
 		}

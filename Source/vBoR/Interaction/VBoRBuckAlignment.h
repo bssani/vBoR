@@ -41,6 +41,7 @@ struct VBOR_API FVBoRBuckAlignment
 {
 	static bool ProjectYaw(const FQuat& Orientation, double MinHorizontalLength, double& OutYawDeg);
 	static FTransform CalculatePawn(const FVBoRBuckCaptureResult& Capture, const FTransform& EyeWorld);
+	static FTransform CalculatePawnOnFloor(const FVBoRBuckCaptureResult& Capture, const FTransform& EyeWorld, const FTransform& BaseEyeWorld, double FloorWorldZCm);
 	static FVBoRBuckApplyDecision CheckEnvironment(const FVBoRBuckSavedAlignment& Saved, int32 CurrentOrigin,
 		const FVector2D& CurrentPlayAreaCm, double ToleranceCm);
 	static FString DescribeTip(bool bTracked, const FVector& WorldTipCm, const FTransform& EyeWorld);

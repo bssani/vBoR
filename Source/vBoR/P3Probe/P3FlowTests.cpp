@@ -323,6 +323,34 @@ bool FP3ViewTest::RunTest(const FString&)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3FloorHeightTest, "vBoR.P3Flow.E28HeightFromFloor", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP3FloorHeightTest::RunTest(const FString&)
+{
+	FP3World E; UVBoRVehicleAlignmentComponent* A = E.Car->Alignment.Get();
+	TestTrue(TEXT("Floor height is the default"),A->bHeightFromFloor && A->FloorWorldZCm == 0);
+	const FTransform DriverEye = E.Car->DriverEye->GetComponentTransform();
+	for (double HeadZ : {100.0,115.0,130.0})
+	{
+		E.Saved.Capture.PositionCm.Z = HeadZ; E.Apply();
+		const FTransform EyeBased = FVBoRBuckAlignment::CalculatePawn(E.Saved.Capture,DriverEye);
+		TestTrue(TEXT("Base pawn on the virtual floor whatever the saved head height"),FMath::IsNearlyZero(E.Pawn->GetActorLocation().Z,0.001));
+		TestTrue(TEXT("Floor height keeps eye-based XY"),FVector::Dist2D(E.Pawn->GetActorLocation(),EyeBased.GetLocation())<0.001);
+		TestTrue(TEXT("Floor height keeps eye-based yaw"),FMath::Abs(FMath::FindDeltaAngleDegrees(double(E.Pawn->GetActorRotation().Yaw),double(EyeBased.Rotator().Yaw)))<0.01);
+		// 저장한 머리는 실제 높이 그대로 보임 (참가자 체격 차이 유지, U-17)
+		TestTrue(TEXT("Saved head at its real height above floor"),FMath::IsNearlyEqual(E.Pawn->GetActorTransform().TransformPosition(E.Saved.Capture.PositionCm).Z,HeadZ,0.001));
+	}
+	E.Saved.Capture.PositionCm.Z = 130; E.Apply(); E.Steps({P3Step(TEXT("12"))});
+	A->SwitchViewpoint(E.Car->RearView); E.FinishSwitch();
+	TestTrue(TEXT("Rear view adds only the eye height difference"),FMath::IsNearlyEqual(E.Pawn->GetActorLocation().Z,E.Car->RearView->GetComponentLocation().Z-DriverEye.GetLocation().Z,0.001));
+	A->ReturnToBase(); E.FinishSwitch();
+	TestTrue(TEXT("Return to base back on floor"),FMath::IsNearlyZero(E.Pawn->GetActorLocation().Z,0.001));
+	A->FloorWorldZCm = 12; E.Apply();
+	TestTrue(TEXT("Floor world Z offsets the pawn"),FMath::IsNearlyEqual(E.Pawn->GetActorLocation().Z,12.0,0.001));
+	A->bHeightFromFloor = false; E.Apply();
+	TestTrue(TEXT("Switch off restores saved-head height (jig method)"),E.Pawn->GetActorLocation().Equals(FVBoRBuckAlignment::CalculatePawn(E.Saved.Capture,DriverEye).GetLocation(),0.001));
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3ExitTest, "vBoR.P3Flow.E12ReturnBeforeExit", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP3ExitTest::RunTest(const FString&)
 {

@@ -25,6 +25,15 @@ FTransform FVBoRBuckAlignment::CalculatePawn(const FVBoRBuckCaptureResult& Captu
 	return FTransform(Rotation, EyeWorld.GetLocation() - Rotation.RotateVector(Capture.PositionCm));
 }
 
+FTransform FVBoRBuckAlignment::CalculatePawnOnFloor(const FVBoRBuckCaptureResult& Capture, const FTransform& EyeWorld, const FTransform& BaseEyeWorld, double FloorWorldZCm)
+{
+	FTransform Pawn = CalculatePawn(Capture, EyeWorld);
+	// 저장한 사람의 앉은 눈높이를 쓰지 않음 (실제 바닥 = 가상 바닥). 다른 시점은 기준 눈과의 높이 차이만 더함 (U-17, cm)
+	const FVector Location = Pawn.GetLocation();
+	Pawn.SetLocation(FVector(Location.X, Location.Y, FloorWorldZCm + EyeWorld.GetLocation().Z - BaseEyeWorld.GetLocation().Z));
+	return Pawn;
+}
+
 FVBoRBuckApplyDecision FVBoRBuckAlignment::CheckEnvironment(const FVBoRBuckSavedAlignment& Saved, int32 CurrentOrigin,
 	const FVector2D& CurrentPlayAreaCm, double ToleranceCm)
 {
