@@ -66,6 +66,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP1cLevelTest, "vBoR.P1c.LevelAndYaw", EAutomat
 bool FP1cLevelTest::RunTest(const FString& Parameters)
 {
 	FSettleWorld F;
+	F.Box->bSnapYawInLoadRegion = false; // 기존 Yaw 보존만 확인함 (P5n §3 예외 3)
 	F.Block(FVector(0, 0, 45), FVector(500, 500, 5));
 	F.Begin();
 	for (const FRotator Tilt : {FRotator(30, 0, 0), FRotator(0, 40, 20)})
@@ -366,6 +367,80 @@ bool FP1cDefaultsTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("E12 leveling defaults on"), Bench->Bag->bLevelOnRelease);
 		TestTrue(TEXT("E12 preview defaults on"), Bench->Bag->bShowLandingPreview);
 		TestEqual(TEXT("Lift default is half default box height cm"), Bench->Bag->LevelLiftMaxCm, float(Bench->Bag->BoxSizeCm.Z * 0.5));
+	}
+	return true;
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5nBoxSnapTest, "vBoR.P5n.E10E14BoxYawSnap", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5nBoxSnapTest::RunTest(const FString&)
+{
+	for (double RestYaw : {0.0,20.0})
+	{
+		for (double Yaw : {37.0,52.0,45.0,-45.0})
+		{
+			FSettleWorld F;
+			F.Target->SetActorRotation(FRotator(0,30,0));
+			F.Block(FVector(0,0,45),FVector(500,500,5)); F.Begin();
+			F.Box->ResetToPose(FTransform(FRotator(0,RestYaw,0),FVector(0,0,100)));
+			F.Box->BeginCarry(0,nullptr,F.Box->GetActorTransform());
+			// RestYaw 와 tilt 를 함께 주면 기존 세우기가 월드 Yaw 도 조금 바꿈. 반 칸은 수평 자세로 잼 (P5n E10)
+			const bool Half=FMath::Abs(Yaw)==45;
+			F.Box->SetActorRotation(FRotator(Half?0:15,30+Yaw,Half?0:10));
+			const double Expected=Yaw==52 || Yaw==45?120:30;
+			TestTrue(TEXT("E10 held box remains at hand yaw before release"),FMath::IsNearlyEqual(F.Box->GetActorRotation().Yaw,30+Yaw,0.001));
+			F.Box->UpdateVisual();
+			TestTrue(TEXT("E13 landing preview visible"),F.Box->LandingPreview->IsVisible());
+			const FTransform Preview=F.Box->LandingPreview->GetComponentTransform();
+			AddInfo(FString::Printf(TEXT("E10 rest yaw=%.0f offset=%.0f preview yaw=%.9f expected=%.0f deg"),RestYaw,Yaw,Preview.Rotator().Yaw,Expected));
+			TestTrue(TEXT("E13 preview uses region yaw plus right angles"),Preview.Rotator().Equals(FRotator(0,Expected,0),0.001));
+			F.Box->ReleaseCarry();
+			TestTrue(TEXT("E10 world yaw snaps independently of rest yaw; half ties go positive"),F.Box->GetActorRotation().Equals(FRotator(0,Expected,0),0.001));
+			F.Box->Tick(1);
+			TestTrue(TEXT("E13 released box agrees with snapped preview"),F.Box->GetActorTransform().Equals(Preview,0.01));
+		}
+	}
+	for (int32 Mode=0; Mode<5; ++Mode)
+	{
+		FSettleWorld F; F.Block(FVector(0,0,45),FVector(500,500,5));
+		if (Mode==1) { F.Box->bSnapYawInLoadRegion=false; }
+		if (Mode==2) { F.Box->LoadTarget=nullptr; }
+		if (Mode==3) { F.Box->bLevelOnRelease=false; }
+		F.Begin();
+		const FVector Center(Mode==0?300:0,0,100);
+		F.Box->ResetToPose(FTransform(Center)); F.Box->BeginCarry(0,nullptr,F.Box->GetActorTransform());
+		F.Box->SetActorRotation(FRotator(0,37,0));
+		if (Mode==4)
+		{
+			// 높이를 무시하고 영역의 XY 만 봄 (P5n D4)
+			F.Target->SetActorLocation(FVector(0,0,-1000));
+		}
+		F.Box->ReleaseCarry();
+		TestTrue(TEXT("E12/E14 opt-out, outside, no target and no leveling retain yaw"),F.Box->GetActorRotation().Equals(FRotator(0,Mode==4?0:37,0),0.001));
+	}
+	for (double LocalX : {299.0,301.0})
+	{
+		FSettleWorld F; F.Target->SetActorTransform(FTransform(FRotator(0,30,0),FVector(0,0,-1000),FVector(2,0.5,1)));
+		F.Block(FVector(0,0,45),FVector(1000,1000,5)); F.Begin();
+		const FVector Center=FRotator(0,30,0).RotateVector(FVector(LocalX,0,0))+FVector(0,0,100);
+		F.Box->ResetToPose(FTransform(Center)); F.Box->BeginCarry(0,nullptr,F.Box->GetActorTransform()); F.Box->SetActorRotation(FRotator(0,67,0));
+		F.Box->ReleaseCarry();
+		TestTrue(TEXT("D4 region XY uses rotated frame and scaled extent, independent of height"),F.Box->GetActorRotation().Equals(FRotator(0,LocalX<300?30:67,0),0.001));
+	}
+	for (bool BothBlocked : {false,true})
+	{
+		// 높은 벽이라 +Z 탐색으로도 못 빠져나옴 (P5n E11, cm)
+		FSettleWorld F; F.Box->BoxSizeCm=FVector(20,60,20); F.Box->ApplyBoxSize();
+		F.Block(FVector(0,0,45),FVector(500,500,5));
+		F.Block(FVector(0,BothBlocked?28.8:29.8,100),FVector(100,0.1,200)); F.Begin();
+		F.Box->BeginCarry(0,nullptr,F.Box->GetActorTransform()); F.Box->SetActorRotation(FRotator(0,40,45));
+		TestTrue(TEXT("E11 tilted release starts clear"),F.Box->IsPoseClear(F.Box->GetActorTransform()));
+		TestFalse(TEXT("E11 snapped upright pose blocked"),F.Box->IsPoseClear(FTransform(FQuat::Identity,FVector(0,0,100))));
+		TestEqual(TEXT("E11 unsnapped upright clearance matches wall"),F.Box->IsPoseClear(FTransform(FRotator(0,40,0),FVector(0,0,100))),!BothBlocked);
+		F.Box->UpdateVisual(); const FTransform Preview=F.Box->LandingPreview->GetComponentTransform();
+		F.Box->ReleaseCarry();
+		TestTrue(TEXT("E11 falls back to unsnapped upright, then original tilt if both blocked"),F.Box->GetActorRotation().Equals(FRotator(0,40,BothBlocked?45:0),0.001));
+		TestTrue(TEXT("E11 fallback starts clear"),F.Box->IsPoseClear(F.Box->GetActorTransform()));
+		F.Box->Tick(1);
+		TestTrue(TEXT("E11 preview agrees with fallback"),F.Box->GetActorTransform().Equals(Preview,0.01));
 	}
 	return true;
 }

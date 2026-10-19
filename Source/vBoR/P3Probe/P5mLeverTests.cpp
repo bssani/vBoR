@@ -231,4 +231,20 @@ bool FP5mColors::RunTest(const FString&)
 	G->Activate(true); G->SetWorldLocation(P->GrabBox->GetComponentLocation()); G->TickComponent(.016f,LEVELTICK_All,nullptr); G->PinchGrab(); P->Tick(.001f);
 	TestTrue(TEXT("Grab overlay"),FP5mTestAccess::Color(P).Equals(P->GrabColor,.001f)); return true;
 }
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5nLeverMargin,"vBoR.P5n.E2LeverPushMargin",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5nLeverMargin::RunTest(const FString&)
+{
+	for (bool Reverse : {false,true})
+	{
+		for (double OutsideCm : {1.2,2.0})
+		{
+			FP5mWorld W; auto* P=W.Part(Reverse); P->PushMarginCm=1.5f; W.Play();
+			const double Y=Reverse?-15:15;
+			P5mPoint(P->Hands[0],FVector(1+OutsideCm,Y,-2)); P->Tick(0.001f);
+			P5mPoint(P->Hands[0],FVector(1+OutsideCm,Y,-0.5)); P->Tick(0.001f);
+			TestEqual(TEXT("E2 axial margin accepts 1.2 cm but rejects 2 cm"),FP5mTestAccess::Hand(P),OutsideCm<1.5?0:INDEX_NONE);
+		}
+	}
+	return true;
+}
 #endif

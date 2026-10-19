@@ -5,12 +5,6 @@ FQuat FVBoRTwoAxisMotion::Rotation() const
 	return FQuat(FVector::ZAxisVector,FMath::DegreesToRadians(YawDeg)) * FQuat(FVector::YAxisVector,FMath::DegreesToRadians(-PitchDeg));
 }
 
-void FVBoRTwoAxisMotion::ApplyNormal(const FVector& Normal)
-{
-	YawDeg = FMath::Clamp(FMath::RadiansToDegrees(FMath::Atan2(-Normal.Y,-Normal.X)),-YawLimitDeg,YawLimitDeg);
-	PitchDeg = FMath::Clamp(FMath::RadiansToDegrees(FMath::Asin(FMath::Clamp(-Normal.Z,-1.0,1.0))),-PitchLimitDeg,PitchLimitDeg);
-}
-
 bool FVBoRTwoAxisMotion::BeginGrab(int32 Hand, const FVector& Point)
 {
 	if (Hand < 0 || Hand > 1 || GrabHand != INDEX_NONE || Point.ContainsNaN()) { return false; }
@@ -100,16 +94,22 @@ void FVBoRTwoAxisMotion::AdvancePush(const FVBoRDoorHand (&Hands)[2])
 			if (FindPush(Hand,Hands[Hand],Point,Depth,PushPoint,PushFace)) { PushHand = Hand; Found = true; break; }
 		}
 	}
-	if (Found && Depth > 1.e-6)
+	// 축 가까이는 작은 깊이에도 큰 Yaw 가 필요함. 소유는 두고 회전만 막음 (P5n D3, cm)
+	if (Found && Depth > 1.e-6 && FMath::Abs(Before.UnrotateVector(Point).Y) >= PushMinLeverCm)
 	{
 		const FVector Normal = Before.RotateVector(-FVector::XAxisVector);
-		const double Radius = Point.Size(), PlaneDistance = PushFace==0 ? -FaceMinCm.X : -FaceMaxCm.X;
-		if (Radius > FMath::Abs(PlaneDistance)+1.e-6)
+		const double HorizontalNormal = Normal.Size2D();
+		const FVector FlatNormal = FVector(Normal.X,Normal.Y,0).GetSafeNormal();
+		const FVector FlatPoint(Point.X,Point.Y,0);
+		const double Radius = FlatPoint.Size();
+		// Pitch 를 고정한 면 식에서 Z 항만 뺌 (잡기로 기운 미러도 밀기는 Yaw 만, P5n D3)
+		const double Plane = PushFace==0 ? -FaceMinCm.X : -FaceMaxCm.X;
+		const double PlaneDistance = HorizontalNormal > UE_SMALL_NUMBER ? (Plane-Normal.Z*Point.Z)/HorizontalNormal : 0;
+		if (HorizontalNormal > UE_SMALL_NUMBER && Radius > FMath::Abs(PlaneDistance)+1.e-6)
 		{
-			// 처음 닿은 면의 N·손점 = 면 거리를 풂 (한 밀기에서 점·면 유지, P5l D3)
-			const double Angle = FMath::Acos(FMath::Clamp(FVector::DotProduct(Normal,Point)/Radius,-1.0,1.0)) - FMath::Acos(PlaneDistance/Radius);
-			const FVector Axis = FVector::CrossProduct(Normal,Point).GetSafeNormal();
-			if (!Axis.IsNearlyZero()) { ApplyNormal(FQuat(Axis,Angle).RotateVector(Normal)); }
+			const double Angle = FMath::Acos(FMath::Clamp(FVector::DotProduct(FlatNormal,FlatPoint)/Radius,-1.0,1.0)) - FMath::Acos(PlaneDistance/Radius);
+			const double CrossZ = FVector::CrossProduct(FlatNormal,FlatPoint).Z;
+			if (!FMath::IsNearlyZero(CrossZ)) { YawDeg = FMath::Clamp(YawDeg+FMath::Sign(CrossZ)*FMath::RadiansToDegrees(Angle),-YawLimitDeg,YawLimitDeg); }
 		}
 	}
 	Previous[0] = Hands[0]; Previous[1] = Hands[1]; PreviousRotation = Rotation();

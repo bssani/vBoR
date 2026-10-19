@@ -59,8 +59,9 @@ void AVBoRTwoAxisPart::PreInitializeComponents()
 	Motion.YawLimitDeg = YawLimitDeg; Motion.PitchLimitDeg = PitchLimitDeg; Motion.CenterExclusionCm = CenterExclusionCm;
 	Motion.FrontToleranceCm = FrontToleranceCm; Motion.DepthMarginCm = DepthMarginCm; Motion.EdgeMarginCm = EdgeMarginCm;
 	Motion.MinLeverCm = MinLeverCm; Motion.MaxGrabJumpCm = MaxGrabJumpCm;
+	Motion.PushMinLeverCm = PushMinLeverCm;
 	bValid = PartMesh->GetStaticMesh() && !MeshRestFromRoot.ContainsNaN() && !Pivot->GetRelativeTransform().ContainsNaN();
-	for (float Value : {YawLimitDeg,PitchLimitDeg,CenterExclusionCm,FrontToleranceCm,DepthMarginCm,EdgeMarginCm})
+	for (float Value : {YawLimitDeg,PitchLimitDeg,CenterExclusionCm,FrontToleranceCm,DepthMarginCm,EdgeMarginCm,PushMinLeverCm})
 	{ bValid = bValid && FMath::IsFinite(Value) && Value >= 0; }
 	for (float Value : {MinLeverCm,MaxGrabJumpCm}) { bValid = bValid && FMath::IsFinite(Value) && Value > 0; }
 	if (PartMesh->GetStaticMesh())

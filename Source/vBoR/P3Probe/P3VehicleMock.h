@@ -82,7 +82,8 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRHingedPanel> Glovebox;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRAxisPart> GloveboxHandle;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 기어", meta=(Units="cm")) FVector GearPivotCm = FVector(39,-30,70);
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 기어", meta=(Units="cm")) FVector GearSizeCm = FVector(2,16,2);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 기어", meta=(Units="cm")) FVector GearSizeCm = FVector(2,22,2);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 레버", meta=(Units="cm", ClampMin="0")) float LeverPushMarginCm = 1.5;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 기어") FRotator GearAxisRotation = FRotator::ZeroRotator;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 기어", meta=(ToolTip="Approximate detent angles in deg")) TArray<float> GearDetentAnglesDeg = {-20,0,20};
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 기어", meta=(Units="deg")) float GearUpThresholdDeg = 15;
@@ -91,7 +92,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRAxisPart> GearLever;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRPokeButton> GearButton;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 방향지시", meta=(Units="cm")) FVector TurnSignalPivotCm = FVector(39,-44,70);
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 방향지시", meta=(Units="cm", ClampMin="0.1")) FVector TurnSignalSizeCm = FVector(2,16,2);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 방향지시", meta=(Units="cm", ClampMin="0.1")) FVector TurnSignalSizeCm = FVector(2,22,2);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 방향지시") FRotator TurnSignalAxisRotation = FRotator::ZeroRotator;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 방향지시", meta=(ToolTip="Approximate detent angles in deg")) TArray<float> TurnSignalDetentAnglesDeg = {-20,0,20};
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 방향지시", meta=(Units="deg")) float TurnSignalUpThresholdDeg = 15;
@@ -114,6 +115,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 노브", meta=(Units="cm")) FVector KnobPivotCm = FVector(10,0,59.5);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 노브", meta=(Units="cm", ClampMin="0.1")) float KnobDiameterCm = 6;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 노브", meta=(Units="cm", ClampMin="0.1")) float KnobHeightCm = 2.5;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 노브", meta=(ClampMin="0.1")) float KnobTwistGain = 2;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 노브", meta=(Units="cm")) FVector KnobSupportCenterCm = FVector(10,0,58.5);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값|근사 노브", meta=(Units="cm", ClampMin="0.1")) FVector KnobSupportSizeCm = FVector(20,16,2);
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TObjectPtr<AVBoRKnob> ConsoleKnob;

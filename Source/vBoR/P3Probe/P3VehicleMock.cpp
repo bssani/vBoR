@@ -195,6 +195,7 @@ void AP3VehicleMock::BeginPlay()
 	GearLever->DetentAnglesDeg = GearDetentAnglesDeg; GearLever->DetentStartIndex = 1;
 	GearLever->DetentUpThresholdDeg = GearUpThresholdDeg; GearLever->DetentDownThresholdDeg = GearDownThresholdDeg;
 	GearLever->bAllowPalmGrab = false; GearLever->bAllowPinchGrab = true; GearLever->bAllowPush = true;
+	GearLever->PushMarginCm = LeverPushMarginCm;
 	GearLever->SpectatorName = FText::FromString(TEXT("Gear Lever"));
 	GearLever->FinishSpawning(GetActorTransform()); GearLever->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	// 버튼 +Z 면을 레버 끝 +Y 로 놓음. 잡기·단계와 연결하지 않음 (P5b D8)
@@ -213,6 +214,7 @@ void AP3VehicleMock::BeginPlay()
 	TurnSignalLever->DetentUpThresholdDeg = TurnSignalUpThresholdDeg; TurnSignalLever->DetentDownThresholdDeg = TurnSignalDownThresholdDeg;
 	TurnSignalLever->DetentNudgeDeg = TurnSignalNudgeDeg;
 	TurnSignalLever->bAllowPalmGrab = false; TurnSignalLever->bAllowPinchGrab = true; TurnSignalLever->bAllowPush = true;
+	TurnSignalLever->PushMarginCm = LeverPushMarginCm;
 	TurnSignalLever->SpectatorName = FText::FromString(TEXT("Turn Signal Lever"));
 	TurnSignalLever->FinishSpawning(GetActorTransform()); TurnSignalLever->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	// 판은 에디터·기존 시험 기준으로 남김 (차 원점 피벗, 근사 cm·deg, P5d D8)
@@ -251,6 +253,7 @@ void AP3VehicleMock::BeginPlay()
 		ConsoleKnob->MeshRestFromRoot = FTransform(FQuat::Identity,KnobPivotCm+FVector(0,0,KnobHeightCm/2),FVector(KnobDiameterCm,KnobDiameterCm,KnobHeightCm)/100);
 		ConsoleKnob->MarkerRestFromPivot.SetLocation(FVector(KnobDiameterCm/2-0.8,0,KnobHeightCm+0.15));
 		ConsoleKnob->SpectatorName = FText::FromString(TEXT("Console Knob"));
+		ConsoleKnob->TwistGain = KnobTwistGain;
 		ConsoleKnob->FinishSpawning(GetActorTransform()); ConsoleKnob->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform);
 	}
 	ReachButton = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), FTransform::Identity, this);

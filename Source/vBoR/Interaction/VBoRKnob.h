@@ -71,6 +71,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob", meta=(Units="deg", ClampMin="0")) float StepDeg = 15;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob", meta=(Units="deg", ClampMin="0")) float StepHysteresisDeg = 3;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob", meta=(Units="deg", ClampMin="0")) float JumpThresholdDeg = 30;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob", meta=(ClampMin="0.1")) float TwistGain = 1;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob", meta=(Units="cm", ClampMin="0")) float GrabMarginCm = 1;
 	UPROPERTY(EditAnywhere, Category="Knob") FLinearColor HoverColor = FLinearColor(0,0.6,1,0.4);
 	UPROPERTY(EditAnywhere, Category="Knob") FLinearColor GrabColor = FLinearColor(0.5,0,1,0.4);

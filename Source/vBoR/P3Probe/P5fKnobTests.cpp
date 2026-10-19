@@ -211,4 +211,31 @@ bool FP5fCleanup::RunTest(const FString&)
 	FP5fWorld W; auto* Car=W.World->SpawnActor<AP3VehicleMock>(); W.Play(); auto* K=Car->ConsoleKnob.Get(); auto* Support=Car->KnobSupport.Get(); if (!TestNotNull(TEXT("Knob spawned"),K)) { return false; }
 	Car->Destroy(); TestTrue(TEXT("Knob destroyed"),K->IsActorBeingDestroyed()); TestFalse(TEXT("Support unregistered by owner"),Support->IsRegistered()); return true;
 }
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5nKnobGain,"vBoR.P5n.E3E6KnobGain",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5nKnobGain::RunTest(const FString&)
+{
+	for (double HandAngle : {10.0,25.0,31.0})
+	{
+		FP5fWorld W; auto* K=W.Knob(); K->TwistGain=2; W.Play(); FP5fTestAccess::Select(K); P5fMove(K,HandAngle);
+		const double Expected=HandAngle>30?0:HandAngle*2;
+		const int32 Count=HandAngle>30?0:(HandAngle==10?1:3);
+		TestTrue(TEXT("E3/E4/E5 actual motion uses gain after raw jump check"),FMath::IsNearlyEqual(K->GetAngleDeg(),Expected,0.001));
+		TestEqual(TEXT("E3/E4 each crossed step delivered in Tick"),K->Steps.Num(),Count);
+		TestEqual(TEXT("E3/E4 sound per crossing"),K->SoundCount,Count);
+		for (int32 Direction : K->Steps) { TestEqual(TEXT("E4 ordered clockwise notifications"),Direction,1); }
+		if (HandAngle>30)
+		{
+			P5fMove(K,32); TestTrue(TEXT("E5 rejected jump rebases"),FMath::IsNearlyEqual(K->GetAngleDeg(),2.0,0.001));
+			K->bTracked=false; K->Tick(0.016f); K->bTracked=true; P5fMove(K,42);
+			TestTrue(TEXT("Recovery discards raw ten deg"),FMath::IsNearlyEqual(FP5fTestAccess::Motion(K).RecoveryDiscardDeg,10.0,0.001));
+			TestTrue(TEXT("Recovery adds no gain-scaled motion"),FMath::IsNearlyEqual(K->GetAngleDeg(),2.0,0.001));
+		}
+	}
+	FP5fWorld W; auto* Parent=W.Knob(); auto* Car=W.World->SpawnActor<AP3VehicleMock>(); Car->KnobTwistGain=2.5f; W.Play();
+	TestEqual(TEXT("E6 parent gain remains one"),Parent->TwistGain,1.f);
+	TestEqual(TEXT("Mock default gain is two"),GetDefault<AP3VehicleMock>()->KnobTwistGain,2.f);
+	TestEqual(TEXT("Mock forwards configurable gain"),Car->ConsoleKnob->TwistGain,2.5f);
+	TestEqual(TEXT("Mock gain reaches motion"),FP5fTestAccess::Motion(Car->ConsoleKnob).TwistGain,2.5);
+	return true;
+}
 #endif

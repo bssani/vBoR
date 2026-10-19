@@ -204,7 +204,7 @@ bool FP5cCar::RunTest(const FString&)
 	TestTrue(TEXT("Actor at car origin"),Part->GetActorTransform().Equals(CarWorld,0.001)); TestTrue(TEXT("Pivot at exposed position"),Part->AxisPivot->GetRelativeLocation().Equals(Car->TurnSignalPivotCm));
 	TestTrue(TEXT("Rest mesh keeps authored world pose"),Part->PartMesh->GetComponentTransform().Equals(Part->MeshRestFromRoot * CarWorld,0.001)); TestEqual(TEXT("Starts center"),Part->GetDetentIndex(),1); TestEqual(TEXT("Nudge enabled"),Part->DetentNudgeDeg,7.f);
 	const FVector RestTip = CarWorld.InverseTransformPosition(Part->AxisPivot->GetComponentTransform().TransformPosition(FVector(0,-Car->TurnSignalSizeCm.Y,0)));
-	TestTrue(TEXT("Lever extends car -Y"),(RestTip - Car->TurnSignalPivotCm).Equals(FVector(0,-16,0),0.001));
+	TestTrue(TEXT("Lever extends car -Y"),(RestTip - Car->TurnSignalPivotCm).Equals(FVector(0,-Car->TurnSignalSizeCm.Y,0),0.001));
 	for (double Angle : {-20.0,0.0,20.0})
 	{
 		FP5cTestAccess::SetValue(Part,Angle); const FVector Tip = CarWorld.InverseTransformPosition(Part->AxisPivot->GetComponentTransform().TransformPosition(FVector(0,-Car->TurnSignalSizeCm.Y,0)));

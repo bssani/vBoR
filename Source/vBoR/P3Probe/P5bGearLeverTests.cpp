@@ -3,6 +3,7 @@
 #include "P5bTestFixture.h"
 #include "P3VehicleMock.h"
 #include "../Interaction/VBoRPokeButton.h"
+#include "../Interaction/VBoRSteeringWheel.h"
 #include "../Interaction/VBoRScenarioRunner.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -412,5 +413,34 @@ bool FP5bButton::RunTest(const FString&)
 		TestEqual(TEXT("Press preserves grab"),Part->GetHoldingHand(),Hand);
 	}
 	TestEqual(TEXT("One event per select held or released"),Events->Presses,2); return true;
+}
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5nLeverLayout,"vBoR.P5n.E1LeverLayout",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5nLeverLayout::RunTest(const FString&)
+{
+	FP5bWorld W; auto* Car=W.World->SpawnActor<AP3VehicleMock>(); W.Play();
+	const UBoxComponent* WheelBox=Car->SteeringWheel->GrabBox;
+	const FBox Wheel=FBox(-WheelBox->GetUnscaledBoxExtent(),WheelBox->GetUnscaledBoxExtent()).TransformBy(WheelBox->GetComponentTransform());
+	const FBox Dashboard(Car->DashboardCenterCm-Car->DashboardSizeCm/2,Car->DashboardCenterCm+Car->DashboardSizeCm/2);
+	TestEqual(TEXT("D1 gear length cm"),Car->GearSizeCm.Y,22.0);
+	TestEqual(TEXT("D1 signal length cm"),Car->TurnSignalSizeCm.Y,22.0);
+	for (AVBoRAxisPart* Part : {Car->GearLever.Get(),Car->TurnSignalLever.Get()})
+	{
+		const double Sign=Part==Car->GearLever?1:-1;
+		TestEqual(TEXT("D1 mock push margin cm"),Part->PushMarginCm,1.5f);
+		for (double Angle : {-20.0,0.0,20.0})
+		{
+			FP5bTestAccess::SetValue(Part,Angle);
+			const FBox Distal=FBox(FVector(-1,Sign>0?14:-22,-1),FVector(1,Sign>0?22:-14,1)).TransformBy(Part->AxisPivot->GetComponentTransform());
+			TestFalse(TEXT("E1 distal eight cm outside wheel grab box at each detent"),Distal.Intersect(Wheel));
+			const FBox Lever=Part->PartMesh->GetStaticMesh()->GetBoundingBox().TransformBy(Part->PartMesh->GetComponentTransform());
+			TestFalse(TEXT("E1 lever avoids dashboard at each detent"),Lever.Intersect(Dashboard));
+			if (Sign>0)
+			{
+				TestTrue(TEXT("E1 gear button stays on new tip"),Car->GearButton->GetActorLocation().Equals(Part->AxisPivot->GetComponentTransform().TransformPosition(FVector(0,22,0)),0.001));
+			}
+		}
+	}
+	TestEqual(TEXT("Parent push margin unchanged"),GetDefault<AVBoRAxisPart>()->PushMarginCm,0.5f);
+	return true;
 }
 #endif
