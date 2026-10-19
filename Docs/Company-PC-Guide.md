@@ -11,9 +11,10 @@
 1. 이 문서
 2. [AGENTS.md](../AGENTS.md): 지켜야 할 규칙(확정 제약·금지·작업 방식). 반드시 읽는다.
 3. [Dev-Plan-50pct-VR.md](Dev-Plan-50pct-VR.md): 범위, 결정(U-01…), 시나리오 19개, 개발 단계, 시험 계획
-4. [Research-Log.md](Research-Log.md): 결정의 근거. 최신 항목이 위에 있다. 정렬은 2026-10-19 항목을 본다.
-5. [Agent-Workflow.md](Agent-Workflow.md): 빌드·시험 명령, 무시해도 되는 로그 잡음, 기록 위치
-6. 맡은 작업의 [Specs/](Specs/)`<이름>.md`와 [Reviews/](Reviews/)`<이름>.md`
+4. [Research-Log.md](Research-Log.md): 결정의 근거. 최신 항목이 위에 있다. 정렬은 2026-10-20(점 4개)·2026-10-19(높이) 항목을 본다.
+5. [Blueprint-Guide.md](Blueprint-Guide.md): **실제 차를 L_Main에 넣는 법**(차 기준점 BP, 부품 BP, 연결 규칙, 시나리오 태그, 넣은 뒤 확인). CAD 작업을 시작하기 전에 읽는다.
+6. [Agent-Workflow.md](Agent-Workflow.md): 빌드·시험 명령, 무시해도 되는 로그 잡음, 기록 위치
+7. 맡은 작업의 [Specs/](Specs/)`<이름>.md`와 [Reviews/](Reviews/)`<이름>.md`
 
 ## 1. 프로젝트 한 줄
 
@@ -98,9 +99,8 @@
 2. 정렬 4점 방식(P4h, U-18)
 3. ~~`AVBoRPawn`·`AVBoRGameMode`~~ — 끝(P4f)
 4. ~~L_Main~~ — 만듦(`Content/Main/L_Main`). 남은 것: 차량 Blueprint 틀
-5. 부품 Blueprint 대조와 "Blueprint 만드는 법" 문서
-   - 근사 차가 C++에서 이어 주던 연결을 레벨 Blueprint에서 어떻게 할지 부품별로 확인한다. 예: 박스 받침 → 적재 영역, 키 태그, 기어 끝 버튼.
-   - 레벨에 놓은 Blueprint로 확인된 것은 문·손잡이(P2e)뿐이다.
+5. 부품 Blueprint — [Blueprint-Guide.md](Blueprint-Guide.md)대로 만든다(문서 2026-10-20).
+   - 근사 차가 C++에서 이어 주던 연결을 문서 §6에 적었다. 확인된 것은 문·손잡이(P2e)뿐이다. 기어 끝 버튼·키 태그·박스 받침 연결은 처음 만들 때 확인한다.
 6. 산출물:
    - 설치·정렬 절차서
    - 진행자 매뉴얼
