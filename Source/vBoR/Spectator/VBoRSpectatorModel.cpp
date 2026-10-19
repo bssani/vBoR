@@ -90,8 +90,10 @@ bool FVBoRSpectatorLayout::Update(FIntPoint WindowSize, float EyeAspect, float M
 	const double Panel = FMath::Min(static_cast<double>(MinPanelWidth), Aspect * 0.99);
 	const double Height = FMath::Min(1.0, (Aspect - Panel) / EyeAspect);
 	const double Width = Height * EyeAspect / Aspect;
+	// 칸 먼저 그림. 시야 먼저면 엔진이 칸 그릴 때도 bClearBlack 으로 창 전체를 지워 시야가 검게 됨
+	// (XRBase DefaultSpectatorScreenController.cpp:284-291, XRCopyTexture.cpp:250-257). 두 영역은 안 겹쳐 순서 무관
 	Layout = FSpectatorScreenModeTexturePlusEyeLayout(FVector2D(0,(1-Height)/2), FVector2D(Width,(1+Height)/2),
-		FVector2D(Width,0), FVector2D(1,1), true, true, false);
+		FVector2D(Width,0), FVector2D(1,1), false, true, false);
 	PanelPixels = FIntPoint(FMath::Max(1,FMath::RoundToInt((1-Width)*WindowSize.X)),WindowSize.Y);
 	DrawScale = WindowSize.Y / 1080.f;
 	return true;

@@ -343,7 +343,7 @@ bool FP5hRects::RunTest(const FString&)
 		TestTrue(TEXT("Expected eye top"),FMath::IsNearlyEqual(L.Layout.EyeRectMin.Y,MinY[I],0.0001));
 		TestTrue(TEXT("Eye vertically centered"),FMath::IsNearlyEqual(L.Layout.EyeRectMax.Y,1-MinY[I],0.0001));
 		TestTrue(TEXT("4:3 in pixels"),FMath::IsNearlyEqual((L.Layout.EyeRectMax.X-L.Layout.EyeRectMin.X)*Sizes[I].X/((L.Layout.EyeRectMax.Y-L.Layout.EyeRectMin.Y)*Sizes[I].Y),4.0/3,0.0001));
-		TestTrue(TEXT("Opaque panel and black surround"),!L.Layout.bUseAlpha && L.Layout.bDrawEyeFirst && L.Layout.bClearBlack);
+		TestTrue(TEXT("Opaque panel drawn first and black surround"),!L.Layout.bUseAlpha && !L.Layout.bDrawEyeFirst && L.Layout.bClearBlack);
 		TestEqual(TEXT("Panel immediately after eye"),L.Layout.TextureRectMin,FVector2D(L.Layout.EyeRectMax.X,0));
 		TestEqual(TEXT("Panel reaches bottom right"),L.Layout.TextureRectMax,FVector2D(1,1));
 	}
