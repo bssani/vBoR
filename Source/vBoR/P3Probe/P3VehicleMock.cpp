@@ -1,4 +1,5 @@
 #include "P3VehicleMock.h"
+#include "../Interaction/VBoRAlignPointComponent.h"
 #include "../P1Probe/P1TrunkMock.h"
 #include "../Interaction/VBoRPoweredPanel.h"
 #include "../Interaction/VBoRFoldingSeat.h"
@@ -36,6 +37,13 @@ AP3VehicleMock::AP3VehicleMock()
 	KeyTableClass = AVBoRKeyTable::StaticClass();
 	DashboardCenterCm = FVector(50,0,85); DashboardSizeCm = FVector(25,175,12);
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("FixedVehicleOrigin")));
+	const TCHAR* PointLabels[] = {TEXT("Mock seat front-left"),TEXT("Mock seat front-right"),TEXT("Mock seat rear-right"),TEXT("Mock seat rear-left")};
+	for (int32 I = 0; I < 4; ++I)
+	{
+		auto* Point = CreateDefaultSubobject<UVBoRAlignPointComponent>(*FString::Printf(TEXT("AlignPoint%d"),I+1));
+		Point->SetupAttachment(RootComponent); Point->Order = I+1; Point->Label = PointLabels[I];
+		Point->SetRelativeLocation(AlignPointsCm[I]); AlignPoints.Add(Point);
+	}
 	DriverEye = CreateDefaultSubobject<UVBoREyePointComponent>(TEXT("DriverEye")); DriverEye->SetupAttachment(RootComponent);
 	PassengerView = CreateDefaultSubobject<UVBoRViewpointComponent>(TEXT("PassengerView")); PassengerView->SetupAttachment(RootComponent); PassengerView->ComponentTags.Add(TEXT("Car.PassengerView"));
 	RearView = CreateDefaultSubobject<UVBoRViewpointComponent>(TEXT("RearView")); RearView->SetupAttachment(RootComponent); RearView->ComponentTags.Add(TEXT("Car.RearView"));
@@ -66,6 +74,7 @@ AP3VehicleMock::AP3VehicleMock()
 void AP3VehicleMock::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
+	for (int32 I = 0; I < AlignPoints.Num(); ++I) { if (AlignPointsCm.IsValidIndex(I)) { AlignPoints[I]->SetRelativeLocation(AlignPointsCm[I]); } }
 	Footprint->SetRelativeLocation(FVector(0,0,BodySizeCm.Z*0.5));
 	Footprint->SetBoxExtent(FVector(BodySizeCm.X*0.5 + FootprintMarginCm, BodySizeCm.Y*0.5 + FootprintMarginCm, BodySizeCm.Z*0.5));
 	// 받침은 차에 고정함 (노브 회전에 따라 콘솔이 움직이지 않게, P5f D8, cm)

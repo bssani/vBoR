@@ -20,7 +20,7 @@ class SBorder;
 class AVBoRFloorRoute;
 class AVBoRKeyFob;
 
-enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel, ReapplyAlignment, FoldSeat, UnfoldSeat };
+enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel, ReapplyAlignment, FoldSeat, UnfoldSeat, CapturePoint, SavePoints, CancelPoints };
 enum class EVBoRCommandSource : uint8 { Participant, Operator };
 struct FVBoRFlowToken { int32 StepIndex = INDEX_NONE; uint64 Generation = 0; };
 struct FVBoRFlowCommand
@@ -82,6 +82,7 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void RequestLevelReload(FName LevelName);
 private:
+	friend struct FP4hTestAccess;
 	friend struct FP3FlowTestAccess;
 	friend struct FP5bTestAccess;
 	friend struct FP5gTestAccess;
@@ -129,7 +130,7 @@ private:
 	bool bOperatorInfo = false, bPanelPlacementPending = true, bSeatedPanelPlaced = false;
 	bool bStartHeadPending = false, bSeatHeadRecorded = false;
 	bool bPawnMovedBeforeFlow = false;
-	bool bReapplyPending = false;
+	bool bReapplyPending = false, bPointSavePending = false;
 	FString LastOperatorCommand;
 	int32 OperatorCompletedSteps = 0;
 	TSharedPtr<SWindow> OperatorWindow;
@@ -174,6 +175,7 @@ private:
 	void KeyFreeMode(); void KeyReloadLevel();
 	void KeyReapply();
 	void KeyFoldSeat(); void KeyUnfoldSeat();
+	void KeyCapturePoint(); void KeySavePoints(); void KeyCancelPoints();
 	void KeyHomeShift(FKey Key);
 	bool HandleHomeShiftKey(FKey Key, bool bRepeat = false);
 	static bool IsHomeShiftEnabled();

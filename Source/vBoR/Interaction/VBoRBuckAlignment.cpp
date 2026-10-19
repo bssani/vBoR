@@ -8,6 +8,39 @@
 #include "Windows/WindowsHWrapper.h"
 #endif
 
+bool FVBoRBuckAlignment::FitPoints(const TArray<FVector>& Stage, const TArray<FVector>& World, double FloorZCm, FVBoRPointFit& Out)
+{
+	if (Stage.Num() < 2 || Stage.Num() != World.Num() || !FMath::IsFinite(FloorZCm)) { return false; }
+	FVector P = FVector::ZeroVector, W = FVector::ZeroVector;
+	for (int32 I = 0; I < Stage.Num(); ++I)
+	{
+		if (Stage[I].ContainsNaN() || World[I].ContainsNaN()) { return false; }
+		P += Stage[I]; W += World[I];
+	}
+	P /= Stage.Num(); W /= World.Num();
+	double Cross = 0, Dot = 0;
+	FVBoRPointFit Fit;
+	for (int32 I = 0; I < Stage.Num(); ++I)
+	{
+		const FVector A = Stage[I] - P, B = World[I] - W;
+		Cross += A.X * B.Y - A.Y * B.X; Dot += A.X * B.X + A.Y * B.Y;
+		for (int32 J = I + 1; J < Stage.Num(); ++J)
+		{ Fit.SpanCm = FMath::Max(Fit.SpanCm, FVector::Dist2D(Stage[I],Stage[J])); }
+	}
+	if (FMath::Square(Cross) + FMath::Square(Dot) < UE_DOUBLE_SMALL_NUMBER) { return false; }
+	// +X → +Y 를 양의 Yaw 로 씀. Z 는 짚은 점 대신 바닥 기준 (P4h D3, U-17, cm)
+	const FRotator Rotation(0,FMath::RadiansToDegrees(FMath::Atan2(Cross,Dot)),0);
+	FVector T = W - Rotation.RotateVector(P); T.Z = FloorZCm;
+	Fit.Pawn = FTransform(Rotation,T);
+	for (int32 I = 0; I < Stage.Num(); ++I)
+	{
+		Fit.XYCm.Add(FVector::Dist2D(Fit.Pawn.TransformPosition(Stage[I]),World[I]));
+		Fit.HeightCm.Add(Stage[I].Z + FloorZCm - World[I].Z);
+		Fit.MaxXYCm = FMath::Max(Fit.MaxXYCm, Fit.XYCm.Last());
+	}
+	Out = Fit; return true;
+}
+
 bool FVBoRBuckAlignment::ProjectYaw(const FQuat& Orientation, double MinHorizontalLength, double& OutYawDeg)
 {
 	if (Orientation.ContainsNaN() || !Orientation.IsNormalized() || !FMath::IsFinite(MinHorizontalLength) || MinHorizontalLength <= 0) { return false; }
@@ -144,9 +177,19 @@ namespace
 	bool ValidSaved(const FVBoRBuckSavedAlignment& Saved)
 	{
 		FDateTime Time;
-		return FDateTime::ParseIso8601(*Saved.SavedAt, Time) && Saved.TrackingOrigin >= 0 && Saved.TrackingOrigin <= 4 &&
-			!Saved.PlayAreaCm.ContainsNaN() && Saved.PlayAreaCm.X >= 0 && Saved.PlayAreaCm.Y >= 0 &&
-			!Saved.Capture.PositionCm.ContainsNaN() && FMath::IsFinite(Saved.Capture.YawDeg) &&
+		if (!FDateTime::ParseIso8601(*Saved.SavedAt, Time) || Saved.TrackingOrigin < 0 || Saved.TrackingOrigin > 4 ||
+			Saved.PlayAreaCm.ContainsNaN() || Saved.PlayAreaCm.X < 0 || Saved.PlayAreaCm.Y < 0) { return false; }
+		if (Saved.Version == 2)
+		{
+			TSet<int32> Orders;
+			for (const auto& P : Saved.Points)
+			{
+				if (P.Order < 1 || Orders.Contains(P.Order) || P.StageCm.ContainsNaN() || !FMath::IsFinite(P.SpreadMm) || P.SpreadMm < 0 || P.Frames < 1) { return false; }
+				Orders.Add(P.Order);
+			}
+			return Saved.Points.Num() >= 2;
+		}
+		return Saved.Version == 1 && !Saved.Capture.PositionCm.ContainsNaN() && FMath::IsFinite(Saved.Capture.YawDeg) &&
 			FMath::Abs(Saved.Capture.YawDeg) <= 180 && FMath::IsFinite(Saved.Capture.PositionSpreadMm) && Saved.Capture.PositionSpreadMm >= 0 &&
 			FMath::IsFinite(Saved.Capture.YawSpreadDeg) && Saved.Capture.YawSpreadDeg >= 0 && Saved.Capture.YawSpreadDeg <= 180 &&
 			Saved.Capture.UsedFrames > 0 && Saved.Capture.DiscardedFrames == 0;
@@ -184,22 +227,41 @@ bool FVBoRBuckAlignmentStore::Load(const FString& Path, FVBoRBuckSavedAlignment&
 	if (!FJsonSerializer::Deserialize(TJsonReaderFactory<>::Create(Text), Json) || !Json.IsValid())
 	{ Reason = TEXT("save file corrupt JSON"); return false; }
 	FVBoRBuckSavedAlignment Candidate;
-	double Version = 0, Origin = 0, Used = 0, Discarded = 0;
-	TArray<double> Position, Bounds;
-	if (!ReadNumber(*Json, TEXT("version"), Version) || Version != FVBoRBuckSavedAlignment::FormatVersion ||
-		!Json->TryGetStringField(TEXT("savedAt"), Candidate.SavedAt) || !ReadNumber(*Json, TEXT("trackingOrigin"), Origin) ||
-		!ReadNumbers(*Json, TEXT("stagePositionCm"), 3, Position) || !ReadNumbers(*Json, TEXT("playAreaCm"), 2, Bounds) ||
-		!ReadNumber(*Json, TEXT("stageYawDeg"), Candidate.Capture.YawDeg) ||
-		!ReadNumber(*Json, TEXT("positionSpreadMm"), Candidate.Capture.PositionSpreadMm) ||
-		!ReadNumber(*Json, TEXT("yawSpreadDeg"), Candidate.Capture.YawSpreadDeg) ||
-		!ReadNumber(*Json, TEXT("usedFrames"), Used) || !ReadNumber(*Json, TEXT("discardedFrames"), Discarded) ||
-		Origin < 0 || Origin > 4 || Origin != FMath::FloorToDouble(Origin) || Used < 1 || Used > MAX_int32 || Used != FMath::FloorToDouble(Used) || Discarded != 0)
+	double Version = 0, Origin = 0;
+	TArray<double> Bounds;
+	if (!ReadNumber(*Json,TEXT("version"),Version) || (Version != 1 && Version != 2) ||
+		!Json->TryGetStringField(TEXT("savedAt"),Candidate.SavedAt) || !ReadNumber(*Json,TEXT("trackingOrigin"),Origin) ||
+		!ReadNumbers(*Json,TEXT("playAreaCm"),2,Bounds) || Origin < 0 || Origin > 4 || Origin != FMath::FloorToDouble(Origin))
 	{ Reason = TEXT("save schema or format version invalid"); return false; }
-	Candidate.TrackingOrigin = static_cast<int32>(Origin);
-	Candidate.Capture.UsedFrames = static_cast<int32>(Used);
-	Candidate.Capture.DiscardedFrames = 0;
-	Candidate.Capture.PositionCm = FVector(Position[0], Position[1], Position[2]);
-	Candidate.PlayAreaCm = FVector2D(Bounds[0], Bounds[1]);
+	Candidate.Version = static_cast<int32>(Version); Candidate.TrackingOrigin = static_cast<int32>(Origin);
+	Candidate.PlayAreaCm = FVector2D(Bounds[0],Bounds[1]);
+	if (Candidate.Version == 2)
+	{
+		const TArray<TSharedPtr<FJsonValue>>* Points;
+		if (!Json->TryGetArrayField(TEXT("points"),Points)) { Reason = TEXT("save points missing"); return false; }
+		for (const auto& Value : *Points)
+		{
+			const TSharedPtr<FJsonObject>* Point;
+			TArray<double> Position; double Order = 0, Frames = 0; FVBoRAlignPointSample P;
+			if (!Value.IsValid() || !Value->TryGetObject(Point) || !Point->IsValid() ||
+				!ReadNumber(**Point,TEXT("order"),Order) || Order < 1 || Order > MAX_int32 || Order != FMath::FloorToDouble(Order) ||
+				!ReadNumbers(**Point,TEXT("stagePositionCm"),3,Position) || !ReadNumber(**Point,TEXT("spreadMm"),P.SpreadMm) ||
+				!ReadNumber(**Point,TEXT("frames"),Frames) || Frames < 1 || Frames > MAX_int32 || Frames != FMath::FloorToDouble(Frames))
+			{ Reason = TEXT("save point schema invalid"); return false; }
+			P.Order = static_cast<int32>(Order); P.Frames = static_cast<int32>(Frames); P.StageCm = FVector(Position[0],Position[1],Position[2]);
+			Candidate.Points.Add(P);
+		}
+	}
+	else
+	{
+		TArray<double> Position; double Used = 0, Discarded = 0;
+		if (!ReadNumbers(*Json,TEXT("stagePositionCm"),3,Position) || !ReadNumber(*Json,TEXT("stageYawDeg"),Candidate.Capture.YawDeg) ||
+			!ReadNumber(*Json,TEXT("positionSpreadMm"),Candidate.Capture.PositionSpreadMm) || !ReadNumber(*Json,TEXT("yawSpreadDeg"),Candidate.Capture.YawSpreadDeg) ||
+			!ReadNumber(*Json,TEXT("usedFrames"),Used) || !ReadNumber(*Json,TEXT("discardedFrames"),Discarded) ||
+			Used < 1 || Used > MAX_int32 || Used != FMath::FloorToDouble(Used) || Discarded != 0)
+		{ Reason = TEXT("save schema or format version invalid"); return false; }
+		Candidate.Capture.PositionCm = FVector(Position[0],Position[1],Position[2]); Candidate.Capture.UsedFrames = static_cast<int32>(Used);
+	}
 	if (!ValidSaved(Candidate)) { Reason = TEXT("save contains invalid values"); return false; }
 	Out = Candidate; Reason.Reset();
 	return true;
@@ -209,16 +271,32 @@ bool FVBoRBuckAlignmentStore::Save(const FString& Path, const FVBoRBuckSavedAlig
 {
 	if (!ValidSaved(Candidate)) { Reason = TEXT("candidate contains invalid values"); return false; }
 	const auto Json = MakeShared<FJsonObject>();
-	Json->SetNumberField(TEXT("version"), FVBoRBuckSavedAlignment::FormatVersion);
+	Json->SetNumberField(TEXT("version"), Candidate.Version);
 	Json->SetStringField(TEXT("savedAt"), Candidate.SavedAt);
 	Json->SetNumberField(TEXT("trackingOrigin"), Candidate.TrackingOrigin);
-	Json->SetArrayField(TEXT("stagePositionCm"), Numbers({Candidate.Capture.PositionCm.X, Candidate.Capture.PositionCm.Y, Candidate.Capture.PositionCm.Z}));
-	Json->SetNumberField(TEXT("stageYawDeg"), Candidate.Capture.YawDeg);
 	Json->SetArrayField(TEXT("playAreaCm"), Numbers({Candidate.PlayAreaCm.X, Candidate.PlayAreaCm.Y}));
-	Json->SetNumberField(TEXT("positionSpreadMm"), Candidate.Capture.PositionSpreadMm);
-	Json->SetNumberField(TEXT("yawSpreadDeg"), Candidate.Capture.YawSpreadDeg);
-	Json->SetNumberField(TEXT("usedFrames"), Candidate.Capture.UsedFrames);
-	Json->SetNumberField(TEXT("discardedFrames"), Candidate.Capture.DiscardedFrames);
+	if (Candidate.Version == 2)
+	{
+		TArray<TSharedPtr<FJsonValue>> Points;
+		for (const auto& P : Candidate.Points)
+		{
+			const auto Point = MakeShared<FJsonObject>();
+			Point->SetNumberField(TEXT("order"),P.Order);
+			Point->SetArrayField(TEXT("stagePositionCm"),Numbers({P.StageCm.X,P.StageCm.Y,P.StageCm.Z}));
+			Point->SetNumberField(TEXT("spreadMm"),P.SpreadMm); Point->SetNumberField(TEXT("frames"),P.Frames);
+			Points.Add(MakeShared<FJsonValueObject>(Point));
+		}
+		Json->SetArrayField(TEXT("points"),Points);
+	}
+	else
+	{
+		Json->SetArrayField(TEXT("stagePositionCm"), Numbers({Candidate.Capture.PositionCm.X, Candidate.Capture.PositionCm.Y, Candidate.Capture.PositionCm.Z}));
+		Json->SetNumberField(TEXT("stageYawDeg"), Candidate.Capture.YawDeg);
+		Json->SetNumberField(TEXT("positionSpreadMm"), Candidate.Capture.PositionSpreadMm);
+		Json->SetNumberField(TEXT("yawSpreadDeg"), Candidate.Capture.YawSpreadDeg);
+		Json->SetNumberField(TEXT("usedFrames"), Candidate.Capture.UsedFrames);
+		Json->SetNumberField(TEXT("discardedFrames"), Candidate.Capture.DiscardedFrames);
+	}
 	FString Text;
 	const FString CandidatePath = Path + TEXT(".candidate");
 	if (!FJsonSerializer::Serialize(Json, TJsonWriterFactory<>::Create(&Text)) ||

@@ -5,6 +5,7 @@
 #include "P3VehicleMock.generated.h"
 
 class UStaticMeshComponent;
+class UVBoRAlignPointComponent;
 class UWidgetComponent;
 class UVBoREyePointComponent;
 class UVBoRViewpointComponent;
@@ -33,6 +34,8 @@ class VBOR_API AP3VehicleMock : public AActor
 	GENERATED_BODY()
 public:
 	AP3VehicleMock();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", EditFixedSize, meta=(ToolTip="Mock alignment points in car local cm")) TArray<FVector> AlignPointsCm = {FVector(4,-60,50),FVector(4,-14,50),FVector(-44,-14,50),FVector(-44,-60,50)};
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="근사 차량") TArray<TObjectPtr<UVBoRAlignPointComponent>> AlignPoints;
 	virtual void OnConstruction(const FTransform& Transform) override;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector BodySizeCm = FVector(470,185,145);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="자리값", meta=(Units="cm")) FVector DriverEyeCm = FVector(-20,-37,115);

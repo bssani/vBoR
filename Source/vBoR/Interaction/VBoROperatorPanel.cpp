@@ -25,7 +25,10 @@ const TArray<FVBoROperatorShortcut>& VBoROperator::Shortcuts()
 		{EVBoROperatorButton::Free, EKeys::End, TEXT("Enter free mode"), TEXT("End")},
 		{EVBoROperatorButton::Reload, EKeys::F6, TEXT("Reload level"), TEXT("F6")},
 		{EVBoROperatorButton::FoldSeat, EKeys::F, TEXT("Fold rear seat"), TEXT("F")},
-		{EVBoROperatorButton::UnfoldSeat, EKeys::U, TEXT("Unfold rear seat"), TEXT("U")}};
+		{EVBoROperatorButton::UnfoldSeat, EKeys::U, TEXT("Unfold rear seat"), TEXT("U")},
+		{EVBoROperatorButton::CapturePoint, EKeys::P, TEXT("Capture point"), TEXT("P")},
+		{EVBoROperatorButton::SavePoints, EKeys::S, TEXT("Save points"), TEXT("S")},
+		{EVBoROperatorButton::CancelPoints, EKeys::X, TEXT("Cancel points"), TEXT("X")}};
 	return Values;
 }
 
@@ -196,7 +199,13 @@ void SVBoROperatorPanel::Construct(const FArguments& Args)
 						+ SVerticalBox::Slot().AutoHeight().Padding(0,8)[SNew(STextBlock).Font(Font(12)).ColorAndOpacity(VBoROperator::Color(TEXT("9aa6b8"))).AutoWrapText(true)
 							.Text_Lambda([this]() { return FText::FromString(Snapshot.ReapplyHelp); })]
 						+ SVerticalBox::Slot().AutoHeight()[Button(EVBoROperatorButton::Info)]
-						+ SVerticalBox::Slot().AutoHeight().Padding(0,8,0,0)[WrappedText(TEXT("If the Quest tracking space moved, save again in the P0-c Buck setup level."),12,TEXT("9aa6b8"))])]]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0,8,0,0)[WrappedText(TEXT("If the Quest tracking space moved, capture points below or save again in P0-c."),12,TEXT("9aa6b8"))])]]
+				+ SVerticalBox::Slot().AutoHeight().Padding(24,16,24,0)
+				[Section(TEXT("Point alignment"),SNew(SVerticalBox)
+					+ SVerticalBox::Slot().AutoHeight()[Pair(EVBoROperatorButton::CapturePoint,EVBoROperatorButton::SavePoints)]
+					+ SVerticalBox::Slot().AutoHeight().Padding(0,8)[SNew(SHorizontalBox) + SHorizontalBox::Slot().FillWidth(1)[Button(EVBoROperatorButton::CancelPoints)] + SHorizontalBox::Slot().FillWidth(1)[SNew(SBox)]]
+					+ SVerticalBox::Slot().AutoHeight()[SNew(STextBlock).Font(Font(12)).ColorAndOpacity(VBoROperator::Color(TEXT("9aa6b8"))).AutoWrapText(true)
+						.Text_Lambda([this]() { return FText::FromString(Snapshot.Status.PointAlignment); })])]
 				+ SVerticalBox::Slot().AutoHeight().Padding(24,16,24,0)
 				[Section(TEXT("Seat folding"),Pair(EVBoROperatorButton::FoldSeat,EVBoROperatorButton::UnfoldSeat))]
 				+ SVerticalBox::Slot().AutoHeight().Padding(24,16,24,0)
