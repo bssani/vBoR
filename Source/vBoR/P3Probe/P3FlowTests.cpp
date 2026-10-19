@@ -1032,7 +1032,7 @@ bool FP4cStartTest::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4cAssetTest, "vBoR.P4c.E9ScenarioAsset", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP4cAssetTest::RunTest(const FString&)
 {
-	const auto* Asset = LoadObject<UVBoRScenarioAsset>(nullptr,TEXT("/Game/P3/DA_P3_Scenario.DA_P3_Scenario"));
+	const auto* Asset = LoadObject<UVBoRScenarioAsset>(nullptr,TEXT("/Game/Main/Data/DA_Main_Scenario.DA_Main_Scenario"));
 	if (!TestNotNull(TEXT("E9 asset loads"),Asset)) { return false; }
 	struct FExpected { const TCHAR* Id; const TCHAR* Text; EVBoRStepRule Rule; const TCHAR* Tag; EVBoRConfirmBy By; };
 	const FExpected Expected[] = {
@@ -1075,7 +1075,7 @@ bool FP4cAssetTest::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4cIntegrationTest, "vBoR.P4c.E10E11E12MockAssetDefaults", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP4cIntegrationTest::RunTest(const FString&)
 {
-	FP3World E; E.Runner->Scenario = LoadObject<UVBoRScenarioAsset>(nullptr,TEXT("/Game/P3/DA_P3_Scenario.DA_P3_Scenario"));
+	FP3World E; E.Runner->Scenario = LoadObject<UVBoRScenarioAsset>(nullptr,TEXT("/Game/Main/Data/DA_Main_Scenario.DA_Main_Scenario"));
 	if (!TestNotNull(TEXT("E10 asset loads"),E.Runner->Scenario.Get())) { return false; }
 	TestTrue(TEXT("E10 asset initializes against mock"),E.Runner->InitializeFlow());
 	TestTrue(TEXT("E10 validation empty"),E.Runner->ValidationProblems.IsEmpty());
@@ -1281,7 +1281,7 @@ bool FP4dAreaTest::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4dFlowTest, "vBoR.P4d.E12E13AssetRearFlow", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP4dFlowTest::RunTest(const FString&)
 {
-	FP3World E; E.Runner->Scenario = LoadObject<UVBoRScenarioAsset>(nullptr,TEXT("/Game/P3/DA_P3_Scenario.DA_P3_Scenario"));
+	FP3World E; E.Runner->Scenario = LoadObject<UVBoRScenarioAsset>(nullptr,TEXT("/Game/Main/Data/DA_Main_Scenario.DA_Main_Scenario"));
 	if (!TestNotNull(TEXT("E12 asset loads"),E.Runner->Scenario.Get())) { return false; }
 	TestTrue(TEXT("E13 asset validates"),E.Runner->InitializeFlow());
 	E.Command(EVBoRFlowCommand::Next); E.Command(EVBoRFlowCommand::Next);
