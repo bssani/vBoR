@@ -174,4 +174,7 @@ private:
 	void KeyFreeMode(); void KeyReloadLevel();
 	void KeyReapply();
 	void KeyFoldSeat(); void KeyUnfoldSeat();
+	void KeyHomeShift(FKey Key);
+	bool HandleHomeShiftKey(FKey Key, bool bRepeat = false);
+	static bool IsHomeShiftEnabled();
 };

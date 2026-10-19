@@ -21,6 +21,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/Pawn.h"
+#include "HAL/IConsoleManager.h"
 #include "HeadMountedDisplayFunctionLibrary.h"
 #include "Interaction/IsdkPokeInteractable.h"
 #include "Kismet/GameplayStatics.h"
@@ -31,6 +32,8 @@
 
 namespace
 {
+	TAutoConsoleVariable<int32> CVarHomeShift(TEXT("vBoR.HomeShift"), 0,
+		TEXT("Home testing only: enable keypad 8/2/4/6 to shift by 1 m in car axes, 5 to reset."));
 	FVector P3RouteEnd(const AVBoRFloorRoute* Route)
 	{
 		return Route->Spline->GetLocationAtSplinePoint(Route->Spline->GetNumberOfSplinePoints() - 1, ESplineCoordinateSpace::World);
@@ -168,6 +171,10 @@ void AVBoRScenarioRunner::BeginPlay()
 		InputComponent->BindKey(EKeys::A, IE_Pressed, this, &AVBoRScenarioRunner::KeyReapply);
 		InputComponent->BindKey(EKeys::F, IE_Pressed, this, &AVBoRScenarioRunner::KeyFoldSeat);
 		InputComponent->BindKey(EKeys::U, IE_Pressed, this, &AVBoRScenarioRunner::KeyUnfoldSeat);
+		for (const FKey Key : {EKeys::NumPadEight, EKeys::NumPadTwo, EKeys::NumPadFour, EKeys::NumPadSix, EKeys::NumPadFive})
+		{
+			InputComponent->BindKey(Key, IE_Pressed, this, &AVBoRScenarioRunner::KeyHomeShift).bConsumeInput = false;
+		}
 	}
 	PlacePanel(); ShowOperatorWindow();
 }
@@ -471,6 +478,8 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 	case EVBoRFlowCommand::Previous: ++PreviousCount; Record(TEXT("진행자 이전")); EnterStep(FMath::Max(0, StepIndex - 1)); break;
 	case EVBoRFlowCommand::Restart:
 		++RetryCount;
+		// 기준 시점의 R 도 집 시험 이동을 되돌림 (P3c D5)
+		Alignment->ResetHomeShift();
 		{
 			// 박스를 먼저 치워 닫힌 게이트 안에 남지 않게 함 (P4d D6)
 			for (TActorIterator<AVBoRBoxStand> It(GetWorld()); It; ++It) { It->ResetStand(); }
@@ -498,6 +507,45 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 void AVBoRScenarioRunner::RequestLevelReload(FName LevelName)
 {
 	UGameplayStatics::OpenLevel(this, LevelName);
+}
+
+bool AVBoRScenarioRunner::IsHomeShiftEnabled()
+{
+	return CVarHomeShift.GetValueOnGameThread() == 1;
+}
+
+void AVBoRScenarioRunner::KeyHomeShift(FKey Key)
+{
+	HandleHomeShiftKey(Key);
+}
+
+bool AVBoRScenarioRunner::HandleHomeShiftKey(FKey Key, bool bRepeat)
+{
+	if (!IsHomeShiftEnabled()) { return false; }
+	FVector2D Direction = FVector2D::ZeroVector;
+	if (Key == EKeys::NumPadEight) { Direction.X = 1; }
+	else if (Key == EKeys::NumPadTwo) { Direction.X = -1; }
+	else if (Key == EKeys::NumPadFour) { Direction.Y = -1; }
+	else if (Key == EKeys::NumPadSix) { Direction.Y = 1; }
+	else if (Key != EKeys::NumPadFive) { return false; }
+	if (bRepeat) { return true; }
+	if (bReloadPending || (Alignment && Alignment->IsSwitching()))
+	{
+		Record(bReloadPending ? TEXT("집 시험 옮기기 버림 — 레벨 다시 열기 암전 중") : TEXT("집 시험 옮기기 버림 — 시점 전환·정렬 다시 적용 암전 중"));
+		return true;
+	}
+	if (!Alignment) { Record(TEXT("집 시험 옮기기 버림 — 정렬 컴포넌트 없음")); return true; }
+	const FVector2D DeltaCm = Key == EKeys::NumPadFive ? -Alignment->GetHomeShiftCm() : Direction * Alignment->HomeShiftStepCm;
+	const bool bMoved = Key == EKeys::NumPadFive ? Alignment->ResetHomeShift() : Alignment->MoveHomeShift(DeltaCm);
+	if (bMoved)
+	{
+		const TCHAR* Axis = Key == EKeys::NumPadEight ? TEXT("+X") : Key == EKeys::NumPadTwo ? TEXT("-X") :
+			Key == EKeys::NumPadFour ? TEXT("-Y") : Key == EKeys::NumPadSix ? TEXT("+Y") : TEXT("원위치");
+		const FVector2D Offset = Alignment->GetHomeShiftCm();
+		Record(FString::Printf(TEXT("집 시험 옮기기 %s %.0f cm → (%.0f, %.0f)"), Axis,
+			FMath::Abs(DeltaCm.X) + FMath::Abs(DeltaCm.Y), Offset.X, Offset.Y));
+	}
+	return true;
 }
 
 void AVBoRScenarioRunner::PlacePanel()

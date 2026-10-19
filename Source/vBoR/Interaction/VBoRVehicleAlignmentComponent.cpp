@@ -71,6 +71,7 @@ void UVBoRVehicleAlignmentComponent::InitializeAlignment(APawn* Pawn, const FVBo
 		{
 			// 참가자의 현재 머리 자세를 읽지 않음 (체격 차이 유지, P3 D2)
 			AlignmentPawn->SetActorTransform(FVBoRBuckAlignment::CalculatePawn(Saved.Capture, BaseEye->GetComponentTransform()), false, nullptr, ETeleportType::TeleportPhysics);
+			HomeShiftCm = FVector2D::ZeroVector;
 			State = Decision.bNeedsCheck ? EVBoRAlignmentState::NeedsCheck : EVBoRAlignmentState::Applied;
 		}
 	}
@@ -106,6 +107,27 @@ bool UVBoRVehicleAlignmentComponent::SwitchViewpoint(UVBoRViewpointComponent* Vi
 }
 
 bool UVBoRVehicleAlignmentComponent::ReturnToBase() { return RequestSwitch(nullptr); }
+
+bool UVBoRVehicleAlignmentComponent::MoveHomeShift(FVector2D DeltaCm)
+{
+	if (bSwitching || !AlignmentPawn || DeltaCm.IsZero()) { return false; }
+	// 수평 차 축만 씀 (집 시험 중 높이·회전 유지, P3c D2·D3, cm)
+	const FVector Delta = GetOwner()->GetActorForwardVector().GetSafeNormal2D() * DeltaCm.X +
+		GetOwner()->GetActorRightVector().GetSafeNormal2D() * DeltaCm.Y;
+	AlignmentPawn->SetActorLocation(AlignmentPawn->GetActorLocation() + Delta, false, nullptr, ETeleportType::TeleportPhysics);
+	HomeShiftCm += DeltaCm;
+	if (APlayerController* PC = Cast<APlayerController>(AlignmentPawn->GetController()))
+	{ if (PC->PlayerCameraManager) { PC->PlayerCameraManager->StartCameraFade(1, 0, FadeSeconds, FLinearColor::Black, false, false); } }
+	OnPawnMoved.Broadcast();
+	return true;
+}
+
+bool UVBoRVehicleAlignmentComponent::ResetHomeShift()
+{
+	if (!MoveHomeShift(-HomeShiftCm)) { return false; }
+	HomeShiftCm = FVector2D::ZeroVector;
+	return true;
+}
 
 FString UVBoRVehicleAlignmentComponent::SwitchRejection(const UVBoRViewpointComponent* Viewpoint, bool bReturnBase) const
 {
@@ -185,6 +207,7 @@ void UVBoRVehicleAlignmentComponent::AdvanceSwitch(double DeltaSeconds)
 			// 매번 Stage 저장값에서 직접 계산함 (전환 오차 누적 방지, P3 E11)
 			const FTransform Eye = PendingViewpoint ? PendingViewpoint->GetComponentTransform() : BaseEye->GetComponentTransform();
 			AlignmentPawn->SetActorTransform(FVBoRBuckAlignment::CalculatePawn(Saved.Capture, Eye), false, nullptr, ETeleportType::TeleportPhysics);
+			HomeShiftCm = FVector2D::ZeroVector;
 			CurrentViewpoint = PendingViewpoint;
 		}
 		bMoved = true;

@@ -28,6 +28,9 @@ public:
 	FString SwitchRejection(const UVBoRViewpointComponent* Viewpoint, bool bReturnBase = false) const;
 	FString ReapplyRejection() const;
 	bool RequestReapply();
+	bool MoveHomeShift(FVector2D DeltaCm);
+	bool ResetHomeShift();
+	FVector2D GetHomeShiftCm() const { return HomeShiftCm; }
 	FString EnglishReason() const;
 	FString SeatName() const;
 	int32 ReapplyCompletions = 0;
@@ -38,6 +41,7 @@ public:
 	FVBoRPawnMoved OnPawnMoved;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="정렬") TObjectPtr<UVBoREyePointComponent> BaseEye;
 	UPROPERTY(EditAnywhere, Category="정렬", meta=(Units="s", ClampMin="0.01")) float FadeSeconds = 0.3;
+	UPROPERTY(EditAnywhere, Category="집 시험", meta=(Units="cm", ClampMin="0")) float HomeShiftStepCm = 100;
 	UPROPERTY(EditAnywhere, Category="정렬", meta=(Units="cm", ClampMin="0")) float PlayAreaToleranceCm = 1;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="정렬") EVBoRAlignmentState State = EVBoRAlignmentState::NoSavedValue;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="정렬") FString Reason;
@@ -53,6 +57,7 @@ private:
 	UPROPERTY() TObjectPtr<UVBoRViewpointComponent> CurrentViewpoint;
 	UPROPERTY() TObjectPtr<UVBoRViewpointComponent> PendingViewpoint;
 	FVBoRBuckSavedAlignment Saved;
+	FVector2D HomeShiftCm = FVector2D::ZeroVector;
 	bool bHasSaved = false, bSwitching = false, bMoved = false;
 	bool bReapplying = false;
 	double SwitchElapsed = 0;

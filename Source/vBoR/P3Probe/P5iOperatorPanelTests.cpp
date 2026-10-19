@@ -7,6 +7,8 @@
 #include "../Interaction/VBoREyePointComponent.h"
 #include "../Interaction/VBoRViewpointComponent.h"
 #include "Components/InputComponent.h"
+#include "Camera/PlayerCameraManager.h"
+#include "HAL/IConsoleManager.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
@@ -508,5 +510,175 @@ bool FP5iR1Snapshot::RunTest(const FString&)
 		TestTrue(TEXT("Snapshot refreshes status after state change"),Snapshot.Status.Title == Status.Title && Snapshot.Status.Alignment == Status.Alignment && Snapshot.Status.Seat == Status.Seat && Snapshot.Status.LastCommand == Status.LastCommand);
 	}
 	return true;
+}
+namespace
+{
+	struct FP3cEnabled
+	{
+		IConsoleVariable* Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("vBoR.HomeShift"));
+		FP3cEnabled() { check(Variable); Variable->Set(1, ECVF_SetByConsole); }
+		~FP3cEnabled() { Variable->Set(0, ECVF_SetByConsole); }
+	};
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE1,"vBoR.P3c.E1DisabledKeys",Flags)
+bool FP3cE1::RunTest(const FString&)
+{
+	FP3cEnabled Setting; Setting.Variable->Set(0, ECVF_SetByConsole);
+	TestEqual(TEXT("Default is off"),Setting.Variable->GetDefaultValue(),FString(TEXT("0")));
+	FP5iWorld W; const FTransform Before = W.Pawn->GetActorTransform(); const FString Record = W.Runner->LastRecord;
+	int32 Moves = 0; const auto Handle = W.Alignment->OnPawnMoved.AddLambda([&]() { ++Moves; });
+	for (const FKey Key : {EKeys::NumPadEight,EKeys::NumPadTwo,EKeys::NumPadFour,EKeys::NumPadSix,EKeys::NumPadFive})
+	{
+		TestFalse(TEXT("Disabled focused key is unhandled"),W.Runner->HandleOperatorKey(Key));
+		FP5iTestAccess::Key(W.Runner,Key);
+	}
+	TestTrue(TEXT("Pawn unchanged"),W.Pawn->GetActorTransform().Equals(Before,0.001));
+	TestTrue(TEXT("Offset stays zero"),W.Alignment->GetHomeShiftCm().IsZero());
+	TestEqual(TEXT("No record"),W.Runner->LastRecord,Record); TestEqual(TEXT("No move notification"),Moves,0);
+	W.Alignment->OnPawnMoved.Remove(Handle); return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE2,"vBoR.P3c.E2CarDirectionAndFade",Flags)
+bool FP3cE2::RunTest(const FString&)
+{
+	FP3cEnabled Setting; FP5iWorld W;
+	W.Car->SetActorRotation(FRotator(0,30,0)); W.Alignment->InitializeAlignment(W.Pawn,&W.Saved,W.Saved.TrackingOrigin,W.Saved.PlayAreaCm);
+	const FTransform Before = W.Pawn->GetActorTransform();
+	int32 Moves = 0; const auto Handle = W.Alignment->OnPawnMoved.AddLambda([&]() { ++Moves; });
+	FP5iTestAccess::Key(W.Runner,EKeys::NumPadEight);
+	TestTrue(TEXT("Car forward 100 cm, independent geometry"),W.Pawn->GetActorLocation().Equals(Before.GetLocation()+FVector(86.6025403784,50,0),0.001));
+	TestTrue(TEXT("Rotation unchanged"),W.Pawn->GetActorQuat().Equals(Before.GetRotation(),0.00001));
+	TestEqual(TEXT("One move notification"),Moves,1);
+	const auto* Camera = Cast<APlayerController>(W.Pawn->GetController())->PlayerCameraManager.Get();
+	TestTrue(TEXT("Fade from black to clear"),Camera->FadeAlpha == FVector2D(1,0));
+	TestEqual(TEXT("Fade duration"),Camera->FadeTime,W.Alignment->FadeSeconds);
+	TestFalse(TEXT("Home shift does not start a seat transition"),W.Alignment->IsSwitching());
+	TestTrue(TEXT("Movement recorded"),W.Runner->LastRecord.Contains(TEXT("집 시험 옮기기 +X 100 cm")));
+	W.Alignment->OnPawnMoved.Remove(Handle); return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE3,"vBoR.P3c.E3AccumulateAndReset",Flags)
+bool FP3cE3::RunTest(const FString&)
+{
+	FP3cEnabled Setting; FP5iWorld W; W.Car->SetActorRotation(FRotator(0,30,0));
+	const FTransform Before = W.Pawn->GetActorTransform();
+	for (const FKey Key : {EKeys::NumPadEight,EKeys::NumPadEight,EKeys::NumPadSix}) { FP5iTestAccess::Key(W.Runner,Key); }
+	TestTrue(TEXT("Car offset (200,100) cm"),W.Alignment->GetHomeShiftCm() == FVector2D(200,100));
+	TestTrue(TEXT("Forward plus right in world space"),W.Pawn->GetActorLocation().Equals(Before.GetLocation()+FVector(123.2050807569,186.6025403784,0),0.001));
+	FP5iTestAccess::Key(W.Runner,EKeys::NumPadFive);
+	TestTrue(TEXT("Original pose within 0.001 cm"),W.Pawn->GetActorTransform().Equals(Before,0.001));
+	TestTrue(TEXT("Offset zero"),W.Alignment->GetHomeShiftCm().IsZero());
+	const FString Record = W.Runner->LastRecord; FP5iTestAccess::Key(W.Runner,EKeys::NumPadFive);
+	TestEqual(TEXT("Already home is a no-op"),W.Runner->LastRecord,Record);
+	FP5iTestAccess::Key(W.Runner,EKeys::NumPadTwo);
+	TestTrue(TEXT("Back key"),W.Alignment->GetHomeShiftCm() == FVector2D(-100,0));
+	FP5iTestAccess::Key(W.Runner,EKeys::NumPadFive); W.Alignment->HomeShiftStepCm = 75;
+	FP5iTestAccess::Key(W.Runner,EKeys::NumPadSix);
+	TestTrue(TEXT("Editable step in cm"),W.Alignment->GetHomeShiftCm() == FVector2D(0,75)); return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE4,"vBoR.P3c.E4FocusedWindowRepeat",Flags)
+bool FP3cE4::RunTest(const FString&)
+{
+	FP3cEnabled Setting; FP5iWorld W; const auto Widget = SNew(SVBoROperatorPanel).Runner(W.Runner);
+	const FVector Before = W.Pawn->GetActorLocation();
+	const FKeyEvent Key(EKeys::NumPadFour,FModifierKeysState(),0,false,0,0);
+	TestTrue(TEXT("Focused keypad key handled"),Widget->OnPreviewKeyDown(FGeometry(),Key).IsEventHandled());
+	const FString Record = W.Runner->LastRecord;
+	const FKeyEvent Repeat(EKeys::NumPadFour,FModifierKeysState(),0,true,0,0);
+	TestTrue(TEXT("Repeat handled"),Widget->OnPreviewKeyDown(FGeometry(),Repeat).IsEventHandled());
+	TestTrue(TEXT("Moves once to driver side"),W.Pawn->GetActorLocation().Equals(Before+FVector(0,-100,0),0.001));
+	TestEqual(TEXT("Repeat adds no record"),W.Runner->LastRecord,Record);
+	TestFalse(TEXT("Unrelated key unhandled"),W.Runner->HandleOperatorKey(EKeys::NumPadNine)); return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE5,"vBoR.P3c.E5TransitionRejection",Flags)
+bool FP3cE5::RunTest(const FString&)
+{
+	FP3cEnabled Setting;
+	for (B Button : {B::Passenger,B::Reapply,B::Reload})
+	{
+		FP5iWorld W; if (Button == B::Reload) { W.Free(); }
+		FP5iTestAccess::Key(W.Runner,EKeys::NumPadEight);
+		W.Button(Button); const FTransform Before = W.Pawn->GetActorTransform(); const FVector2D Offset = W.Alignment->GetHomeShiftCm();
+		for (const FKey Key : {EKeys::NumPadEight,EKeys::NumPadFive})
+		{
+			TestTrue(TEXT("Focused blocked key handled"),W.Runner->HandleOperatorKey(Key));
+			TestTrue(TEXT("Rejection recorded"),W.Runner->LastRecord.StartsWith(TEXT("집 시험 옮기기 버림")));
+			FP5iTestAccess::Key(W.Runner,Key);
+			TestTrue(TEXT("Blocked game key recorded"),W.Runner->LastRecord.StartsWith(TEXT("집 시험 옮기기 버림")));
+		}
+		TestTrue(TEXT("No motion during blackout"),W.Pawn->GetActorTransform().Equals(Before,0.001));
+		TestTrue(TEXT("Offset retained during blackout"),W.Alignment->GetHomeShiftCm() == Offset);
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE6,"vBoR.P3c.E6SeatAbsolutePose",Flags)
+bool FP3cE6::RunTest(const FString&)
+{
+	FP3cEnabled Setting; FP5iWorld W;
+	for (B Button : {B::Passenger,B::Rear,B::Driver})
+	{
+		W.Button(Button); W.FinishSwitch(); const FTransform Expected = W.Pawn->GetActorTransform();
+		W.Button(B::Driver); W.FinishSwitch(); FP5iTestAccess::Key(W.Runner,EKeys::NumPadEight);
+		W.Button(Button); W.FinishSwitch();
+		TestTrue(TEXT("Seat uses saved absolute pose"),W.Pawn->GetActorTransform().Equals(Expected,0.001));
+		TestTrue(TEXT("Seat placement clears offset"),W.Alignment->GetHomeShiftCm().IsZero());
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE7,"vBoR.P3c.E7ReapplyClearsOffset",Flags)
+bool FP3cE7::RunTest(const FString&)
+{
+	FP3cEnabled Setting; FP5iWorld W; const FTransform Expected = W.Pawn->GetActorTransform();
+	FP5iTestAccess::Key(W.Runner,EKeys::NumPadSix); W.Button(B::Reapply); W.FinishSwitch();
+	TestTrue(TEXT("Reapply restores saved pose"),W.Pawn->GetActorTransform().Equals(Expected,0.001));
+	TestTrue(TEXT("Reapply clears offset"),W.Alignment->GetHomeShiftCm().IsZero());
+	FP5iTestAccess::Key(W.Runner,EKeys::NumPadEight);
+	W.Alignment->InitializeAlignment(W.Pawn,&W.Saved,W.Saved.TrackingOrigin,W.Saved.PlayAreaCm);
+	TestTrue(TEXT("Direct alignment also clears offset"),W.Alignment->GetHomeShiftCm().IsZero()); return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE8,"vBoR.P3c.E8RestartAtBase",Flags)
+bool FP3cE8::RunTest(const FString&)
+{
+	FP3cEnabled Setting; FP5iWorld W; const FTransform Expected = W.Pawn->GetActorTransform(); W.Button(B::Next);
+	FP5iTestAccess::Key(W.Runner,EKeys::NumPadEight); W.Button(B::Restart);
+	TestTrue(TEXT("R at base restores original pose"),W.Pawn->GetActorTransform().Equals(Expected,0.001));
+	TestTrue(TEXT("R clears offset"),W.Alignment->GetHomeShiftCm().IsZero());
+	TestEqual(TEXT("Back at mission 01"),W.Runner->GetStepIndex(),0); TestTrue(TEXT("Flow running"),W.Runner->IsRunning());
+	TestEqual(TEXT("Retry counted once"),W.Runner->RetryCount,1); return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE9,"vBoR.P3c.E9WithoutAppliedAlignment",Flags)
+bool FP3cE9::RunTest(const FString&)
+{
+	FP3cEnabled Setting;
+	for (bool bSaved : {false,true})
+	{
+		FP5iWorld W(bSaved); if (bSaved) { W.NeedsCheck(); }
+		const auto State = W.Alignment->State; const FVector Before = W.Pawn->GetActorLocation();
+		FP5iTestAccess::Key(W.Runner,EKeys::NumPadEight);
+		TestTrue(TEXT("Shift allowed without Applied"),W.Pawn->GetActorLocation().Equals(Before+FVector(100,0,0),0.001));
+		TestTrue(TEXT("Alignment state unchanged"),W.Alignment->State == State);
+		W.Button(B::Ignore); W.Button(B::Passenger);
+		TestFalse(TEXT("Seat still rejected"),W.Alignment->IsSwitching());
+		TestTrue(TEXT("Rejection requires saved alignment"),W.Runner->GetOperatorStatus().LastCommand.Contains(TEXT("Saved alignment required")));
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE10,"vBoR.P3c.E10OperatorStatus",Flags)
+bool FP3cE10::RunTest(const FString&)
+{
+	FP3cEnabled Setting; FP5iWorld W;
+	for (const FKey Key : {EKeys::NumPadEight,EKeys::NumPadEight,EKeys::NumPadFour}) { FP5iTestAccess::Key(W.Runner,Key); }
+	TestTrue(TEXT("Status shows signed metres"),W.Runner->GetOperatorStatus().Seat.Contains(TEXT("Home shift ON · +2.0 m front · -1.0 m side")));
+	Setting.Variable->Set(0, ECVF_SetByConsole);
+	TestEqual(TEXT("Disabled status is unchanged"),W.Runner->GetOperatorStatus().Seat,FString(TEXT("Driver")));
+	TestTrue(TEXT("Turning off does not move Pawn"),W.Alignment->GetHomeShiftCm() == FVector2D(200,-100)); return true;
 }
 #endif
