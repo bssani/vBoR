@@ -7,7 +7,7 @@
 | 베이스 브랜치 | `main` @ `9ff47b1`(PR #38 정렬 높이) + 이 명세 커밋 |
 | 작업 브랜치 | `codex/P4f-main-pawn-gamemode` |
 | 리뷰 파일 | `Docs/Reviews/P4f-main-pawn-gamemode.md` (첫 리뷰 때 생김) |
-| 상태 | 명세 — 구현 전 |
+| 상태 | 구현(`6f1b042`) — 리뷰 1회차 R1-1 반영(`92c3c04`) |
 
 ## 0. 결정
 
@@ -49,6 +49,7 @@
 - **`AVBoRHandRigPawn` 기본값은 그대로다.** `bAllowPalmGrab`는 거짓, poke 전용이다.
 - 손 프로퍼티가 비어 있으면 손 메시·재질·보임은 지금과 같다. 추적 손은 숨고 합성 손이 보인다.
 - poke limiter와 손끝 원본 읽기(`ReadRawIndexTip`·`ReadRawPalmAndTips`)는 그대로다. 도달 판정은 추적된 실제 손끝으로 한다(AGENTS.md).
+- **Pawn의 Actor Tick은 부모 기본 그대로다**(켜짐, PrePhysics). 매핑 확인 때문에 끄거나 그룹을 바꾸지 않는다. 끄면 `BP_vBoRPawn`의 Event Tick이 돌지 않는다(리뷰 1회차 R1-1).
 - **기존 단언은 바꾸지 않는다. 예외 없음.** Claude가 Pawn을 쓰는 시험을 모두 대조했다. 아래는 그대로 통과해야 한다.
   - `vBoR.P3Flow`(`P3Probe/P3FlowTests.cpp:445-452`): `AP3FlowGameMode`의 Pawn 클래스가 `AP3PalmGrabPawn`이다. 그 Pawn의 손바닥 리그가 켜지고 레이·거리가 꺼진다. `AVBoRHandRigPawn` 기본은 손바닥 꺼짐이다. → 이름과 동작이 그대로라 같다.
   - `vBoR.P4a.Key.E1PinchAndP3Rig`(`P3Probe/P4aKeyTableTests.cpp:125`), P5e 잡기(`P3Probe/P5eRearviewMirrorTests.cpp:173`): `AP3PalmGrabPawn`을 띄운다. → 같다.
@@ -105,3 +106,4 @@
 | 날짜 | 개정 | 내용 |
 |---|---|---|
 | 2026-10-19 | 처음 | 작성(사용자 요청: L_Main 통합 준비, `vBoRGameMode`, `vBoRPawn` 손 메시 교체). 기존 Pawn 시험을 모두 대조함 — 바뀌는 단언 없음 |
+| 2026-10-19 | 리뷰 1회차 | §3에 "Pawn Actor Tick은 부모 기본 그대로"를 더함. 구현이 매핑 확인 뒤 Pawn Tick을 꺼서 BP 자식의 Event Tick이 막혔다(R1-1). 명세에 이 조건이 없었다. 반영은 Claude가 직접 함 |
