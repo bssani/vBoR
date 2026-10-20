@@ -15,6 +15,7 @@
 5. [Blueprint-Guide.md](Blueprint-Guide.md): **실제 차를 L_Main에 넣는 법**(차 기준점 BP, 부품 BP, 연결 규칙, 시나리오 태그, 넣은 뒤 확인). CAD 작업을 시작하기 전에 읽는다.
 6. [Agent-Workflow.md](Agent-Workflow.md): 빌드·시험 명령, 무시해도 되는 로그 잡음, 기록 위치
 7. 맡은 작업의 [Specs/](Specs/)`<이름>.md`와 [Reviews/](Reviews/)`<이름>.md`
+8. [Company-Handover.md](Company-Handover.md): **작업한 뒤 Claude에게 넘길 때** 무엇을 어떤 형식으로 적는지(차량 수치는 `Saved/Handover/`에, 리포 밖).
 
 ## 1. 프로젝트 한 줄
 
