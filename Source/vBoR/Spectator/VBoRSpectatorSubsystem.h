@@ -6,6 +6,7 @@
 #include "VBoRSpectatorSubsystem.generated.h"
 
 class AVBoRScenarioRunner;
+class ULevel;
 class FWidgetRenderer;
 class SWidget;
 class UTextureRenderTarget2D;
@@ -57,6 +58,16 @@ private:
 	FVBoRSpectatorLayout ScreenLayout;
 	bool bPending = false;
 	float PendingSeconds = 0, RetryCountdown = 0, RedrawCountdown = 0;
+	// 처음 한 번만 월드를 훑고, 뒤에 생긴 Actor·추가된 레벨만 더함 (CAD Actor 수만 개를 frame 마다 순회 안 하게, P5o)
+	TArray<TWeakObjectPtr<AActor>> Parts;
+	bool bPartsCollected = false;
+	FDelegateHandle SpawnedHandle, LevelAddedHandle;
+#if WITH_DEV_AUTOMATION_TESTS
+	int32 PartScans = 0;
+#endif
+	void CollectParts();
+	void AddPart(AActor* Actor);
+	void HandleLevelAdded(ULevel* Level, UWorld* World);
 	bool TryStart();
 	void Stop();
 	TSharedRef<SWidget> MakeWidget();

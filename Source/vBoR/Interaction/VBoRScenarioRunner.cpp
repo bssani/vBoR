@@ -219,6 +219,8 @@ bool AVBoRScenarioRunner::InitializeFlow()
 		for (UVBoRVehicleAlignmentComponent* C : Components) { Alignment = C; ++AlignmentCount; }
 	}
 	if (AlignmentCount != 1) { ValidationProblems += TEXT("정렬 컴포넌트 1개 필요\n"); }
+	// 좌석 시점은 Play 중 생기거나 바뀌지 않음. 여기서 한 번 찾고 진행자 창·자유모드가 이 값을 씀 (P5o)
+	SeatViews[0] = ScanSeatView(TEXT("Car.PassengerView")); SeatViews[1] = ScanSeatView(TEXT("Car.RearView"));
 	if (!Scenario || Scenario->Steps.IsEmpty()) { ValidationProblems += TEXT("시나리오 단계 없음\n"); }
 	else for (const FVBoRScenarioStep& Step : Scenario->Steps)
 	{
@@ -715,8 +717,8 @@ void AVBoRScenarioRunner::RefreshPanel()
 		if (bAway) { Seats.Add(EVBoRFlowCommand::ReturnBase); SeatLabels.Add(TEXT("운전석")); }
 		for (const auto Action : {EVBoRFlowCommand::Passenger, EVBoRFlowCommand::Rear})
 		{
-			FString Problems;
-			auto* View = P3Component<UVBoRViewpointComponent>(FindP3Tag(GetWorld(), Action == EVBoRFlowCommand::Passenger ? FName(TEXT("Car.PassengerView")) : FName(TEXT("Car.RearView")), Problems));
+			// 매 frame 호출이라 시작 때 찾은 시점 씀 (P5o)
+			auto* View = CommandViewpoint(Action);
 			if (View && (!Alignment || !Alignment->IsAtViewpoint(View)))
 			{ Seats.Add(Action); SeatLabels.Add(Action == EVBoRFlowCommand::Passenger ? TEXT("동승석") : TEXT("2열")); }
 		}

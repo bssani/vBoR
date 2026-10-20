@@ -140,6 +140,9 @@ private:
 	FVBoRCommandDecision EvaluateCommand(const FVBoRFlowCommand& Command, UVBoRViewpointComponent* Viewpoint) const;
 	FString OperatorButtonBadge(EVBoROperatorButton Button, UVBoRViewpointComponent* Viewpoint) const;
 	UVBoRViewpointComponent* CommandViewpoint(EVBoRFlowCommand Action) const;
+	// 동승석·2열 시점은 시작 검사 때 한 번 찾음 (CAD Actor 수만 개를 frame 마다 순회 안 하게, P5o)
+	TWeakObjectPtr<UVBoRViewpointComponent> SeatViews[2];
+	UVBoRViewpointComponent* ScanSeatView(FName Tag) const;
 #if WITH_DEV_AUTOMATION_TESTS
 	mutable int32 OperatorViewpointScans = 0;
 #endif

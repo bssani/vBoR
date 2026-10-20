@@ -15,6 +15,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/Engine.h"
+#include "Engine/Level.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/Pawn.h"
@@ -34,6 +35,10 @@ struct FP5hTestAccess
 	static FString Line(UVBoRSpectatorSubsystem* S) { return S->Names.Line(TEXT("Interacting: ")); }
 	static bool HasResources(UVBoRSpectatorSubsystem* S) { return S->WidgetRenderer != nullptr || S->SlateWidget.IsValid() || S->RenderTarget != nullptr; }
 	static FVector2D Size(UVBoRSpectatorSubsystem* S) { return S->ScreenLayout.DesignSize(); }
+	static int32 Scans(UVBoRSpectatorSubsystem* S) { return S->PartScans; }
+	static int32 PartCount(UVBoRSpectatorSubsystem* S) { return S->Parts.Num(); }
+	static void Forget(UVBoRSpectatorSubsystem* S, AActor* Part) { S->Parts.Remove(Part); }
+	static void LevelAdded(UVBoRSpectatorSubsystem* S, ULevel* Level, UWorld* World) { S->HandleLevelAdded(Level,World); }
 	static TSharedRef<SWidget> Widget(UVBoRSpectatorSubsystem* S, const FText& Mission, const TArray<FString>& Parts,
 		const FText& Label = FText::GetEmpty(), bool bProgress = true)
 	{
@@ -254,6 +259,40 @@ bool FP5hButton::RunTest(const FString&)
 	State->SetState(EIsdkInteractableState::Normal); S->SampleParts(0.032); S->SampleParts(0.532);
 	TestEqual(TEXT("Frame press remains readable"),FP5hTestAccess::Line(S),FString(TEXT("Interacting: Button")));
 	S->SampleParts(1.032); TestTrue(TEXT("Expires after 1 s; selected unnamed ignored"),FP5hTestAccess::Line(S).IsEmpty());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5oParts,"vBoR.P5o.E3E5SpectatorPartsCollectedOnce",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5oParts::RunTest(const FString&)
+{
+	FP5hWorld W;
+	auto* Early = W.World->SpawnActor<AVBoRPokeButton>(); Early->SpectatorName = FText::FromString(TEXT("Early"));
+	auto* EarlyState = NewObject<UP5hPokeState>(Early); Early->Poke = EarlyState;
+	W.World->SpawnActor<AActor>();
+	W.Play();
+	auto* S = W.World->GetSubsystem<UVBoRSpectatorSubsystem>();
+	if (!TestNotNull(TEXT("Game world subsystem"),S)) { return false; }
+	// E3: 첫 수집 한 번만 월드를 훑음. 부품 아닌 Actor 는 목록에 없음
+	for (int32 I = 0; I < 5; ++I) { S->SampleParts(I * 0.016); }
+	TestEqual(TEXT("World scanned once"),FP5hTestAccess::Scans(S),1);
+	TestEqual(TEXT("Only spectator parts kept"),FP5hTestAccess::PartCount(S),1);
+	// E4: 첫 수집 뒤 spawn 한 부품도 바로 이름이 나옴. 지운 부품은 빠짐
+	auto* Late = W.World->SpawnActor<AVBoRPokeButton>(); Late->SpectatorName = FText::FromString(TEXT("Late"));
+	auto* LateState = NewObject<UP5hPokeState>(Late); Late->Poke = LateState;
+	LateState->SetState(EIsdkInteractableState::Select); S->SampleParts(0.1);
+	TestEqual(TEXT("Part spawned after the first scan"),FP5hTestAccess::Line(S),FString(TEXT("Interacting: Late")));
+	TestEqual(TEXT("Spawn adds without rescanning"),FP5hTestAccess::Scans(S),1);
+	Late->Destroy(); S->SampleParts(0.2);
+	TestEqual(TEXT("Destroyed part dropped"),FP5hTestAccess::PartCount(S),1);
+	S->SampleParts(1.5); TestTrue(TEXT("Destroyed part name expires"),FP5hTestAccess::Line(S).IsEmpty());
+	// E5: 추가된 레벨의 부품을 받음. 다른 월드 알림은 무시함
+	FP5hTestAccess::Forget(S,Early);
+	FP5hTestAccess::LevelAdded(S,W.World->PersistentLevel,nullptr);
+	TestEqual(TEXT("Other world level ignored"),FP5hTestAccess::PartCount(S),0);
+	FP5hTestAccess::LevelAdded(S,W.World->PersistentLevel,W.World);
+	TestEqual(TEXT("Added level part collected"),FP5hTestAccess::PartCount(S),1);
+	EarlyState->SetState(EIsdkInteractableState::Select); S->SampleParts(1.6);
+	TestEqual(TEXT("Level part name shown"),FP5hTestAccess::Line(S),FString(TEXT("Interacting: Early")));
 	return true;
 }
 

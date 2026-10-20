@@ -56,7 +56,12 @@ UVBoRViewpointComponent* AVBoRScenarioRunner::CommandViewpoint(EVBoRFlowCommand 
 	if (!SeatAction(Action) || Action == EVBoRFlowCommand::ReturnBase) { return nullptr; }
 	if (Action == EVBoRFlowCommand::Viewpoint)
 	{ return CurrentStep() && CurrentStep()->Rule == EVBoRStepRule::Viewpoint && Targets.IsValidIndex(StepIndex) ? Cast<UVBoRViewpointComponent>(Targets[StepIndex]) : nullptr; }
-	const FName Tag = Action == EVBoRFlowCommand::Passenger ? FName(TEXT("Car.PassengerView")) : FName(TEXT("Car.RearView"));
+	// 시작 검사 때 찾은 값 씀. 없거나 여럿이었으면 null, 지운 시점도 null (P5o)
+	return SeatViews[Action == EVBoRFlowCommand::Passenger ? 0 : 1].Get();
+}
+
+UVBoRViewpointComponent* AVBoRScenarioRunner::ScanSeatView(FName Tag) const
+{
 	UVBoRViewpointComponent* Found = nullptr;
 	int32 Matches = 0;
 #if WITH_DEV_AUTOMATION_TESTS
@@ -278,7 +283,7 @@ FVBoROperatorSnapshot AVBoRScenarioRunner::GetOperatorSnapshot() const
 	FVBoROperatorSnapshot Snapshot;
 	Snapshot.Status = GetOperatorStatus();
 	Snapshot.ReapplyHelp = ReapplyHelp();
-	// 좌석별 탐색 결과를 판정·꼬리표에 같이 씀 (P5i R1-3, frame 당 두 번만 월드 순회)
+	// 좌석별 시점을 판정·꼬리표에 같이 씀 (P5i R1-3). 시점은 시작 검사 때 찾은 값이라 월드 순회 없음 (P5o)
 	for (const auto& Shortcut : VBoROperator::Shortcuts())
 	{
 		const auto Button = Shortcut.Button;

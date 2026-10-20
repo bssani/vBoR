@@ -6,6 +6,7 @@
 #include "../Interaction/VBoRScenarioRunner.h"
 #include "../Interaction/VBoREyePointComponent.h"
 #include "../Interaction/VBoRViewpointComponent.h"
+#include "../Interaction/VBoRPokeButton.h"
 #include "Components/InputComponent.h"
 #include "Camera/PlayerCameraManager.h"
 #include "HAL/IConsoleManager.h"
@@ -43,6 +44,7 @@ struct FP5iTestAccess
 	static void CloseWindow(AVBoRScenarioRunner* R) { R->CloseOperatorWindow(); }
 	static void ResetScans(AVBoRScenarioRunner* R) { R->OperatorViewpointScans = 0; }
 	static int32 Scans(AVBoRScenarioRunner* R) { return R->OperatorViewpointScans; }
+	static bool SeatButtonsShown(AVBoRScenarioRunner* R) { return !R->ConfirmButton->IsHidden() && !R->ActionButton->IsHidden(); }
 	static const FVBoROperatorSnapshot& Snapshot(const SVBoROperatorPanel& Panel) { return Panel.Snapshot; }
 	static bool ButtonEnabled(const SVBoROperatorPanel& Panel, EVBoROperatorButton Button)
 	{ for (const auto& Entry : Panel.Buttons) { if (Entry.Key == Button) { return Entry.Value->IsEnabled(); } } return false; }
@@ -494,7 +496,7 @@ bool FP5iR1Snapshot::RunTest(const FString&)
 		const auto& Snapshot = FP5iTestAccess::Snapshot(*Widget);
 		for (const auto& Shortcut : VBoROperator::Shortcuts())
 		{ TestEqual(TEXT("Actual button reads snapshot enabled state"),FP5iTestAccess::ButtonEnabled(*Widget,Shortcut.Button),Snapshot.Buttons[static_cast<int32>(Shortcut.Button)].Decision.bAccepted); }
-		TestEqual(TEXT("Tick and prepass scan once per passenger/rear seat"),FP5iTestAccess::Scans(W.Runner),2);
+		TestEqual(TEXT("Tick and prepass use seats found at start (no world scan, P5o)"),FP5iTestAccess::Scans(W.Runner),0);
 		for (const auto& Shortcut : VBoROperator::Shortcuts())
 		{
 			const auto& Button = Snapshot.Buttons[static_cast<int32>(Shortcut.Button)];
@@ -680,5 +682,30 @@ bool FP3cE10::RunTest(const FString&)
 	Setting.Variable->Set(0, ECVF_SetByConsole);
 	TestEqual(TEXT("Disabled status is unchanged"),W.Runner->GetOperatorStatus().Seat,FString(TEXT("Driver")));
 	TestTrue(TEXT("Turning off does not move Pawn"),W.Alignment->GetHomeShiftCm() == FVector2D(200,-100)); return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5oSeatViews,"vBoR.P5o.E1E2SeatViewsFoundAtStart",Flags)
+bool FP5oSeatViews::RunTest(const FString&)
+{
+	FP5iWorld W;
+	// E1: 시작 검사에서 동승석·2열 한 번씩만 찾음. 진행자 창·자유모드 패널은 frame 마다 찾지 않음
+	TestEqual(TEXT("Start check scans each seat once"),FP5iTestAccess::Scans(W.Runner),2);
+	W.Free(); FP5iTestAccess::ResetScans(W.Runner);
+	for (int32 I = 0; I < 5; ++I) { W.Ready(); W.Runner->GetOperatorSnapshot(); }
+	TestEqual(TEXT("Free-mode frames and snapshots do not scan"),FP5iTestAccess::Scans(W.Runner),0);
+	TestTrue(TEXT("Passenger available"),W.Runner->EvaluateOperatorButton(B::Passenger).bAccepted);
+	TestTrue(TEXT("Rear available"),W.Runner->EvaluateOperatorButton(B::Rear).bAccepted);
+	TestTrue(TEXT("Free seat buttons shown"),FP5iTestAccess::SeatButtonsShown(W.Runner));
+	// E2: Play 중 더한 같은 태그는 다음 시작 검사까지 안 봄. 지운 시점은 바로 없음
+	auto* Extra = NewObject<UVBoRViewpointComponent>(W.Car); W.Car->AddInstanceComponent(Extra);
+	Extra->ComponentTags.Add(TEXT("Car.RearView")); Extra->RegisterComponent();
+	TestTrue(TEXT("Rear kept until the next start check"),W.Runner->EvaluateOperatorButton(B::Rear).bAccepted);
+	W.Car->PassengerView->DestroyComponent(); W.Ready();
+	TestEqual(TEXT("Destroyed passenger view"),W.Runner->EvaluateOperatorButton(B::Passenger).Reason,FString(TEXT("Seat not found")));
+	TestFalse(TEXT("Free seat buttons need both seats"),FP5iTestAccess::SeatButtonsShown(W.Runner));
+	W.Runner->InitializeFlow(); W.Ready();
+	TestEqual(TEXT("Next start check scans again"),FP5iTestAccess::Scans(W.Runner),2);
+	TestEqual(TEXT("Duplicate rear seen at the next start check"),W.Runner->EvaluateOperatorButton(B::Rear).Reason,FString(TEXT("Seat not found")));
+	return true;
 }
 #endif
