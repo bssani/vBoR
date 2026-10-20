@@ -3,6 +3,7 @@
 #include "../Interaction/VBoRScenarioRunner.h"
 #include "Engine/Engine.h"
 #include "Engine/GameViewportClient.h"
+#include "Engine/Level.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -79,12 +80,40 @@ bool UVBoRSpectatorSubsystem::TryStart()
 	return true;
 }
 
+void UVBoRSpectatorSubsystem::AddPart(AActor* Actor)
+{
+	if (Actor && Cast<IVBoRSpectatorPart>(Actor)) { Parts.AddUnique(Actor); }
+}
+
+void UVBoRSpectatorSubsystem::CollectParts()
+{
+	bPartsCollected = true;
+#if WITH_DEV_AUTOMATION_TESTS
+	++PartScans;
+#endif
+	for (TActorIterator<AActor> It(GetWorld()); It; ++It) { AddPart(*It); }
+	// UE 5.6 부터 spawn 알림은 FinishSpawning 뒤에 옴 (Deferred spawn 도 이름·상태 정해진 뒤, LevelActor.cpp:51-55)
+	SpawnedHandle = GetWorld()->AddOnActorSpawnedHandler(FOnActorSpawned::FDelegate::CreateUObject(this,&UVBoRSpectatorSubsystem::AddPart));
+	// 서브레벨·스트리밍으로 나중에 들어온 부품도 받음 (spawn 알림은 안 옴)
+	LevelAddedHandle = FWorldDelegates::LevelAddedToWorld.AddUObject(this,&UVBoRSpectatorSubsystem::HandleLevelAdded);
+}
+
+void UVBoRSpectatorSubsystem::HandleLevelAdded(ULevel* Level, UWorld* World)
+{
+	// 전역 알림이라 다른 월드 레벨은 무시함
+	if (!Level || World != GetWorld()) { return; }
+	for (AActor* Actor : Level->Actors) { AddPart(Actor); }
+}
+
 void UVBoRSpectatorSubsystem::SampleParts(double NowSeconds)
 {
+	if (!bPartsCollected) { CollectParts(); }
+	// 지운 Actor 는 뺌. 순서 유지 (같은 frame 에 잡은 이름 순서가 흔들리지 않게)
+	Parts.RemoveAll([](const TWeakObjectPtr<AActor>& Part) { return !Part.IsValid(); });
 	TArray<FString> ActiveNames;
-	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+	for (const TWeakObjectPtr<AActor>& Actor : Parts)
 	{
-		const IVBoRSpectatorPart* Part = Cast<IVBoRSpectatorPart>(*It);
+		const IVBoRSpectatorPart* Part = Cast<IVBoRSpectatorPart>(Actor.Get());
 		if (Part && Part->IsSpectatorInteracting()) { ActiveNames.AddUnique(Part->GetSpectatorName().ToString()); }
 	}
 	Names.Sample(ActiveNames,NowSeconds,NameHoldSeconds);
@@ -246,5 +275,8 @@ void UVBoRSpectatorSubsystem::Stop()
 void UVBoRSpectatorSubsystem::Deinitialize()
 {
 	Stop();
+	if (UWorld* World = GetWorld()) { World->RemoveOnActorSpawnedHandler(SpawnedHandle); }
+	FWorldDelegates::LevelAddedToWorld.Remove(LevelAddedHandle);
+	Parts.Reset(); bPartsCollected = false;
 	Super::Deinitialize();
 }
