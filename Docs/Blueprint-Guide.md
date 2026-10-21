@@ -2,13 +2,14 @@
 
 > 읽는 사람: 회사 PC에서 실제 차 CAD로 L_Main을 채우는 사람과 그 PC의 AI.
 > 먼저 읽을 것: [Company-PC-Guide.md](Company-PC-Guide.md)(지금 상태, CAD에서 뽑을 값 §4).
-> 기준: `main` 2026-10-20(PR #41 뒤). 코드 위치는 `Source/vBoR/` 아래다.
+> 기준: `main` 2026-10-21(PR #47 뒤). 코드 위치는 `Source/vBoR/` 아래다.
 
 ## 0. 상태 — 무엇이 확인됐고 무엇이 아닌가
 
 - **지금 L_Main의 차는 근사 차 `AP3VehicleMock` 하나다.** 부품 약 20개를 C++ `BeginPlay`에서 만들고, 태그를 붙이고, 서로 잇는다(`P3Probe/P3VehicleMock.cpp`).
   - 이 문서는 그 일을 실제 차에서는 **Blueprint와 레벨 배치로** 하는 방법이다.
 - **확인된 것은 문·손잡이 조립뿐이다(P2e).** 자동화 시험으로 확인했고, 에디터·VR 확인은 아직이다.
+  - 메시로 잡기·밀기(P2f·P2g, §4.3)도 자동화로만 확인했다. 엔진 기본 메시로 시험했고, CAD 메시로는 아직이다.
 - **나머지는 확인되지 않았다.** 부품 부모 클래스는 근사 차에서만 돌았고, BP 자식으로 만들어 레벨에 놓은 적은 아직 없다. 표의 "확인" 칸에 적었다.
   - 막히면 그 부품 하나만 Claude에게 알려 명세로 고친다. 부모 C++를 BP 로직으로 우회하지 않는다.
 - **CAD 에셋과 그것을 쓰는 BP를 리포에 올릴지는 미정이다.** 정하기 전에는 커밋하지 않는다(Company-PC-Guide §5).
@@ -65,7 +66,9 @@ L_Main
 1. Content Browser 우클릭 → **Blueprint Class** → All Classes에서 부모 C++ 클래스를 고른다(아래 표). 이름 예: `BP_Door_FL`, `BP_DoorHandle_FL_Ext`.
 2. **BP를 레벨에 놓을 때 Actor 위치는 차 원점(월드 원점)이다.** CAD 메시는 피벗이 차 원점에 묶여 있으므로, 메시를 원래 자리에 둔 채 **축 컴포넌트만** 경첩·회전축 자리로 옮긴다(U-09, P2b D3). 근사 차가 같은 방식이다("Actor 원점은 차 원점, 메시·축만 부품 자리로", `P3VehicleMock.cpp:145`).
 3. **메시:** 부품 메시 컴포넌트(표의 "메시")에 CAD 메시를 넣는다. 문에 붙어 같이 도는 것(유리·미러·트림)은 하나로 merge해서 넣는다(U-14). 손잡이처럼 따로 움직이는 것은 따로 BP다.
-4. **`MeshRestFromRoot` = 단위 변환**(위치 0, 회전 0, 크기 1)으로 둔다. 기본값은 근사 상자용 크기·위치다. 문·패널의 "설정 검사"가 이걸 경고한다("Non-cube DoorMesh still uses mock MeshRestFromRoot", `Interaction/VBoRHingedPanel.cpp:245`).
+4. **`MeshRestFromRoot`는 차 원점에서 본 메시 자리다.** 메시 피벗이 차 원점 그대로면 **단위 변환**(위치 0, 회전 0, 크기 1)으로 둔다.
+   - 기본값은 근사 상자용 크기·위치다. 문·패널의 "설정 검사"가 이걸 경고한다("Non-cube DoorMesh still uses mock MeshRestFromRoot", `Interaction/VBoRHingedPanel.cpp:292`).
+   - 메시 충돌로 잡는 부품은 피벗을 옮기고, 옮긴 만큼을 여기에 넣는다(§4.3).
 5. **축 컴포넌트:** 표의 "축"에 CAD의 경첩·회전 중심 위치와 방향을 넣는다. 방향 규칙은 근사 차 줄(표의 "예")의 주석에 있다. 처음 하나는 그 줄을 그대로 따라 하고, Play로 열리는 방향을 확인한 뒤 나머지를 맞춘다.
 6. **태그**는 Actor의 Tags(Details → Actor → Tags)에 넣는다. **`SpectatorName`**은 TV 띠에 보일 영어 이름이다(예 `Driver Door`).
 7. BP에 Event Graph 로직을 넣지 않는다. 동작이 모자라면 부모 C++를 고친다(명세).
@@ -74,8 +77,8 @@ L_Main
 
 | 부품(INT) | 부모 클래스 | 메시 / 축 | 꼭 넣을 값 | 태그·연결 | 근사 차 예 | 확인 |
 |---|---|---|---|---|---|---|
-| 운전석 문 | `AVBoRHingedDoor` | `DoorMesh` / `HingePivot`(+Z가 경첩축) | `MaxAngleDeg`, `bUseLatch`, 미는 면 상자(`bUsePushFaceBox`) | `Car.DriverDoor` — 07·08·11·18·20단계 | `:141-144` | 자동화(P2e) |
-| 문 손잡이 바깥·안쪽(001·002) | `AVBoRAxisPart` | `PartMesh` / `AxisPivot` + `Axis`·`bReverse` | **`DoorHandleSide` = 바깥/안쪽**, `MaxAngleDeg`, `Release` | 문 BP 밑에 붙인다(§6.1) | `:146-162` | 자동화(P2e) |
+| 운전석 문 | `AVBoRHingedDoor` | `DoorMesh` / `HingePivot`(+Z가 경첩축) | `MaxAngleDeg`, `bUseLatch`, 미는 면 — 메시 표면(`bPushOnMeshSurface`, §4.3) 또는 미는 면 상자(`bUsePushFaceBox`) | `Car.DriverDoor` — 07·08·11·18·20단계 | `:141-144` | 자동화(P2e·P2g) |
+| 문 손잡이 바깥·안쪽(001·002) | `AVBoRAxisPart` | `PartMesh` / `AxisPivot` + `Axis`·`bReverse` | **`DoorHandleSide` = 바깥/안쪽**, `MaxAngleDeg`, `Release`, 메시로 잡기(`bGrabWithMesh`, §4.3) | 문 BP 밑에 붙인다(§6.1) | `:146-162` | 자동화(P2e·P2f) |
 | 콘솔박스(005) | `AVBoRHingedPanel` | `DoorMesh` / `HingePivot` | `bUseLatch` 켬, `bAllowPalmOpening` 끔, `MaxAngleDeg` 100 | 손잡이 자리(`OutsideHandle` 상자) | `:164-179` | 안 됨 |
 | 글러브박스(006) | `AVBoRHingedPanel` + 손잡이 `AVBoRAxisPart` | 같음 | `bUseLatch` 켬, `bAllowPalmOpening` 끔, 손잡이 `Release` = Return | 손잡이는 문과 같은 방식(§6.1, 바깥) | `:181-198` | 안 됨 |
 | 기어 레버(008) | `AVBoRAxisPart` | `PartMesh` / `AxisPivot`, `Axis` X | `Release` = Detent, `DetentAnglesDeg`, 시작 1, pinch 켬·손바닥 끔·밀기 켬(U-13) | 끝 버튼은 §6.2 | `:200-209` | 안 됨 |
@@ -88,6 +91,54 @@ L_Main
 | 리프트게이트(011) | `AVBoRPoweredPanel` | `PanelMesh` / `HingeLocationCm` | `OpenAngleDeg`, `DelaySeconds`, 열기·닫기 버튼 자리(`OpenButtonFromHinge`·`CloseButtonFromHinge`) | `Car.Liftgate` — 04·06단계. 버튼은 스스로 만듦 | `:350-357` | 안 됨 |
 | 2열 등받이 | `AVBoRFoldingSeat` | `SeatMesh` / `HingeLocationCm` | `FoldAngleDeg` | `Car.RearSeat`. 진행자 F·U가 모든 접는 시트를 찾음 | `:128-132` | 안 됨 |
 
+- 콘솔박스·글러브박스도 `bPushOnMeshSurface`를 켤 수 있다. 1축 부품(레버 포함)·스티어링 휠·룸미러·노브도 `bGrabWithMesh`를 켤 수 있다. 방법은 §4.3이다.
+
+### 4.3 메시로 잡기·밀기 — 선택(P2f·P2g, 자동화로만 확인)
+
+기본은 상자로 판정한다. 잡는 상자(`GrabBox`)는 메시 bounds에 여유를 더한 것이다. 미는 면은 bounds 평면(또는 미는 면 상자)이다. 그래서 곡면이나 비스듬한 부품은 메시 앞의 허공에서도 잡히거나 밀린다. 아래 옵션을 켜면 메시 모양 그대로 판정한다. 둘 다 기본은 꺼짐이다.
+
+**작업 전 확인 — 메시 에셋만 열어 본다.** 피벗·충돌 작업 전에 그 메시를 쓸 수 있는지 본다.
+1. Static Mesh 에디터 툴바의 Collision 보기에서 **Complex Collision**을 켠다. 보이는 메시와 똑같이 겹치면 그대로 쓸 수 있다.
+   - 아무것도 안 보이면 Details → LOD0 → Sections에서 그 섹션의 `Enable Collision`이 꺼져 있는 것이다.
+   - 보이는 메시보다 거칠면 Nanite 대체 메시로 만들어졌을 수 있다(확인 안 한 엔진 동작). 잡기·밀기도 그 거친 모양으로 판정된다.
+2. **Simple Collision** 보기로 이미 simple 충돌이 있는지 본다. 있어도 큰 상자 하나 수준이면 지금 잡는 상자와 다를 게 없다. 그러면 아래 잡기 3의 Use Complex Collision As Simple로 바꾼다.
+3. 문은 `Double Sided Geometry`를 켠 뒤 문 BP의 "설정 검사"를 누른다. Play 없이 trace되는지 알려 준다(아래 밀기 4).
+4. 잡는 부품에는 "설정 검사" 버튼이 없다. 옵션을 켜고 Play를 한 번 해서, Output Log에 `grab mesh …` 경고가 없는지 본다.
+
+**잡기 — `메시 충돌로 잡기`(`bGrabWithMesh`).** 1축 부품·스티어링 휠·룸미러·노브의 Input 칸에 있다.
+1. **메시 피벗을 손이 잡는 부분 가운데로 옮긴다.**
+   - 이유: ISDK는 손바닥에 닿은 후보 중 충돌 컴포넌트 **원점**이 가장 가까운 것을 고른다(`Plugins/MetaXRInteraction/Source/OculusInteraction/Private/Interaction/GrabDetectors/IsdkHandGrabDetector.cpp:397-460`). CAD 메시는 피벗이 모두 차 원점이다. 그대로 두면 휠과 레버처럼 가까운 부품 사이에서 무엇이 잡힐지 정해지지 않는다.
+   - 옵션을 켰는데 피벗이 Actor 원점에서 1 cm 안이면 Play 때 경고한다("grab mesh pivot is at the actor origin").
+   - 회전축과는 상관없다. 도는 중심은 여전히 축 컴포넌트(`AxisPivot` 등)다(U-09, §4.1-2).
+   - **방법(에디터 — 확인 안 함):**
+     1. 임시 레벨의 원점에 CAD 메시를 하나 놓는다.
+     2. Modeling 모드 → Edit Pivot으로 피벗을 잡는 부분 가운데로 옮기고 Accept한다.
+     3. 메시가 제자리에 그대로 보여야 한다. 그때 그 Actor의 Location(회전도 했으면 Rotation)이 옮긴 만큼이다. 그 값을 적고 임시 Actor는 지운다.
+   - 메시 에셋 자체가 바뀐다. 같은 메시를 레벨에 따로 놓은 곳이 있으면 거기도 옮겨진다. 잡는 부품의 메시만 옮긴다.
+2. 부품 BP의 **`MeshRestFromRoot`에 1의 위치(와 회전)를 넣는다.** 그러면 메시가 원래 자리로 돌아온다. 크기는 1이다.
+3. **메시 에셋 충돌** — Static Mesh 에디터 → Collision Complexity:
+   - **Use Complex Collision As Simple**이 가장 쉽다. 렌더 삼각형 그대로 쓴다.
+   - simple 충돌을 만든다면 box·convex를 쓴다. 구·캡슐이 하나라도 있으면, 크기를 축마다 다르게 준 메시는 충돌 전체가 가장 작은 축으로 줄어든다(엔진 `Engine/Private/PhysicsEngine/BodyInstance.cpp:2133-2153`).
+   - 둘 다 없으면 경고하고 상자로 잡는다("grab mesh has no simple collision").
+4. 옵션을 켠다. **BP에서 메시의 Collision Presets는 바꾸지 않는다.** Play 때 코드가 정한다. 켜면 Query만 하고 WorldDynamic overlap만 받으며, 끄면 충돌이 없다.
+- 그대로인 것: 휠의 잡는 반지름 검사, 레버 손가락 밀기(메시 bounds 기준), hover·잡기 색.
+- **Complex As Simple 주의:**
+  - 삼각형 충돌은 표면만 있고 안이 없다. 손바닥 감지 구(반지름 4 cm)가 표면에 닿을 때만 hover된다. 그래서 두께 8 cm보다 두꺼운 부품 안으로 손이 완전히 들어가면 hover가 끊긴다. 손잡이·레버·노브·미러·휠 테는 얇아서 거의 해당하지 않는다.
+  - 피벗 변경은 메시 에셋에 들어간다. 그래서 CAD를 다시 import하면 사라질 수 있다. **부품마다 옮긴 값을 기록해 둔다.** 다시 옮기고 `MeshRestFromRoot`에 같은 값을 넣는다.
+
+**밀기 — `메시 표면으로 밀기`(`bPushOnMeshSurface`).** 문·콘솔·글러브박스(`AVBoRHingedPanel`)의 Push face 칸에 있다.
+1. **피벗은 옮기지 않는다.** `DoorMesh`는 차 원점 피벗 그대로 두고, `MeshRestFromRoot`는 단위 변환이다. 손 점마다 그 자리의 면을 trace로 읽기 때문이다(P2g D2).
+2. **메시 에셋에서 `Double Sided Geometry`를 켠다**(Static Mesh 에디터 → Collision).
+   - 복합 trace는 기본으로 뒷면을 무시한다. 그래서 한 장짜리 겉판이나 면 방향이 뒤집힌 곳에서는 trace가 빠진다(P2g 리뷰 참고 1).
+3. 충돌은 따로 만들지 않아도 된다. 엔진이 렌더 삼각형으로 복합 충돌을 만든다.
+4. 옵션을 켜고 **"설정 검사"**를 누른다.
+   - "DoorMesh has no traceable collision"이 나오면 trace가 안 되는 것이다. 그러면 bounds로 민다.
+   - 켜면 미는 면 상자(`bUsePushFaceBox`)는 쓰지 않는다("PushFaceBox ignored …" 알림). 두께 경고도 내지 않는다.
+- merge한 사이드미러 같은 돌출도 미는 면이 된다. 미러를 밀면 문이 밀린다.
+  - 빼려면 그 메시의 Collision Complexity를 Use Simple Collision As Complex로 두고, 미러가 없는 simple 충돌을 만든다(P2g §1).
+- Nanite 메시는 복합 충돌이 원본보다 거친 대체 메시로 만들어질 수 있다(확인 안 함). 밀리는 면이 보이는 면과 다르면 알려 달라.
+- 문에 붙은 손잡이는 위 "잡기"대로 따로 한다.
+
 ## 5. 레벨에 놓는 것
 
 | 무엇 | 클래스 | 놓는 법 | 태그·연결 | 근사 차 예 |
@@ -98,7 +149,7 @@ L_Main
 | 박스 적재 영역 | `AVBoRLoadTarget` | 트렁크 안. `LoadingRegion` 상자를 트렁크 안 공간 크기로 | — | `:358-364` |
 | 박스 받침 | `AVBoRBoxStand` | 차 뒤 동승석 쪽 바닥 | 태그 `Car.BoxStand`, **`LoadTarget`에 위 적재 영역을 고름**(§6.4) | `:365-368` |
 
-- **경로는 `Car.Footprint`를 지나면 안 된다.** 흐름 시작 때 검사해서, 지나면 이유를 남기고 시작하지 않는다(`VBoRScenarioRunner.cpp:254`·`:263`).
+- **경로는 `Car.Footprint`를 지나면 안 된다.** 흐름 시작 때 검사해서, 지나면 이유를 남기고 시작하지 않는다(`VBoRScenarioRunner.cpp:255`·`:265`).
 - 경로 점은 나중에 실제 방 크기에 맞춰 옮긴다. 플레이 영역 밖이면 경로를 숨긴다(P3b D6).
 
 ## 6. 연결 규칙
@@ -106,8 +157,8 @@ L_Main
 ### 6.1 손잡이 → 문·콘솔·글러브박스 (확인됨 — 자동화, P2e·U-14)
 
 - 손잡이 BP의 **`DoorHandleSide`**를 바깥 또는 안쪽으로 정한다. 기어 레버처럼 판과 상관없는 1축 부품은 "없음"이다.
-- 레벨 Outliner에서 손잡이를 **문(판) Actor 밑으로 끌어다 붙인다.** Play 때 판이 자기 밑의 손잡이를 찾아 연결하고, 경첩 축(`HingePivot`)에 붙여 같이 돌게 한다(`Interaction/VBoRHingedPanel.cpp:153-163`, `:274`).
-  - Child Actor 컴포넌트로 넣는 경우에는 그 컴포넌트를 BP 안에서 **`HingePivot` 밑에** 둔다. 아니면 연결하지 않고 경고한다(`:191`).
+- 레벨 Outliner에서 손잡이를 **문(판) Actor 밑으로 끌어다 붙인다.** Play 때 판이 자기 밑의 손잡이를 찾아 연결하고, 경첩 축(`HingePivot`)에 붙여 같이 돌게 한다(`Interaction/VBoRHingedPanel.cpp:200-210`, `:328`).
+  - Child Actor 컴포넌트로 넣는 경우에는 그 컴포넌트를 BP 안에서 **`HingePivot` 밑에** 둔다. 아니면 연결하지 않고 경고한다(`:236-238`).
 - 손잡이 하나를 두 판이 같이 쓰면, 먼저 연결한 판이 갖는다(경고).
 - 판 Details의 **"설정 검사"** 버튼(Hinged panel → Setup)이 Play 전에 같은 판정을 보여 준다. 판마다 한 번 누른다.
 
@@ -163,11 +214,14 @@ L_Main
 2. **Play(PIE) 한 번** — Output Log에서 찾을 것:
    - `Template Mismatch during attachment`(ensure)가 없을 것. P4f에서 네이티브 부모의 BP 자식이 이것을 냈다. 정렬 점(`UVBoRAlignPointComponent`)도 같은 구조라 처음 한 번은 꼭 본다(P4h 리뷰 참고 2).
    - `P2e setup:` 경고가 없을 것(손잡이 연결).
+   - 메시로 잡기·밀기를 켠 부품에서 `grab mesh …`·`DoorMesh has no traceable collision` 경고가 없을 것(§4.3).
 3. **흐름 시작 막힘이 없을 것:** Output Log(또는 VR 진행자 정보 `I`)에 `시작 차단:`이 없어야 한다(§7). "정렬 컴포넌트 1개 필요"면 근사 차가 남아 있다(§2-3).
 4. **진행자 창**(툴바 `Operator`):
    - **4점 정렬:** 실물 좌석 점 4개를 `P`로 짚고 → 차이(cm)·높이 차이 확인 → `S` 저장 → 표시를 다시 짚어 거리 확인 → `A`로 시작(P4h). 높이 경고가 뜨면 실물 좌석 높이를 확인한다(U-17).
    - **좌석 전환:** `1`·`2`로 동승석·2열에 가서 SgRP 차이만큼 옮겨졌는지, `Home`으로 돌아오는지 본다.
 5. **부품마다:** 열리는 방향·최대 각, 손잡이가 문과 같이 도는지(§6.1), 기어 버튼이 레버를 따라오는지(§6.2), 리프트게이트 버튼, 2열 F·U, 키를 집고 버튼 누르기(§6.3).
+   - 메시로 잡는 부품은 hover가 메시에 닿을 때만 켜지는지 본다. 얇은 손잡이가 잡히는지, 가까운 부품끼리 맞게 골라지는지도 본다. 콘솔 변수 `Meta.InteractionSDK.DebugInteractionVisuals 1`은 잡는 충돌의 bounds 상자를 그린다. 메시 충돌 모양은 뷰포트 Show → Collision으로 본다.
+   - 메시 표면으로 미는 문은 바깥 면과 안쪽 트림을 밀어 본다. 보이는 면에 닿을 때 밀리기 시작하는지, 돌출부와 창문 자리에서 어떻게 되는지 본다.
 6. **VR(Quest 3 Link):** 계획서 §7 시험 ID로 기록한다. 확인 전까지 상태는 `not-tested`다.
 
 막힌 곳은 부품 이름, Output Log 줄, 진행자 창 이유를 그대로 적어 Claude에게 넘긴다. Claude가 명세로 고친다.
