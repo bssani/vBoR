@@ -2,16 +2,16 @@
 
 #include "Components/AudioComponent.h"
 
-void FVBoRSoundPlayback::Play(const FVBoRSoundCue& Cue, UAudioComponent* Audio, int32 Count, uint64 Frame)
+void FVBoRSoundPlayback::Play(const FVBoRSoundCue& Cue, UAudioComponent* Audio, int32 Count, uint64 Frame, bool bCoalesce)
 {
 	if (!Cue.Sound || Count <= 0) { return; }
 	Requests += Count;
 #if WITH_DEV_AUTOMATION_TESTS
 	for (int32 I = 0; I < Count; ++I) { RequestFrames.Add(Frame); }
 #endif
-	// 긴 frame 의 요청 수는 보존하고 실제 Play 는 한 번만 호출함 (P5r D2)
-	if (!Audio || LastPlayFrame == Frame) { return; }
-	LastPlayFrame = Frame;
+	// Advance 의 긴 frame 만 합침. 지연 0 이벤트는 호출마다 재생함 (P5s D2)
+	if (!Audio || (bCoalesce && LastPlayFrame == Frame)) { return; }
+	if (bCoalesce) { LastPlayFrame = Frame; }
 	Audio->SetSound(Cue.Sound);
 	Audio->SetVolumeMultiplier(FMath::Max(0.0f, Cue.VolumeMultiplier));
 	Audio->SetPitchMultiplier(FMath::Max(0.001f, Cue.PitchMultiplier));
@@ -22,7 +22,7 @@ void FVBoRSoundPlayback::Play(const FVBoRSoundCue& Cue, UAudioComponent* Audio, 
 void FVBoRSoundPlayback::Queue(const FVBoRSoundCue& Cue, UAudioComponent* Audio, uint64 Frame)
 {
 	if (!Cue.Sound) { return; }
-	if (Cue.StartDelaySeconds <= 0) { Play(Cue, Audio, 1, Frame); }
+	if (Cue.StartDelaySeconds <= 0) { Play(Cue, Audio, 1, Frame, false); }
 	else { Pending.Add(Cue.StartDelaySeconds); }
 }
 
@@ -37,7 +37,8 @@ void FVBoRSoundPlayback::BeginHeld(const FVBoRHeldSoundCue& Cue, UAudioComponent
 
 void FVBoRSoundPlayback::Advance(const FVBoRSoundCue& Cue, UAudioComponent* Audio, double Seconds, uint64 Frame)
 {
-	Seconds = FMath::Max(0.0, Seconds);
+	// NaN 이면 예약이 영영 안 끝나므로 0 으로 봄 (일부 부품은 유한성 검사 전에 부름, P5s 리뷰 참고 1)
+	Seconds = FMath::IsFinite(Seconds) ? FMath::Max(0.0, Seconds) : 0.0;
 	int32 Due = 0;
 	for (int32 I = Pending.Num() - 1; I >= 0; --I)
 	{

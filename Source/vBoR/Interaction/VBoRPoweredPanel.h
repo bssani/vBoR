@@ -52,6 +52,8 @@ class VBOR_API AVBoRPoweredPanel : public AActor
 	GENERATED_BODY()
 public:
 	AVBoRPoweredPanel();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Powered Panel|Sound") FVBoRSoundCue ButtonPressedCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Powered Panel|Sound") FVBoRSoundCue ButtonReleasedCue;
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void Tick(float DeltaSeconds) override;
 	UFUNCTION(BlueprintCallable, Category = "Powered Panel") void RequestOpen();

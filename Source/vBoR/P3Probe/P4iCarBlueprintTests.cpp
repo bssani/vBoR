@@ -140,7 +140,7 @@ bool FP4iPreview::RunTest(const FString&)
 	AVBoRPokeButton* Live = Game.World->SpawnActor<AVBoRPokeButton>(); Game.Play();
 	TestTrue(TEXT("Game visual connected"), Live->ButtonVisual->GetPokeInteractable() == Live->Poke);
 	TestTrue(TEXT("Game pointable connected"), Live->PointerAudio->GetPointable().GetObject() == Live->Poke);
-	TestTrue(TEXT("Game audio connected"), Live->PointerAudio->GetSelectAudio() == Live->PressAudio);
+	TestTrue(TEXT("Game audio connected"), Live->PointerAudio->GetSelectAudio() == nullptr);
 	return true;
 }
 

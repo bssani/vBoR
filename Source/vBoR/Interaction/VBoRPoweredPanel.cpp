@@ -19,6 +19,8 @@ DEFINE_LOG_CATEGORY_STATIC(LogPoweredPanel, Log, All);
 
 AVBoRPoweredPanel::AVBoRPoweredPanel()
 {
+	static ConstructorHelpers::FObjectFinder<USoundBase> ButtonSound(IsdkContentAssetPaths::Audio::Interaction_BasicPoke_ButtonPress);
+	ButtonPressedCue.Sound = ButtonSound.Object;
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PostUpdateWork;
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("VehicleOrigin")));
@@ -65,6 +67,7 @@ AVBoRPokeButton* AVBoRPoweredPanel::CreateButton(const FTransform& Relative)
 	AVBoRPokeButton* Button = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), Pose, this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (!Button) { return nullptr; }
 	Button->ButtonMesh->SetRelativeScale3D(ButtonSizeCm.ComponentMax(FVector(0.1)) / 100.0);
+	Button->PressedCue = ButtonPressedCue; Button->ReleasedCue = ButtonReleasedCue;
 	Button->FinishSpawning(Pose);
 	Button->AttachToComponent(HingePivot, FAttachmentTransformRules::KeepWorldTransform);
 	return Button;

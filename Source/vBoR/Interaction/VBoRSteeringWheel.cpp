@@ -59,6 +59,9 @@ AVBoRSteeringWheel::AVBoRSteeringWheel()
 	Transformer = CreateDefaultSubobject<UVBoRWheelTransformer>(TEXT("WheelTransformer"));
 	StateAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("LimitClick")); StateAudio->SetupAttachment(AxisPivot); StateAudio->bAutoActivate = false;
 	static ConstructorHelpers::FObjectFinder<USoundBase> Sound(IsdkContentAssetPaths::Audio::Interaction_BasicPoke_ButtonPress); StateAudio->SetSound(Sound.Object);
+	SoundAudio.SetNum(1); SoundAudio[0] = StateAudio;
+	LimitCue.Sound = StateAudio->Sound;
+
 	HoldingGrabbers.SetNum(2);
 }
 
@@ -201,6 +204,7 @@ void AVBoRSteeringWheel::ApplyAngle(double DeltaDeg)
 void AVBoRSteeringWheel::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	++SoundFrame; AdvanceSounds(DeltaSeconds);
 	if (!FMath::IsFinite(DeltaSeconds) || DeltaSeconds <= 0) { return; }
 	// 한 손의 손실도 먼저 확인함 (다른 손의 놓기가 보류를 지우지 않게, P5d D6)
 	AdvanceMotion();
@@ -220,7 +224,7 @@ void AVBoRSteeringWheel::Tick(float DeltaSeconds)
 	const TArray<int32> Notifications = MoveTemp(PendingLimits);
 	for (int32 Direction : Notifications)
 	{
-		StateAudio->Play(); OnLimitReached.Broadcast(Direction);
+		SoundPlayback[0].Queue(LimitCue, SoundAudio[0], SoundFrame); OnLimitReached.Broadcast(Direction);
 		if (IsActorBeingDestroyed()) { return; }
 	}
 }
@@ -236,7 +240,13 @@ FString AVBoRSteeringWheel::GetDebugText() const
 }
 void AVBoRSteeringWheel::EndPlay(const EEndPlayReason::Type Reason)
 {
+	for (int32 I = 0; I < 1; ++I) { SoundPlayback[I].Reset(SoundAudio[I], false); }
 	Grabbable->GetInteractionPointerEventDelegate().RemoveDynamic(this,&AVBoRSteeringWheel::HandlePointer);
 	WheelMesh->SetOverlayMaterial(nullptr); HandOrder.Empty(); HoldingGrabbers.Empty(); PendingLimits.Empty();
 	Super::EndPlay(Reason);
+}
+
+void AVBoRSteeringWheel::AdvanceSounds(double Seconds)
+{
+	SoundPlayback[0].Advance(LimitCue, SoundAudio[0], Seconds, SoundFrame);
 }

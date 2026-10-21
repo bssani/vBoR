@@ -20,7 +20,7 @@ struct FP5cTestAccess
 	static void Begin(AVBoRAxisPart* Part, const FIsdkGrabPose& Pose) { Part->HoldingHand = 0; Part->Transformer->BeginTransform({Pose},FIsdkTargetTransform(Part->AxisPivot)); }
 	static void Move(AVBoRAxisPart* Part, const FIsdkGrabPose& Pose, bool bTracked) { Part->AxisPivot->SetRelativeTransform(Part->Transformer->UpdateTracked({Pose},FIsdkTargetTransform(Part->AxisPivot),bTracked)); }
 	static void Release(AVBoRAxisPart* Part) { Part->ReleasePart(); }
-	static UP5bAudioObserver* Audio(AVBoRAxisPart* Part) { auto* Audio = NewObject<UP5bAudioObserver>(Part); Part->StateAudio = Audio; return Audio; }
+	static UP5bAudioObserver* Audio(AVBoRAxisPart* Part) { auto* Audio = NewObject<UP5bAudioObserver>(Part); Part->StateAudio = Audio; for (auto& Slot : Part->SoundAudio) { Slot = Audio; } return Audio; }
 	static const TArray<TObjectPtr<UStaticMeshComponent>>& Plates(AP3VehicleMock* Car) { return Car->Plates; }
 };
 

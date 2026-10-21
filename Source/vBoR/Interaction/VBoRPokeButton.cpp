@@ -18,6 +18,7 @@
 
 AVBoRPokeButton::AVBoRPokeButton()
 {
+	PrimaryActorTick.bCanEverTick = true; PrimaryActorTick.bStartWithTickEnabled = false;
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("FixedRoot")));
 	BaseMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BaseMesh"));
 	BaseMesh->SetupAttachment(RootComponent);
@@ -43,6 +44,11 @@ AVBoRPokeButton::AVBoRPokeButton()
 	PressAudio->bAutoActivate = false;
 	static ConstructorHelpers::FObjectFinder<USoundBase> PressSound(IsdkContentAssetPaths::Audio::Interaction_BasicPoke_ButtonPress);
 	PressAudio->SetSound(PressSound.Object);
+	SoundAudio.SetNum(2); SoundAudio[0] = PressAudio;
+	PressAudio->SetupAttachment(ButtonVisual);
+	SoundAudio[1] = CreateDefaultSubobject<UAudioComponent>(TEXT("ReleasedCueAudio")); SoundAudio[1]->SetupAttachment(ButtonVisual); SoundAudio[1]->bAutoActivate = false;
+	PressedCue.Sound = PressAudio->Sound;
+
 	PointerAudio = CreateDefaultSubobject<UIsdkPointerEventAudioPlayer>(TEXT("PointerAudio"));
 }
 
@@ -77,7 +83,7 @@ void AVBoRPokeButton::PreInitializeComponents()
 	if (!UIsdkWorldSubsystem::TryGet(GetWorld())) { return; }
 	ButtonVisual->SetPokeInteractable(Poke);
 	PointerAudio->SetPointable(Poke.Get());
-	PointerAudio->SetSelectAudio(PressAudio);
+	PointerAudio->SetSelectAudio(nullptr);
 }
 
 void AVBoRPokeButton::BeginPlay()
@@ -93,6 +99,7 @@ void AVBoRPokeButton::BeginPlay()
 
 void AVBoRPokeButton::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	for (int32 I = 0; I < 2; ++I) { SoundPlayback[I].Reset(SoundAudio[I], false); }
 	Poke->GetInteractableStateChangedDelegate()->RemoveDynamic(this, &AVBoRPokeButton::HandleState);
 	Poke->GetInteractionPointerEventDelegate().RemoveDynamic(this, &AVBoRPokeButton::HandlePointer);
 	ButtonMesh->SetOverlayMaterial(nullptr);
@@ -118,6 +125,10 @@ void AVBoRPokeButton::HandleState(const FIsdkInteractableStateEvent& Event)
 
 void AVBoRPokeButton::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 {
+	// 필터 거부도 Select 피드백은 유지함 (키를 쥔 손 포함, P5s D4)
+	if (Event.Type == EIsdkPointerEventType::Select) { SoundPlayback[0].Queue(PressedCue, SoundAudio[0], SoundFrame); }
+	else if (Event.Type == EIsdkPointerEventType::Unselect) { SoundPlayback[1].Queue(ReleasedCue, SoundAudio[1], SoundFrame); }
+	SetActorTickEnabled(SoundPlayback[0].HasPending() || SoundPlayback[1].HasPending());
 	if (PressFilter.IsBound() && !PressFilter.Execute(Event)) { return; }
 	if (Event.Type == EIsdkPointerEventType::Select) { OnButtonPressed.Broadcast(Event); }
 	else if (Event.Type == EIsdkPointerEventType::Unselect) { OnButtonReleased.Broadcast(Event); }
@@ -126,4 +137,12 @@ void AVBoRPokeButton::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 bool AVBoRPokeButton::IsSpectatorInteracting() const
 {
 	return Poke && Poke->GetInteractableState() == EIsdkInteractableState::Select;
+}
+
+void AVBoRPokeButton::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds); ++SoundFrame;
+	SoundPlayback[0].Advance(PressedCue, SoundAudio[0], DeltaSeconds, SoundFrame);
+	SoundPlayback[1].Advance(ReleasedCue, SoundAudio[1], DeltaSeconds, SoundFrame);
+	SetActorTickEnabled(SoundPlayback[0].HasPending() || SoundPlayback[1].HasPending());
 }

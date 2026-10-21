@@ -6,6 +6,7 @@
 #include "Interaction/Grabbable/IsdkGrabTransformerComponent.h"
 #include "VBoRDoorMotion.h"
 #include "VBoRSpectatorPart.h"
+#include "VBoRSoundCue.h"
 #include "VBoRHingedPanel.generated.h"
 
 class UStaticMeshComponent;
@@ -54,6 +55,15 @@ class VBOR_API AVBoRHingedPanel : public AActor, public IVBoRSpectatorPart
 	GENERATED_BODY()
 public:
 	AVBoRHingedPanel();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Sound") FVBoRSoundCue UnlockedCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Sound") FVBoRSoundCue LatchedCue;
+	// 칸 순서는 위 프로퍼티 순서와 같음 (P5s D12)
+#if WITH_DEV_AUTOMATION_TESTS
+	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
+	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return SoundAudio[Slot]; }
+	uint64 GetSoundFrameForTest() const { return SoundFrame; }
+#endif
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spectator") FText SpectatorName;
 	virtual FText GetSpectatorName() const override { return SpectatorName; }
 	virtual bool IsSpectatorInteracting() const override { return Motion.GrabHand != INDEX_NONE || Motion.PushHand != INDEX_NONE; }
@@ -117,6 +127,14 @@ protected:
 	virtual bool ReadHand(int32 Hand, FVBoRDoorHand& Input);
 	virtual bool ReadPalmClosed(int32 Hand, bool& bClosed) const;
 private:
+#if WITH_DEV_AUTOMATION_TESTS
+	friend struct FP5sTestAccess;
+#endif
+	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
+	FVBoRSoundPlayback SoundPlayback[2];
+	uint64 SoundFrame = 0;
+	void AdvanceSounds(double Seconds);
+
 	friend struct FP2bTestAccess;
 	friend struct FP2cTestAccess;
 	friend struct FP2dTestAccess;

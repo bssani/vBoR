@@ -6,6 +6,7 @@
 #include "Interaction/Grabbable/IsdkGrabTransformerComponent.h"
 #include "VBoRSpectatorPart.h"
 #include "VBoRDoorMotion.h"
+#include "VBoRSoundCue.h"
 #include "VBoRAxisPart.generated.h"
 
 class UStaticMeshComponent;
@@ -78,6 +79,17 @@ class VBOR_API AVBoRAxisPart : public AActor, public IVBoRSpectatorPart
 	GENERATED_BODY()
 public:
 	AVBoRAxisPart();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Sound") FVBoRSoundCue OpenedCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Sound") FVBoRSoundCue ClosedCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Sound") FVBoRSoundCue DetentCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Sound") FVBoRSoundCue NudgeCue;
+	// 칸 순서는 위 프로퍼티 순서와 같음 (P5s D12)
+#if WITH_DEV_AUTOMATION_TESTS
+	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
+	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return SoundAudio[Slot]; }
+	uint64 GetSoundFrameForTest() const { return SoundFrame; }
+#endif
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part", meta=(DisplayName="문의 어느 쪽", ToolTip="문 밑에 붙인 손잡이를 Play 때 연결함. 문과 무관한 부품은 없음.")) EVBoRDoorHandleSide DoorHandleSide = EVBoRDoorHandleSide::None;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spectator") FText SpectatorName;
 	virtual FText GetSpectatorName() const override { return SpectatorName; }
@@ -141,6 +153,14 @@ protected:
 	virtual void ReadPushHands(FVBoRDoorHand (&Hands)[2]) const;
 	virtual UIsdkGrabberComponent* GetPushGrabber(int32 Hand) const;
 private:
+#if WITH_DEV_AUTOMATION_TESTS
+	friend struct FP5sTestAccess;
+#endif
+	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
+	FVBoRSoundPlayback SoundPlayback[4];
+	uint64 SoundFrame = 0;
+	void AdvanceSounds(double Seconds);
+
 	friend class UVBoRAxisTransformer;
 	friend class AVBoRHingedPanel;
 	friend struct FP2bTestAccess;

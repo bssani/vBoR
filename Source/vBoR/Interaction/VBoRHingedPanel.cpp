@@ -93,6 +93,11 @@ AVBoRHingedPanel::AVBoRHingedPanel()
 	StateAudio->bAutoActivate = false;
 	static ConstructorHelpers::FObjectFinder<USoundBase> Sound(IsdkContentAssetPaths::Audio::Interaction_BasicPoke_ButtonPress);
 	StateAudio->SetSound(Sound.Object);
+	SoundAudio.SetNum(2); SoundAudio[0] = StateAudio;
+	SoundAudio[1] = CreateDefaultSubobject<UAudioComponent>(TEXT("LatchedCueAudio")); SoundAudio[1]->SetupAttachment(HingePivot); SoundAudio[1]->bAutoActivate = false;
+	UnlockedCue.Sound = StateAudio->Sound;
+	LatchedCue.Sound = StateAudio->Sound;
+
 	SyncSettings();
 }
 
@@ -532,6 +537,7 @@ void AVBoRHingedPanel::UpdateHandleVisuals()
 void AVBoRHingedPanel::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	++SoundFrame; AdvanceSounds(DeltaSeconds);
 	if (bCancelPending)
 	{
 		bCancelPending = false;
@@ -572,8 +578,8 @@ void AVBoRHingedPanel::ApplyState(double BeforeAngle, int32 BeforeUnlocks, int32
 {
 	HingePivot->SetRelativeRotation(ClosedHingeRotation * FQuat(FVector::UpVector, FMath::DegreesToRadians(Motion.AngleDeg)));
 	UpdateHandleVisuals();
-	if (Motion.Metrics.Unlocks != BeforeUnlocks) { StateAudio->Play(); NotifyUnlocked(); }
-	if (Motion.Metrics.Latches != BeforeLatches) { CancelSelections(TEXT("latch")); StateAudio->Play(); NotifyLocked(); }
+	if (Motion.Metrics.Unlocks != BeforeUnlocks) { SoundPlayback[0].Queue(UnlockedCue, SoundAudio[0], SoundFrame); NotifyUnlocked(); }
+	if (Motion.Metrics.Latches != BeforeLatches) { CancelSelections(TEXT("latch")); SoundPlayback[1].Queue(LatchedCue, SoundAudio[1], SoundFrame); NotifyLocked(); }
 	if (Motion.AngleDeg != BeforeAngle) { OnAngleChanged.Broadcast(static_cast<float>(Motion.AngleDeg)); }
 	if (StateOverlay)
 	{
@@ -587,6 +593,7 @@ void AVBoRHingedPanel::ApplyState(double BeforeAngle, int32 BeforeUnlocks, int32
 
 void AVBoRHingedPanel::ResetDoor()
 {
+	for (int32 I = 0; I < 2; ++I) { SoundPlayback[I].Reset(SoundAudio[I], true); }
 	const double Before = Motion.AngleDeg;
 	Motion.Reset();
 	for (int32 H = 0; H < 2; ++H)
@@ -624,6 +631,7 @@ FString AVBoRHingedPanel::GetMeasurementText(const FVBoRDoorMetrics* Baseline) c
 
 void AVBoRHingedPanel::EndPlay(const EEndPlayReason::Type Reason)
 {
+	for (int32 I = 0; I < 2; ++I) { SoundPlayback[I].Reset(SoundAudio[I], false); }
 	EndAxisHold(TEXT("end play"), false);
 	OutsideGrab->GetInteractionPointerEventDelegate().RemoveDynamic(this, &AVBoRHingedPanel::HandleOutsidePointer);
 	InsideGrab->GetInteractionPointerEventDelegate().RemoveDynamic(this, &AVBoRHingedPanel::HandleInsidePointer);
@@ -633,3 +641,9 @@ void AVBoRHingedPanel::EndPlay(const EEndPlayReason::Type Reason)
 
 void AVBoRHingedPanel::NotifyUnlocked() { OnPanelUnlocked.Broadcast(this); }
 void AVBoRHingedPanel::NotifyLocked() { OnPanelLocked.Broadcast(this); }
+
+void AVBoRHingedPanel::AdvanceSounds(double Seconds)
+{
+	SoundPlayback[0].Advance(UnlockedCue, SoundAudio[0], Seconds, SoundFrame);
+	SoundPlayback[1].Advance(LatchedCue, SoundAudio[1], Seconds, SoundFrame);
+}
