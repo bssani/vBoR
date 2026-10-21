@@ -13,6 +13,7 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "Sound/SoundBase.h"
+#include "Subsystem/IsdkWorldSubsystem.h"
 #include "UObject/ConstructorHelpers.h"
 
 AVBoRPokeButton::AVBoRPokeButton()
@@ -72,7 +73,8 @@ void AVBoRPokeButton::OnConstruction(const FTransform& Transform)
 void AVBoRPokeButton::PreInitializeComponents()
 {
 	Super::PreInitializeComponents();
-	// setter 는 WorldSubsystem 을 읽으므로 CDO 에서 호출하지 않음 (P0-b §3)
+	// 썸네일·BP 미리보기 world 에는 subsystem 이 없음 (P4i D7·Q2)
+	if (!UIsdkWorldSubsystem::TryGet(GetWorld())) { return; }
 	ButtonVisual->SetPokeInteractable(Poke);
 	PointerAudio->SetPointable(Poke.Get());
 	PointerAudio->SetSelectAudio(PressAudio);
