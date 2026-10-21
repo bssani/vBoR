@@ -11,6 +11,28 @@
 
 ---
 
+## 2026-10-21 — 상자 대신 메시로 잡기·밀기(P2f·P2g)
+
+사용자 요청: 잡기·밀기를 상자가 아니라 메시 모양으로 하고 싶다. 확인한 사실과 채택한 방식이다.
+
+**잡기 — ISDK는 원점 거리로 고른다:**
+- 손바닥은 반지름 4 cm 구, pinch는 1.2 cm 구이고 객체 종류는 WorldDynamic이다. overlap이 시작되면 hover가 된다(`IsdkHandGrabDetector.h:130`·`:134`·`:143`, `.cpp:35-70`·`:358`).
+- 겹친 후보 중 하나를 고르는 기준은 **잡는 충돌 컴포넌트의 원점**과 손바닥 사이의 거리다(`IsdkHandGrabDetector.cpp:397-460`).
+- CAD 메시는 피벗이 모두 차 원점이다. 그래서 메시를 그대로 잡는 충돌로 쓰면 가까운 부품끼리 거리가 같아져 고르기가 정해지지 않는다.
+- LiftGateStudy는 잡는 부품이 하나라 이 문제가 없었다. ISDK 기본 `ColliderMode = FindStaticMesh`로 메시가 잡는 충돌이었다(`IsdkGrabbableComponent.h:198`).
+- **채택(사용자 제안):** 잡는 부품 메시만 피벗을 부품 쪽으로 옮기고, 옮긴 값을 `MeshRestFromRoot`에 넣는다. 부품 옵션으로 메시를 잡는 충돌로 쓴다(P2f).
+- 메시를 잡는 충돌로 쓰려면 simple 충돌이 있거나 Use Complex Collision As Simple이어야 한다. overlap은 simple 쪽 질의이기 때문이다.
+
+**밀기 — trace는 복합 충돌에 맞고 채널을 안 본다:**
+- `LineTraceComponent`는 채널 응답 없이 `BodyInstance->LineTrace(bTraceComplex)`만 부른다(`PrimitiveComponent.cpp:3513-3525`). Chaos 구현은 shape의 complex·simple 표시만 거른다(`PhysInterface_Chaos.cpp:905-955`).
+- 그래서 `QueryOnly` + 모든 채널 Ignore인 문 메시에 `bTraceComplex = true`로 쏘면 보이는 삼각형에 맞는다. 다른 질의·손 감지에는 걸리지 않는다.
+- 다만 `NoCollision`이면 물리 몸이 안 생겨 trace가 안 된다(`PrimitiveComponent.cpp:2018`).
+- 가장 가까운 점 질의(`GetClosestPointOnCollision`·`GetDistanceToCollision`)는 convex 같은 단순 충돌에서만 된다(`PrimitiveComponent.h:2274-2300`). 그래서 밀기에는 쓰지 않는다.
+- **채택(P2g):** 밀기 계산의 면 평면 Y를 손 점마다 그 자리의 trace 결과로 바꾼다. 나머지 규칙(교차·두께·손바닥 방향·속도 상한·걸쇠)은 그대로다.
+- **채택하지 않음:** convex 하나로 문을 감싸기. 오목한 안쪽 트림이 메워진다. 또 2026-10-21 대화에서 Claude가 "단순 충돌이 밀기에 낫다"고 했던 것은 trace 방식을 검토하기 전의 판단이라 고쳤다.
+
+---
+
 ## 2026-10-20 — Buck 정렬 앞뒤·좌우·Yaw: 실물 좌석 점 4개(U-18)
 
 사용자 정보: 좌석 기준점(SgRP)은 하나이고 좌석 중앙, 방석보다 살짝 위에 있다. 사용자 결정: 볼트가 아니어도 실물 좌석의 점 네 개에 맞춘다.
