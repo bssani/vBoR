@@ -2,14 +2,15 @@
 
 > 읽는 사람: 회사 PC에서 실제 차 CAD로 L_Main을 채우는 사람과 그 PC의 AI.
 > 먼저 읽을 것: [Company-PC-Guide.md](Company-PC-Guide.md)(지금 상태, CAD에서 뽑을 값 §4).
-> 기준: `main` 2026-10-21(PR #59 뒤 — L_Main이 BP 차, 선바이저·시동 버튼·사이드미러 추가, 부품별 소리 칸). 코드 위치는 `Source/vBoR/` 아래다.
+> 기준: `main` 2026-10-21(PR #62 뒤 — L_Main이 BP 차, 선바이저·시동 버튼·사이드미러 추가, 부품별 소리 칸, 박스 BP). 코드 위치는 `Source/vBoR/` 아래다.
 
 ## 0. 상태 — 무엇이 확인됐고 무엇이 아닌가
 
 - **L_Main의 차는 이미 BP 틀이다(P4i, 2026-10-21).**
-  - `Content/Main/Car/`에 BP 23개가 있다(§3·§4.2 표의 BP 이름). 메시는 모두 엔진 Cube다.
+  - `Content/Main/Car/`에 BP 24개가 있다(§3·§4.2 표의 BP 이름). 메시는 모두 엔진 Cube다.
     - 18개(P4i)는 근사 차와 같은 값이다.
     - 선바이저 2개(P5p)와 시동 버튼·사이드미러 3개(P5q)는 근사 차에 없는 부품이다. 값은 명세에 적은 근사 값이다.
+    - 박스 `BP_Box`(P5t)는 C++ 기본 박스와 같은 값이다. 레벨에 놓지 않는다 — 받침이 Play 때 만든다(§5).
   - L_Main에 차 원점으로 놓여 있다. 근사 판·근사 트렁크·"근사 형상" 표시 글자는 Outliner **`Approx` 폴더**에 모여 있다.
   - 근사 차 C++(`AP3VehicleMock`)는 이제 `Development/P3/L_P3_Flow`에만 있다.
   - **회사에서 할 일:** `Approx`를 지우고(§2-3), CAD 정적 메시를 넣고, BP마다 메시와 축 자리를 CAD로 바꾼다(§3·§4). BP를 새로 만들 필요는 없다.
@@ -20,6 +21,7 @@
   - 메시로 잡기·밀기(P2f·P2g, §4.3)는 엔진 기본 메시로만 자동화 시험했다.
   - 선바이저 잡기·밀기와 놓은 자리 유지(P5p), 시동 버튼 → 전원 → 사이드미러 접기·펴기(P5q, §6.5).
   - 소리 칸(P5r·P5s, §4.4): 이벤트마다 재생 요청이 나는 수와 frame만 시험했다. 소리는 끈 채로 돌렸다.
+  - 받침이 `BP_Box`를 만들고, 크기를 `BP_Box`에서 읽어 받침 위에 놓는다(P5t). 다른 메시로 바꾼 상태는 시험하지 않았다.
 - **아직 안 된 것:** VR(Quest 3) 확인 전부, CAD 메시로 바꾼 상태, 버튼 두 개의 CAD 피벗 처리(§4.2 버튼 줄), 실제로 들리는 소리·타이밍·위치감.
   - 막히면 그 부품 하나만 Claude에게 알려 명세로 고친다. 부모 C++를 BP 로직으로 우회하지 않는다.
 - **CAD를 넣은 뒤의 BP·L_Main을 리포에 올릴지는 미정이다.** 지금 BP 틀은 CAD가 없어서 리포에 있다. CAD 메시를 넣으면 BP와 L_Main이 CAD를 참조하게 된다. 정하기 전에는 커밋하지 않는다(Company-PC-Guide §5).
@@ -33,7 +35,7 @@ L_Main
 ├─ BP_Car_Core         차 기준점 BP — 정렬·좌석점·구역·태그 (§3)
 ├─ 부품 BP             문·손잡이·콘솔·글러브박스·레버·스티어링·룸미러·노브·버튼·리프트게이트·2열 시트
 │                      ·선바이저·시동 버튼·사이드미러 (§4)
-├─ 레벨 배치            바닥 경로 2개, 키 테이블 2개, 박스 받침·적재 영역 (§5)
+├─ 레벨 배치            바닥 경로 2개, 키 테이블 2개, 박스 받침(→ BP_Box를 만듦)·적재 영역 (§5)
 ├─ Approx 폴더         근사 판·근사 트렁크·표시 글자 — 회사에서 통째로 지움 (§2-3)
 └─ CAD 정적 메시        (회사) 움직이지 않는 것은 BP로 만들지 않고 레벨에 그대로 (U-14)
 ```
@@ -113,9 +115,10 @@ L_Main
 | 선바이저 L·R — `BP_SunVisor_L`·`_R` | `AVBoRAxisPart` | `PartMesh` / `AxisPivot`, `Axis` Y | `Release` = Stay, palm·pinch·밀기 켬, `MaxAngleDeg` 95(근사). **값 +가 내림이다** — 경첩 방향은 아래 주의 | 없음(자유모드 부품, 단계와 안 이음) | 근사 차에 없음. 근사 값: 경첩 (18, ∓37, 142), 판 16×35×1.5 cm | 자동화(P5p) |
 | 시동 버튼 — `BP_StartButton` | `AVBoRPokeButton` | `ButtonMesh` | `HitAreaScale` 1(기본값) | **`Car.StartButton`** — 전원(§6.5). Actor가 대시보드 위 버튼 자리 (27, −15, 91.6)에 있음(차 원점 아님) — CAD 피벗 처리 확인 안 함 | 근사 차에 없음 | 자동화(P5q) |
 | 사이드미러 L·R — `BP_SideMirror_L`·`_R` | `AVBoRFoldingMirror` | `MirrorMesh` / **`HingeLocationCm`·`HingeRotation`**(회전한 +Z가 접는 축) | `MeshRestFromRoot` = **펼친** 자리, `FoldAngleDeg` L −65·R +65(부호로 방향 — 차 뒤로 접힘), `SpeedDegPerSecond` 30 | L은 `BP_Door_FL` 밑(§6.5). 전원으로만 움직임, 손으로는 안 만짐 | 근사 차에 없음. 근사 값: 경첩 (40, ∓90, 100), 메시 (40, ∓100, 100) | 자동화(P5q) |
+| 박스(05) — `BP_Box` | `AVBoRCarryObject` | `CarryMesh`(Actor 루트) / 축 없음 | **`BoxSizeCm`** = 박스 크기(cm). 메시를 이 크기로 늘린다. 메시 조건은 아래 | 레벨에 놓지 않는다. `L_Main` 받침의 `BoxClass`가 이 BP다(§5) | 근사 차는 C++ 기본 박스. 근사 값 45×35×30 | 자동화(P5t) |
 
 - "자동화(P4i)"는 BP가 근사 차와 같은 자리·설정이고 연결이 된다는 뜻이다(엔진 Cube 메시, VR 전). CAD로 바꾼 뒤의 동작은 아직이다.
-- "자동화(P5p)"·"자동화(P5q)"는 BP 값으로 동작 시험을 했다는 뜻이다(엔진 Cube 메시, VR 전).
+- "자동화(P5p)"·"자동화(P5q)"·"자동화(P5t)"는 BP 값으로 동작 시험을 했다는 뜻이다(엔진 Cube 메시, VR 전).
 - **선바이저 경첩 방향:**
   - 지금 `AxisPivot`은 Yaw 180°다. 그래서 로컬 +X가 차 뒤를 향하고, 판이 경첩 뒤쪽에 놓인다.
   - CAD 경첩으로 옮길 때 이 Yaw를 그대로 두고 위치·기울기만 바꾸면 쉽다.
@@ -128,6 +131,22 @@ L_Main
   - **하우징과 거울면을 merge해서 `MirrorMesh` 하나로 넣는다.** 안쪽 거울면은 따로 움직이지 않는다(사용자 2026-10-21).
 - 콘솔박스·글러브박스도 `bPushOnMeshSurface`를 켤 수 있다. 1축 부품(레버 포함)·스티어링 휠·룸미러·노브도 `bGrabWithMesh`를 켤 수 있다. 방법은 §4.3이다.
 - 소리 파일과 타이밍은 §4.4에서 바꾼다.
+- **박스 메시·크기 바꾸기(`BP_Box`, 확인 안 함 — 자동화는 엔진 Cube로만):**
+  - BP에서 `CarryMesh` 컴포넌트를 골라 Static Mesh를 바꾼다. 크기는 `BoxSizeCm`이 정한다.
+    - 메시는 bounds가 `BoxSizeCm`이 되도록 축마다 따로 늘어난다(`Interaction/VBoRCarryObject.cpp:101-108`). CAD 메시를 원래 크기로 쓰려면 그 메시의 크기를 그대로 넣는다. 비율이 다르면 찌그러진다.
+    - 받침은 크기를 `BP_Box`에서 읽어 박스를 받침 위에 놓는다. 받침에는 크기 칸이 없다(P5t).
+  - **피벗을 박스 가운데에 둔다.**
+    - `CarryMesh`가 Actor 루트라 BP에서 메시를 옮길 수 없다. 받침은 Actor 원점을 박스 가운데로 보고 놓는다.
+    - 피벗이 바닥에 있으면 박스가 받침 위에 뜨고, 돌릴 때 모서리를 축으로 돈다.
+    - 1 cm 넘게 벗어나면 Play 때 Output Log에 경고가 뜬다("mesh bounds center is … cm from the Actor origin"). 박스를 들 때마다 새 박스가 생기므로 그때마다 한 줄씩 뜬다.
+    - 옮기는 도구는 §4.3 잡기 1과 같다(Modeling 모드 Edit Pivot, 확인 안 함). 박스는 받침이 자리를 정하므로 `MeshRestFromRoot` 같은 되돌림 값이 필요 없다.
+  - **simple collision이 있어야 한다** — 상자나 convex만 쓴다.
+    - 없으면 "No simple collision on carry mesh … movement disabled" 경고가 뜨고 박스가 움직이지 않는다(`VBoRCarryObject.cpp:133-138`). Use Complex Collision As Simple로는 안 된다(simple 요소가 없음).
+    - 구·캡슐은 쓰지 않는다. 메시를 축마다 다르게 늘리면 충돌이 가장 작은 축으로 줄어든다(§4.3 잡기 3).
+  - **받침이 덮어쓰는 값:** `LoadTarget`, `bUsePlacementAssist`(끔), `bDestroyAtFloor`(켬), `FloorHeightCm`. `BP_Box`에서 바꿔도 받침 박스에는 들지 않는다(`Interaction/VBoRBoxStand.cpp` `SpawnBox`).
+  - **높이를 크게 바꾸면 `LevelLiftMaxCm`도 본다.** 놓을 때 박스를 세우면서 위로 올릴 수 있는 한도다(P1c D2). 기본 15 cm는 기본 높이 30 cm의 절반으로 잡은 값이다.
+  - 적재 영역(`AVBoRLoadTarget`)은 박스 크기를 따르지 않는다. 트렁크 안 공간 크기로 따로 둔다(§5).
+  - `Approx`가 있는 집 PC에서 `BP_Box` 값을 바꾸면 `vBoR.P5t.E6`이 실패한다(§4.4 마지막 문단과 같은 이유).
 
 ### 4.3 메시로 잡기·밀기 — 선택(P2f·P2g, 자동화로만 확인)
 
@@ -221,7 +240,7 @@ L_Main
 | 사이드미러 `BP_SideMirror_L`·`_R` | `Mirror folding\|Sound` | `UnfoldMotorCue`·`FoldMotorCue` | 지속 | 펼치는·접는 동안. 도중에 방향이 바뀌면 앞 모터는 그 칸의 페이드대로 멈추고 새 모터가 같은 frame에 시작한다 | 무음 |
 | | | `UnfoldedCue`·`FoldedCue` | 순간 | 펼침·접힘 도착 | 무음 |
 | 전원 `BP_Car_Core` → `VehiclePower` | `Vehicle power\|Sound` | `PowerOnCue`·`PowerOffCue` | 순간 | 켜짐·꺼짐이 실제로 바뀐 순간(시동 버튼·진행자 `E`). 같은 frame에 손과 진행자가 같이 눌러도 한 번 | 무음 |
-| 박스(BP 없음 — 아래) | `Carry\|Sound` | `BlockedCue` | 순간 | 막힘에 들어간 순간. 막힌 동안 다시 안 난다 | ISDK |
+| 박스 `BP_Box` | `Carry\|Sound` | `BlockedCue` | 순간 | 막힘에 들어간 순간. 막힌 동안 다시 안 난다 | ISDK |
 | | | `PausedCue` | 지속 | 손에 든 채 추적을 잃은 동안 | ISDK, 0.25 s 반복 |
 
 - 1축 부품은 부모가 같아서 BP마다 네 칸이 다 보인다. 걸림 부품(레버)은 열림·닫힘 칸이 나지 않는다. 나머지(손잡이·선바이저)는 걸림 칸이 나지 않는다.
@@ -242,13 +261,7 @@ L_Main
   - 전원: 차 원점(바닥 가운데). 시동 버튼 쪽이 아니다.
 - 자리가 거슬리면 Claude에게 알린다. 명세로 고친다.
 
-**박스 소리를 바꾸려면 박스 BP가 필요하다 — 확인 안 함.**
-- 박스는 받침(`AVBoRBoxStand`)이 Play 때 만든다. 지금 받침의 `BoxClass`는 C++ 기본(`AVBoRCarryObject`)이라 소리를 바꿀 곳이 없다.
-- 방법:
-  1. `Content/Main/Car/Parts/`에 `AVBoRCarryObject` 자식 BP를 만든다(예 `BP_Box`). 소리 칸만 바꾼다.
-  2. L_Main의 받침 Details에서 `BoxClass`로 그 BP를 고른다.
-- 크기·적재 영역·바닥 높이는 받침이 덮어쓴다(`Interaction/VBoRBoxStand.cpp:47-49`).
-- Play로 박스가 생기고 잡히는지 본다. 그 뒤 `vBoR.*`를 돌린다.
+**박스 소리는 `BP_Box`에서 바꾼다.** 받침이 Play 때 이 BP로 박스를 만든다(P5t, §5). 메시·크기도 같은 BP에서 바꾼다(§4.2 아래 "박스 메시·크기 바꾸기").
 
 **집 PC에서 바꿀 때 — `Approx`가 있으면 `vBoR.P4i.E2`가 실패한다.**
 - E2는 `Approx`가 있으면 부품 BP의 설정 값을 근사 차와 하나씩 비교하고, 소리 칸도 비교한다(`P3Probe/P4iCarBlueprintTests.cpp:93-103`). 그래서 "`BP_Door_FL setting LatchedCue`"처럼 실패한다.
@@ -263,7 +276,7 @@ L_Main
 | 바닥 경로 — 운전석 문까지 | `AVBoRFloorRoute` | 같음. 끝 점은 문 앞 | `Route.ToDriverDoor` — 07단계 | `:137-140` |
 | 앞·뒤 키 테이블 | `AVBoRKeyTable` | 바닥에 놓음. `KeyClass` = `BP_KeyFob_Front`·`BP_KeyFob_Rear` | 키 태그는 §6.3. 뒤 키(`Car.RearKey`)는 단계가 안 쓰지만 근사 차와 같게 둠 | `:117-118`, `:283-298` |
 | 박스 적재 영역 | `AVBoRLoadTarget` | 트렁크 안. `LoadingRegion` 상자를 트렁크 안 공간 크기로 | — | `:358-364` |
-| 박스 받침 | `AVBoRBoxStand` | 차 뒤 동승석 쪽 바닥 | 태그 `Car.BoxStand`, **`LoadTarget`에 위 적재 영역을 고름**(§6.4) | `:365-368` |
+| 박스 받침 | `AVBoRBoxStand` | 차 뒤 동승석 쪽 바닥 | 태그 `Car.BoxStand`, **`LoadTarget`에 위 적재 영역을 고름**(§6.4). **`BoxClass` = `BP_Box`**(이미 골라져 있음, P5t) — 박스 메시·크기·소리는 `BP_Box`에서 바꾼다(§4.2). 비우면 박스가 생기지 않고 경고가 뜬다 | `:365-368` |
 
 - **경로는 `Car.Footprint`를 지나면 안 된다.** 흐름 시작 때 검사해서, 지나면 이유를 남기고 시작하지 않는다(`VBoRScenarioRunner.cpp:256`·`:265`).
 - 경로 점은 나중에 실제 방 크기에 맞춰 옮긴다. 플레이 영역 밖이면 경로를 숨긴다(P3b D6).
@@ -356,6 +369,7 @@ L_Main
    - **좌석 전환:** `1`·`2`로 동승석·2열에 가서 SgRP 차이만큼 옮겨졌는지, `Home`으로 돌아오는지 본다.
 5. **부품마다:** 열리는 방향·최대 각, 손잡이가 문과 같이 도는지(§6.1), 기어 버튼이 레버를 따라오는지(§6.2), 리프트게이트 버튼, 2열 F·U, 키를 집고 버튼 누르기(§6.3).
    - **박스를 트렁크에 놓아 바닥에 착지하는지** 본다. `Approx`의 근사 트렁크를 지운 뒤에는 CAD 트렁크 충돌이 받친다(§2-3).
+   - **`BP_Box` 메시를 바꿨다면:** 박스가 받침 위에 뜨거나 묻히지 않는지, 잡혀서 움직이는지 본다. Output Log에 피벗·simple collision 경고가 없어야 한다(§4.2 아래).
    - 메시로 잡는 부품은 hover가 메시에 닿을 때만 켜지는지 본다. 얇은 손잡이가 잡히는지, 가까운 부품끼리 맞게 골라지는지도 본다. 콘솔 변수 `Meta.InteractionSDK.DebugInteractionVisuals 1`은 잡는 충돌의 bounds 상자를 그린다. 메시 충돌 모양은 뷰포트 Show → Collision으로 본다.
    - 메시 표면으로 미는 문은 바깥 면과 안쪽 트림을 밀어 본다. 보이는 면에 닿을 때 밀리기 시작하는지, 돌출부와 창문 자리에서 어떻게 되는지 본다.
    - **선바이저:** 잡아 내리고 놓은 자리에 남는지 본다. 앞·뒤 면을 밀어 보고, 잡으려다 밀려 버리지 않는지 본다.
@@ -364,6 +378,7 @@ L_Main
 6. **자동화 시험** `vBoR.*`를 돌린다(Agent-Workflow §2.4). `Approx`를 지운 뒤에는 `vBoR.P4i.E2`가 근사 차 비교를 건너뛴다(Info 한 줄). 다른 P4i 시험(BP 부모, 차 원점 배치, 정렬 점 4개, 연결, 참조 규칙)은 그대로 통과해야 한다.
    - `vBoR.P5p.*`는 선바이저 BP의 값을 읽어 시험한다. 실패하면 경첩 방향·`bReverse`를 본다(§4.2 주의).
    - `vBoR.P5q.E13`은 L_Main에 전원 하나, 시동 버튼 하나, 미러 L·R과 L의 부모(`BP_Door_FL`)가 있는지 본다.
+   - `vBoR.P5t.*`는 `BP_Box`의 부모·빈 Event Graph, L_Main 받침의 `BoxClass`, 받침이 `BP_Box` 크기대로 놓는지 본다. E6만 `Approx`가 있을 때 `BP_Box`를 C++ 기본값과 비교하고, 없으면 건너뛴다.
 7. **VR(Quest 3 Link):** 계획서 §7 시험 ID로 기록한다. 확인 전까지 상태는 `not-tested`다.
 
 막힌 곳은 부품 이름, Output Log 줄, 진행자 창 이유를 그대로 적어 Claude에게 넘긴다. Claude가 명세로 고친다.
