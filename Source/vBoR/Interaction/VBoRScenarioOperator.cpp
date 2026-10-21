@@ -1,5 +1,6 @@
 #include "VBoRScenarioRunner.h"
 #include "VBoRFoldingSeat.h"
+#include "VBoRVehiclePowerComponent.h"
 #include "VBoRVehicleAlignmentComponent.h"
 #include "VBoRViewpointComponent.h"
 #include "../Spectator/VBoRSpectatorModel.h"
@@ -31,6 +32,7 @@ namespace
 		case EVBoROperatorButton::Reload: return EVBoRFlowCommand::ReloadLevel;
 		case EVBoROperatorButton::FoldSeat: return EVBoRFlowCommand::FoldSeat;
 		case EVBoROperatorButton::UnfoldSeat: return EVBoRFlowCommand::UnfoldSeat;
+		case EVBoROperatorButton::Power: return EVBoRFlowCommand::Power;
 		default: return EVBoRFlowCommand::Confirm;
 		}
 	}
@@ -136,6 +138,11 @@ FVBoRCommandDecision AVBoRScenarioRunner::EvaluateCommand(const FVBoRFlowCommand
 		return {};
 	}
 	if (Alignment && Alignment->IsSwitching()) { return Reject(EVBoRDiscard::Transition, TEXT("View transition in progress"), TEXT("명령 버림 — 전환 중")); }
+	if (Action == EVBoRFlowCommand::Power)
+	{
+		return VehiclePower.IsValid() && VehiclePower->IsAvailable() ? FVBoRCommandDecision{} :
+			Reject(EVBoRDiscard::Rule, TEXT("No vehicle power"), TEXT("명령 버림 — 전원 컴포넌트 없음 또는 중복"));
+	}
 	if (Action == EVBoRFlowCommand::FoldSeat || Action == EVBoRFlowCommand::UnfoldSeat)
 	{
 		bool bFound = false;

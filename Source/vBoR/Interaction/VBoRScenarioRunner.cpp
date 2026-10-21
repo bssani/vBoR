@@ -1,5 +1,7 @@
 #include "VBoRScenarioRunner.h"
 #include "VBoRPoweredPanel.h"
+#include "VBoRVehiclePowerComponent.h"
+#include "VBoRFoldingMirror.h"
 #include "VBoRFoldingSeat.h"
 #include "VBoRBoxStand.h"
 #include "VBoRParticipantZones.h"
@@ -139,6 +141,9 @@ AVBoRScenarioRunner::AVBoRScenarioRunner()
 void AVBoRScenarioRunner::BeginPlay()
 {
 	Super::BeginPlay();
+	int32 PowerCount = 0;
+	VehiclePower = UVBoRVehiclePowerComponent::FindUnique(GetWorld(), &PowerCount);
+	if (PowerCount == 0) { UE_LOG(LogTemp, Warning, TEXT("Vehicle power: expected one component, found 0; power disabled")); }
 	PanelText = SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold", 40)).ColorAndOpacity(FLinearColor::Black).AutoWrapText(true);
 	PanelBorder = P3TextPlate(PanelText.ToSharedRef()); Panel->SetSlateWidget(PanelBorder);
 	Panel->SetWorldScale3D(FVector(1, PanelSizeCm.X / 1000.0, PanelSizeCm.Y / 640.0));
@@ -176,6 +181,7 @@ void AVBoRScenarioRunner::BeginPlay()
 		InputComponent->BindKey(EKeys::X, IE_Pressed, this, &AVBoRScenarioRunner::KeyCancelPoints);
 		InputComponent->BindKey(EKeys::F, IE_Pressed, this, &AVBoRScenarioRunner::KeyFoldSeat);
 		InputComponent->BindKey(EKeys::U, IE_Pressed, this, &AVBoRScenarioRunner::KeyUnfoldSeat);
+		InputComponent->BindKey(EKeys::E, IE_Pressed, this, &AVBoRScenarioRunner::KeyPower);
 		for (const FKey Key : {EKeys::NumPadEight, EKeys::NumPadTwo, EKeys::NumPadFour, EKeys::NumPadSix, EKeys::NumPadFive})
 		{
 			InputComponent->BindKey(Key, IE_Pressed, this, &AVBoRScenarioRunner::KeyHomeShift).bConsumeInput = false;
@@ -480,6 +486,9 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 	case EVBoRFlowCommand::ReapplyAlignment:
 		bReapplyPending = Alignment->RequestReapply(); ++ReapplyCount;
 		Record(TEXT("진행자 정렬 다시 적용 — 암전 시작")); break;
+	case EVBoRFlowCommand::Power:
+		if (VehiclePower.IsValid()) { VehiclePower->TogglePower(EVBoRPowerSource::Operator); }
+		break;
 	case EVBoRFlowCommand::EnterFreeMode:
 		EnterFreeMode(false); break;
 	case EVBoRFlowCommand::ReloadLevel:
@@ -509,6 +518,8 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 			for (TActorIterator<AVBoRPoweredPanel> It(GetWorld()); It; ++It) { if (It->ActorHasTag(TEXT("Car.Liftgate"))) { Gates.Add(*It); } }
 			for (auto* Gate : Gates) { Gate->ResetPanel(); }
 			for (TActorIterator<AVBoRFoldingSeat> It(GetWorld()); It; ++It) { It->ResetSeat(); }
+			if (VehiclePower.IsValid()) { VehiclePower->SetPowerOn(false, EVBoRPowerSource::Restart); }
+			for (TActorIterator<AVBoRFoldingMirror> It(GetWorld()); It; ++It) { It->ResetMirror(); }
 			TSet<AVBoRHingedDoor*> Doors;
 			for (UObject* Target : Targets) { if (auto* Door = Cast<AVBoRHingedDoor>(Target)) { Doors.Add(Door); } }
 			FString Problems;
@@ -861,6 +872,7 @@ void AVBoRScenarioRunner::KeyReloadLevel() { QueueLive(EVBoRFlowCommand::ReloadL
 void AVBoRScenarioRunner::KeyReapply() { QueueLive(EVBoRFlowCommand::ReapplyAlignment, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyFoldSeat() { QueueLive(EVBoRFlowCommand::FoldSeat, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyUnfoldSeat() { QueueLive(EVBoRFlowCommand::UnfoldSeat, EVBoRCommandSource::Operator); }
+void AVBoRScenarioRunner::KeyPower() { QueueLive(EVBoRFlowCommand::Power, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyIgnore() { QueueLive(EVBoRFlowCommand::IgnoreAlignment, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyOperatorInfo()
 {

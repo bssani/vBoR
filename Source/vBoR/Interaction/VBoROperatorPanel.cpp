@@ -28,7 +28,8 @@ const TArray<FVBoROperatorShortcut>& VBoROperator::Shortcuts()
 		{EVBoROperatorButton::UnfoldSeat, EKeys::U, TEXT("Unfold rear seat"), TEXT("U")},
 		{EVBoROperatorButton::CapturePoint, EKeys::P, TEXT("Capture point"), TEXT("P")},
 		{EVBoROperatorButton::SavePoints, EKeys::S, TEXT("Save points"), TEXT("S")},
-		{EVBoROperatorButton::CancelPoints, EKeys::X, TEXT("Cancel points"), TEXT("X")}};
+		{EVBoROperatorButton::CancelPoints, EKeys::X, TEXT("Cancel points"), TEXT("X")},
+		{EVBoROperatorButton::Power, EKeys::E, TEXT("Power on/off"), TEXT("E")}};
 	return Values;
 }
 
@@ -208,6 +209,8 @@ void SVBoROperatorPanel::Construct(const FArguments& Args)
 						.Text_Lambda([this]() { return FText::FromString(Snapshot.Status.PointAlignment); })])]
 				+ SVerticalBox::Slot().AutoHeight().Padding(24,16,24,0)
 				[Section(TEXT("Seat folding"),Pair(EVBoROperatorButton::FoldSeat,EVBoROperatorButton::UnfoldSeat))]
+				+ SVerticalBox::Slot().AutoHeight().Padding(24,16,24,0)
+				[Section(TEXT("Vehicle power"),Button(EVBoROperatorButton::Power))]
 				+ SVerticalBox::Slot().AutoHeight().Padding(24,16,24,0)
 				[Section(TEXT("Free mode"),SNew(SVerticalBox)
 					+ SVerticalBox::Slot().AutoHeight()[Pair(EVBoROperatorButton::Free,EVBoROperatorButton::Reload)]
