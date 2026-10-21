@@ -66,6 +66,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Steering wheel") TObjectPtr<UBoxComponent> GrabBox;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Steering wheel") TObjectPtr<UIsdkGrabbableComponent> Grabbable;
 	UPROPERTY(VisibleAnywhere, Category="Steering wheel") TObjectPtr<UVBoRWheelGrabComponent> GrabComponent;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Steering wheel|Input", meta=(DisplayName="메시 충돌로 잡기")) bool bGrabWithMesh = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Steering wheel") FTransform MeshRestFromRoot;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Steering wheel") FTransform MarkerRestFromPivot = FTransform(FQuat::Identity,FVector(-1.6,0,16.5),FVector(0.008,0.025,0.03));
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Steering wheel", meta=(Units="deg", ClampMin="0")) float LimitAngleDeg = 450;

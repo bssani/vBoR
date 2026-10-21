@@ -1,4 +1,5 @@
 #include "VBoRSteeringWheel.h"
+#include "VBoRGrabCollider.h"
 #include "VBoRHandRigPawn.h"
 #include "Components/StaticMeshComponent.h"
 #include "Components/BoxComponent.h"
@@ -81,8 +82,7 @@ void AVBoRSteeringWheel::PreInitializeComponents()
 		FMath::IsFinite(MinGrabRadiusCm) && FMath::IsFinite(MaxGrabRadiusCm) && MinGrabRadiusCm >= 0 && MaxGrabRadiusCm >= MinGrabRadiusCm &&
 		FMath::IsFinite(MinAxisDistanceCm) && MinAxisDistanceCm > 0 && FMath::IsFinite(MinPairDistanceCm) && MinPairDistanceCm > 0;
 	if (!bGrabValid) { UE_LOG(LogSteeringWheel, Warning, TEXT("%s: Missing mesh or invalid wheel limits/radii; grabbing disabled | approximate geometry | not-tested"),*GetName()); }
-	GrabBox->SetCollisionEnabled(bGrabValid ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
-	Grabbable->SetGrabCollider(GrabBox); Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm,bGrabValid);
+	Grabbable->SetGrabCollider(ConfigureVBoRGrabCollider(WheelMesh, GrabBox, bGrabWithMesh, bGrabValid, MeshRestFromRoot)); Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm,bGrabValid);
 	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch,false);
 	GrabComponent->Configure(); GrabComponent->SetTransformTarget(AxisPivot);
 	GrabComponent->SetSingleGrabTransformerObject(Transformer); GrabComponent->SetMultiGrabTransformerObject(Transformer);

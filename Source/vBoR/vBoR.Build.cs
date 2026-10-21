@@ -10,7 +10,7 @@ public class vBoR : ModuleRules
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "OculusInteraction", "OculusInteractionPrebuilts" });
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "OculusXRInput", "HeadMountedDisplay", "XRBase", "Json", "UMG", "Slate", "SlateCore", "GameplayTags", "RenderCore" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "OculusXRInput", "HeadMountedDisplay", "XRBase", "Json", "UMG", "Slate", "SlateCore", "GameplayTags", "RenderCore", "PhysicsCore" });
 
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });

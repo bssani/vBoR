@@ -1,4 +1,5 @@
 #include "VBoRTwoAxisPart.h"
+#include "VBoRGrabCollider.h"
 #include "VBoRHandRigPawn.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -73,9 +74,8 @@ void AVBoRTwoAxisPart::PreInitializeComponents()
 	}
 	// 저장된 레벨도 실행 때 검사함. construction 은 경고를 내지 않음 (P5e E15)
 	if (!bValid) { UE_LOG(LogTwoAxisPart,Warning,TEXT("%s: Missing mesh or invalid two-axis settings; grabbing and pushing disabled | approximate geometry | no reflection | not-tested"),*GetName()); }
-	GrabBox->SetCollisionEnabled(bValid ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
-	GrabBox->SetGenerateOverlapEvents(bValid); GrabBox->SetVisibility(bValid,true);
-	Grabbable->SetGrabCollider(GrabBox); Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm,bValid);
+	GrabBox->SetVisibility(bValid,true);
+	Grabbable->SetGrabCollider(ConfigureVBoRGrabCollider(PartMesh, GrabBox, bGrabWithMesh, bValid, MeshRestFromRoot)); Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm,bValid);
 	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch,bValid);
 	GrabComponent->Configure(); GrabComponent->SetTransformTarget(PitchAxis); GrabComponent->SetSingleGrabTransformerObject(Transformer);
 	Grabbable->SetGrabTransformer(GrabComponent);
