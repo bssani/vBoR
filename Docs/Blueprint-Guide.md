@@ -149,7 +149,7 @@ L_Main
 | 박스 적재 영역 | `AVBoRLoadTarget` | 트렁크 안. `LoadingRegion` 상자를 트렁크 안 공간 크기로 | — | `:358-364` |
 | 박스 받침 | `AVBoRBoxStand` | 차 뒤 동승석 쪽 바닥 | 태그 `Car.BoxStand`, **`LoadTarget`에 위 적재 영역을 고름**(§6.4) | `:365-368` |
 
-- **경로는 `Car.Footprint`를 지나면 안 된다.** 흐름 시작 때 검사해서, 지나면 이유를 남기고 시작하지 않는다(`VBoRScenarioRunner.cpp:255`·`:265`).
+- **경로는 `Car.Footprint`를 지나면 안 된다.** 흐름 시작 때 검사해서, 지나면 이유를 남기고 시작하지 않는다(`VBoRScenarioRunner.cpp:256`·`:265`).
 - 경로 점은 나중에 실제 방 크기에 맞춰 옮긴다. 플레이 영역 밖이면 경로를 숨긴다(P3b D6).
 
 ## 6. 연결 규칙
@@ -199,7 +199,7 @@ L_Main
 | 13 | 도달 버튼 누름 | `Car.ReachButton` | `AVBoRPokeButton` |
 | 14·15 | 좌석 시점 | `Car.PassengerView`·`Car.RearView` | `UVBoRViewpointComponent` |
 
-- 태그가 없거나 종류가 다르면 흐름이 시작되지 않는다. Output Log와 VR 진행자 정보(`I`)에 `시작 차단:` 아래 `<단계>: 태그 <이름> 종류 불일치 또는 없음`으로 보인다(`VBoRScenarioRunner.cpp:238`·`:293`).
+- 태그가 없거나 종류가 다르면 흐름이 시작되지 않는다. Output Log와 VR 진행자 정보(`I`)에 `시작 차단:` 아래 `<단계>: 태그 <이름> 종류 불일치 또는 없음`으로 보인다(`VBoRScenarioRunner.cpp:240`·`:295`).
 - 시나리오 에셋은 하나만 쓴다. 근사 차와 실제 차가 같은 태그를 쓰므로 복사하지 않는다.
 
 ## 8. 손 메시 바꾸기 — `BP_vBoRPawn`
