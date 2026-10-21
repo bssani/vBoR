@@ -19,7 +19,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Box Stand") void ResetStand();
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Box Stand", meta=(Units="cm", ClampMin="1")) FVector StandSizeCm = FVector(60,60,5);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Box Stand", meta=(Units="cm")) float StandTopHeightCm = 75;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Box Stand", meta=(Units="cm", ClampMin="1")) FVector BoxSizeCm = FVector(45,35,30);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Box Stand") TSubclassOf<AVBoRCarryObject> BoxClass;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Box Stand") TObjectPtr<AVBoRLoadTarget> LoadTarget;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Box Stand") TObjectPtr<UStaticMeshComponent> Stand;
@@ -30,6 +29,7 @@ protected:
 private:
 	UPROPERTY() TArray<TObjectPtr<AVBoRCarryObject>> Boxes;
 	bool bSourceLifted = false;
+	FVector GetBoxSizeCm() const;
 	FTransform StartPose() const;
 	void SpawnBox();
 	void ClearBoxes();

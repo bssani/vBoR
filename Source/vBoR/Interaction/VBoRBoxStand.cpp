@@ -21,19 +21,31 @@ void AVBoRBoxStand::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	StandSizeCm = StandSizeCm.GetAbs().ComponentMax(FVector(1));
-	BoxSizeCm = BoxSizeCm.GetAbs().ComponentMax(FVector(1));
 	Stand->SetRelativeLocation(FVector(0,0,StandTopHeightCm-StandSizeCm.Z*0.5));
 	Stand->SetRelativeScale3D(StandSizeCm/100);
 }
 
 void AVBoRBoxStand::BeginPlay()
 {
-	Super::BeginPlay(); ResetStand();
+	Super::BeginPlay();
+	if (!BoxClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Box stand '%s': BoxClass is empty; no boxes will be spawned."), *GetName());
+	}
+	ResetStand();
 	UE_LOG(LogTemp, Log, TEXT("Box stand — approximate geometry and values (P4d D1, cm)"));
+}
+
+FVector AVBoRBoxStand::GetBoxSizeCm() const
+{
+	// BP 크기와 시작·보충 칸을 같은 기준으로 맞춤 (P5t D3, cm)
+	const AVBoRCarryObject* Defaults = BoxClass.GetDefaultObject();
+	return Defaults ? Defaults->BoxSizeCm.GetAbs().ComponentMax(FVector(1)) : FVector(1);
 }
 
 FTransform AVBoRBoxStand::StartPose() const
 {
+	const FVector BoxSizeCm = GetBoxSizeCm();
 	// 받침 접촉 오차를 피하려고 윗면에서 0.1 mm 띄움 (P1b D5·P4d D1)
 	return FTransform(GetActorQuat(), GetActorTransform().TransformPosition(FVector(0,0,StandTopHeightCm+BoxSizeCm.Z*0.5+0.01)));
 }
@@ -44,7 +56,7 @@ void AVBoRBoxStand::SpawnBox()
 	const FTransform Pose = StartPose();
 	SourceBox = GetWorld()->SpawnActorDeferred<AVBoRCarryObject>(BoxClass, Pose, this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (!SourceBox) { return; }
-	SourceBox->BoxSizeCm = BoxSizeCm; SourceBox->LoadTarget = LoadTarget;
+	SourceBox->LoadTarget = LoadTarget;
 	SourceBox->bUsePlacementAssist = false; SourceBox->bDestroyAtFloor = true;
 	SourceBox->FloorHeightCm = GetActorLocation().Z;
 	SourceBox->FinishSpawning(Pose); SourceBox->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
@@ -59,6 +71,7 @@ void AVBoRBoxStand::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	if (!bSourceLifted || (IsValid(SourceBox) && SourceBox->GetCarrySession().bPaused)) { return; }
 	const FTransform Pose = StartPose();
+	const FVector BoxSizeCm = GetBoxSizeCm();
 	const FBox Slot(-BoxSizeCm*0.5-FVector(1), BoxSizeCm*0.5+FVector(1));
 	// 손에 든 박스·되돌린 박스가 출고 공간에서 1 cm 벗어나야 보충함 (P1b D5·P4d D1)
 	for (const AVBoRCarryObject* Box : Boxes)

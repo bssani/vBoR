@@ -131,6 +131,7 @@ void AVBoRCarryObject::PreInitializeComponents()
 void AVBoRCarryObject::BeginPlay()
 {
 	Super::BeginPlay();
+	WarnIfOffCenterPivot(GetMeshLocalBounds(), GetActorScale3D());
 	if (!HasSimpleCollision())
 	{
 		UE_LOG(LogVBoRCarry, Warning, TEXT("No simple collision on carry mesh '%s' (%s); movement disabled. Add simple collision to the child mesh."),
@@ -143,6 +144,17 @@ void AVBoRCarryObject::BeginPlay()
 	Mesh->SetOverlayMaterial(nullptr);
 	Grabbable->GetInteractionPointerEventDelegate().AddUniqueDynamic(this, &AVBoRCarryObject::HandlePointer);
 	UpdateVisual();
+}
+
+void AVBoRCarryObject::WarnIfOffCenterPivot(const FBox& Bounds, const FVector& Scale) const
+{
+	if (!Bounds.IsValid) { return; }
+	// 늘린 뒤 cm 거리로 판단함. 피벗 보정은 메시에서 함 (P5t D4)
+	const double DistanceCm = (Bounds.GetCenter() * Scale).Size();
+	if (DistanceCm > 1)
+	{
+		UE_LOG(LogVBoRCarry, Warning, TEXT("Carry box '%s': mesh bounds center is %.2f cm from the Actor origin; move the mesh pivot to the box center."), *GetName(), DistanceCm);
+	}
 }
 
 FBox AVBoRCarryObject::GetMeshLocalBounds() const
