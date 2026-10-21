@@ -97,6 +97,14 @@ L_Main
 
 기본은 상자로 판정한다. 잡는 상자(`GrabBox`)는 메시 bounds에 여유를 더한 것이다. 미는 면은 bounds 평면(또는 미는 면 상자)이다. 그래서 곡면이나 비스듬한 부품은 메시 앞의 허공에서도 잡히거나 밀린다. 아래 옵션을 켜면 메시 모양 그대로 판정한다. 둘 다 기본은 꺼짐이다.
 
+**작업 전 확인 — 메시 에셋만 열어 본다.** 피벗·충돌 작업 전에 그 메시를 쓸 수 있는지 본다.
+1. Static Mesh 에디터 툴바의 Collision 보기에서 **Complex Collision**을 켠다. 보이는 메시와 똑같이 겹치면 그대로 쓸 수 있다.
+   - 아무것도 안 보이면 Details → LOD0 → Sections에서 그 섹션의 `Enable Collision`이 꺼져 있는 것이다.
+   - 보이는 메시보다 거칠면 Nanite 대체 메시로 만들어졌을 수 있다(확인 안 한 엔진 동작). 잡기·밀기도 그 거친 모양으로 판정된다.
+2. **Simple Collision** 보기로 이미 simple 충돌이 있는지 본다. 있어도 큰 상자 하나 수준이면 지금 잡는 상자와 다를 게 없다. 그러면 아래 잡기 3의 Use Complex Collision As Simple로 바꾼다.
+3. 문은 `Double Sided Geometry`를 켠 뒤 문 BP의 "설정 검사"를 누른다. Play 없이 trace되는지 알려 준다(아래 밀기 4).
+4. 잡는 부품에는 "설정 검사" 버튼이 없다. 옵션을 켜고 Play를 한 번 해서, Output Log에 `grab mesh …` 경고가 없는지 본다.
+
 **잡기 — `메시 충돌로 잡기`(`bGrabWithMesh`).** 1축 부품·스티어링 휠·룸미러·노브의 Input 칸에 있다.
 1. **메시 피벗을 손이 잡는 부분 가운데로 옮긴다.**
    - 이유: ISDK는 손바닥에 닿은 후보 중 충돌 컴포넌트 **원점**이 가장 가까운 것을 고른다(`Plugins/MetaXRInteraction/Source/OculusInteraction/Private/Interaction/GrabDetectors/IsdkHandGrabDetector.cpp:397-460`). CAD 메시는 피벗이 모두 차 원점이다. 그대로 두면 휠과 레버처럼 가까운 부품 사이에서 무엇이 잡힐지 정해지지 않는다.
@@ -114,6 +122,9 @@ L_Main
    - 둘 다 없으면 경고하고 상자로 잡는다("grab mesh has no simple collision").
 4. 옵션을 켠다. **BP에서 메시의 Collision Presets는 바꾸지 않는다.** Play 때 코드가 정한다. 켜면 Query만 하고 WorldDynamic overlap만 받으며, 끄면 충돌이 없다.
 - 그대로인 것: 휠의 잡는 반지름 검사, 레버 손가락 밀기(메시 bounds 기준), hover·잡기 색.
+- **Complex As Simple 주의:**
+  - 삼각형 충돌은 표면만 있고 안이 없다. 손바닥 감지 구(반지름 4 cm)가 표면에 닿을 때만 hover된다. 그래서 두께 8 cm보다 두꺼운 부품 안으로 손이 완전히 들어가면 hover가 끊긴다. 손잡이·레버·노브·미러·휠 테는 얇아서 거의 해당하지 않는다.
+  - 피벗 변경은 메시 에셋에 들어간다. 그래서 CAD를 다시 import하면 사라질 수 있다. **부품마다 옮긴 값을 기록해 둔다.** 다시 옮기고 `MeshRestFromRoot`에 같은 값을 넣는다.
 
 **밀기 — `메시 표면으로 밀기`(`bPushOnMeshSurface`).** 문·콘솔·글러브박스(`AVBoRHingedPanel`)의 Push face 칸에 있다.
 1. **피벗은 옮기지 않는다.** `DoorMesh`는 차 원점 피벗 그대로 두고, `MeshRestFromRoot`는 단위 변환이다. 손 점마다 그 자리의 면을 trace로 읽기 때문이다(P2g D2).
