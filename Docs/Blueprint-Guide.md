@@ -2,12 +2,14 @@
 
 > 읽는 사람: 회사 PC에서 실제 차 CAD로 L_Main을 채우는 사람과 그 PC의 AI.
 > 먼저 읽을 것: [Company-PC-Guide.md](Company-PC-Guide.md)(지금 상태, CAD에서 뽑을 값 §4).
-> 기준: `main` 2026-10-21(PR #50 뒤 — L_Main이 BP 차). 코드 위치는 `Source/vBoR/` 아래다.
+> 기준: `main` 2026-10-21(PR #54 뒤 — L_Main이 BP 차, 선바이저·시동 버튼·사이드미러 추가). 코드 위치는 `Source/vBoR/` 아래다.
 
 ## 0. 상태 — 무엇이 확인됐고 무엇이 아닌가
 
 - **L_Main의 차는 이미 BP 틀이다(P4i, 2026-10-21).**
-  - `Content/Main/Car/`에 BP 18개가 있다(§3·§4.2 표의 BP 이름). 값은 근사 차와 같고, 메시는 엔진 Cube다.
+  - `Content/Main/Car/`에 BP 23개가 있다(§3·§4.2 표의 BP 이름). 메시는 모두 엔진 Cube다.
+    - 18개(P4i)는 근사 차와 같은 값이다.
+    - 선바이저 2개(P5p)와 시동 버튼·사이드미러 3개(P5q)는 근사 차에 없는 부품이다. 값은 명세에 적은 근사 값이다.
   - L_Main에 차 원점으로 놓여 있다. 근사 판·근사 트렁크·"근사 형상" 표시 글자는 Outliner **`Approx` 폴더**에 모여 있다.
   - 근사 차 C++(`AP3VehicleMock`)는 이제 `Development/P3/L_P3_Flow`에만 있다.
   - **회사에서 할 일:** `Approx`를 지우고(§2-3), CAD 정적 메시를 넣고, BP마다 메시와 축 자리를 CAD로 바꾼다(§3·§4). BP를 새로 만들 필요는 없다.
@@ -16,6 +18,7 @@
   - 손잡이 연결(P2e), 기어 버튼 Child Actor, 키 BP와 태그, 받침 → 적재 영역(P4i E3·E4).
   - L_Main PIE에서 흐름 시작 차단이 없다(P4i E6, 정렬 없이 `O`로 시작).
   - 메시로 잡기·밀기(P2f·P2g, §4.3)는 엔진 기본 메시로만 자동화 시험했다.
+  - 선바이저 잡기·밀기와 놓은 자리 유지(P5p), 시동 버튼 → 전원 → 사이드미러 접기·펴기(P5q, §6.5).
 - **아직 안 된 것:** VR(Quest 3) 확인 전부, CAD 메시로 바꾼 상태, 버튼 두 개의 CAD 피벗 처리(§4.2 버튼 줄).
   - 막히면 그 부품 하나만 Claude에게 알려 명세로 고친다. 부모 C++를 BP 로직으로 우회하지 않는다.
 - **CAD를 넣은 뒤의 BP·L_Main을 리포에 올릴지는 미정이다.** 지금 BP 틀은 CAD가 없어서 리포에 있다. CAD 메시를 넣으면 BP와 L_Main이 CAD를 참조하게 된다. 정하기 전에는 커밋하지 않는다(Company-PC-Guide §5).
@@ -27,7 +30,8 @@ L_Main
 ├─ World Settings: GameMode Override = BP_vBoRGameMode  (손 Pawn — §8)
 ├─ VBoRScenarioRunner  (Scenario = Main/Data/DA_Main_Scenario, 19단계)
 ├─ BP_Car_Core         차 기준점 BP — 정렬·좌석점·구역·태그 (§3)
-├─ 부품 BP             문·손잡이·콘솔·글러브박스·레버·스티어링·미러·노브·버튼·리프트게이트·2열 시트 (§4)
+├─ 부품 BP             문·손잡이·콘솔·글러브박스·레버·스티어링·룸미러·노브·버튼·리프트게이트·2열 시트
+│                      ·선바이저·시동 버튼·사이드미러 (§4)
 ├─ 레벨 배치            바닥 경로 2개, 키 테이블 2개, 박스 받침·적재 영역 (§5)
 ├─ Approx 폴더         근사 판·근사 트렁크·표시 글자 — 회사에서 통째로 지움 (§2-3)
 └─ CAD 정적 메시        (회사) 움직이지 않는 것은 BP로 만들지 않고 레벨에 그대로 (U-14)
@@ -64,6 +68,7 @@ L_Main
 | Scene 또는 작은 메시 | 1 | `Car.Start` | 차 앞 밖(근사 차는 앞 끝 +250 cm), 차를 바라보게(Yaw 180) | 시작 위치 기록(P3b) | `:63-64`, `:108` |
 | `VBoR Eye Point` (`UVBoREyePointComponent`) | 0–1 | — | 운전석 설계 눈 | **선택.** 눈 방식 정렬(집 시험 대체)과 참고 표시. 없으면 기준 좌석점은 `Car.DriverView` | `:47` |
 | `VBoR Approach Zone` | 0–1 | `Car.Approach` | 차 둘레 접근 구역 | **지금 단계에서는 안 씀** | `:50`, `:87` |
+| `VehiclePower` (`UVBoRVehiclePowerComponent`) | **정확히 1** | — | 넣을 값 없음 | 시동 버튼·진행자 `E`·사이드미러(§6.5) | 근사 차에 없음(P5q) |
 
 **주의:**
 - **좌석점 셋은 같은 종류의 점이어야 한다.** 회사 차는 셋 다 SgRP이고 운전석에 `Car.DriverView`를 붙인다. 근사 차는 `Car.DriverView` 없이 눈 위치를 쓴다. 섞으면 좌석 사이 거리가 틀어진다.
@@ -104,8 +109,22 @@ L_Main
 | 13번 도달 버튼 — `BP_ReachButton` | `AVBoRPokeButton` | `ButtonMesh` | **`HitAreaScale` 1**(13번은 판정 확대 없음, AGENTS.md) | `Car.ReachButton` — 13단계. Actor가 대시보드 위 버튼 자리에 있음(차 원점 아님) — CAD 피벗 처리 확인 안 함 | `:268-273` | 자동화(P4i) |
 | 리프트게이트(011) — `BP_Liftgate` | `AVBoRPoweredPanel` | `PanelMesh` / `HingeLocationCm` | `OpenAngleDeg`, `DelaySeconds`, 열기·닫기 버튼 자리(`OpenButtonFromHinge`·`CloseButtonFromHinge`) | `Car.Liftgate` — 04·06단계. 버튼은 스스로 만듦 | `:350-357` | 자동화(P4i) |
 | 2열 등받이 — `BP_RearSeatBack` | `AVBoRFoldingSeat` | `SeatMesh` / `HingeLocationCm` | `FoldAngleDeg` | `Car.RearSeat`. 진행자 F·U가 모든 접는 시트를 찾음 | `:128-132` | 자동화(P4i) |
+| 선바이저 L·R — `BP_SunVisor_L`·`_R` | `AVBoRAxisPart` | `PartMesh` / `AxisPivot`, `Axis` Y | `Release` = Stay, palm·pinch·밀기 켬, `MaxAngleDeg` 95(근사). **값 +가 내림이다** — 경첩 방향은 아래 주의 | 없음(자유모드 부품, 단계와 안 이음) | 근사 차에 없음. 근사 값: 경첩 (18, ∓37, 142), 판 16×35×1.5 cm | 자동화(P5p) |
+| 시동 버튼 — `BP_StartButton` | `AVBoRPokeButton` | `ButtonMesh` | `HitAreaScale` 1(기본값) | **`Car.StartButton`** — 전원(§6.5). Actor가 대시보드 위 버튼 자리 (27, −15, 91.6)에 있음(차 원점 아님) — CAD 피벗 처리 확인 안 함 | 근사 차에 없음 | 자동화(P5q) |
+| 사이드미러 L·R — `BP_SideMirror_L`·`_R` | `AVBoRFoldingMirror` | `MirrorMesh` / **`HingeLocationCm`·`HingeRotation`**(회전한 +Z가 접는 축) | `MeshRestFromRoot` = **펼친** 자리, `FoldAngleDeg` L −65·R +65(부호로 방향 — 차 뒤로 접힘), `SpeedDegPerSecond` 30 | L은 `BP_Door_FL` 밑(§6.5). 전원으로만 움직임, 손으로는 안 만짐 | 근사 차에 없음. 근사 값: 경첩 (40, ∓90, 100), 메시 (40, ∓100, 100) | 자동화(P5q) |
 
 - "자동화(P4i)"는 BP가 근사 차와 같은 자리·설정이고 연결이 된다는 뜻이다(엔진 Cube 메시, VR 전). CAD로 바꾼 뒤의 동작은 아직이다.
+- "자동화(P5p)"·"자동화(P5q)"는 BP 값으로 동작 시험을 했다는 뜻이다(엔진 Cube 메시, VR 전).
+- **선바이저 경첩 방향:**
+  - 지금 `AxisPivot`은 Yaw 180°다. 그래서 로컬 +X가 차 뒤를 향하고, 판이 경첩 뒤쪽에 놓인다.
+  - CAD 경첩으로 옮길 때 이 Yaw를 그대로 두고 위치·기울기만 바꾸면 쉽다.
+  - 경첩을 반대 방향(Yaw 0 근처)으로 넣으면 `bReverse`를 뒤집어야 값 +가 내림이 된다.
+  - 방향이 틀리면 자동화 `vBoR.P5p.E2`("Actual mesh bottom moves downward")가 실패한다. 자동화는 경첩 방향이 바뀌어도 따라간다(P5p R1-1).
+- 선바이저는 얇은 판이라 메시로 잡기(§4.3)를 권장한다.
+- **사이드미러 경첩은 값으로 옮긴다.**
+  - BP 뷰포트에서 `HingePivot` 컴포넌트를 끌어 옮기면 construction이 `HingeLocationCm`·`HingeRotation`으로 덮어쓴다. 리프트게이트·2열 시트와 같은 방식이다.
+  - CAD 미러 경첩이 기울어 있으면 `HingeRotation`으로 기울인다.
+  - **하우징과 거울면을 merge해서 `MirrorMesh` 하나로 넣는다.** 안쪽 거울면은 따로 움직이지 않는다(사용자 2026-10-21).
 - 콘솔박스·글러브박스도 `bPushOnMeshSurface`를 켤 수 있다. 1축 부품(레버 포함)·스티어링 휠·룸미러·노브도 `bGrabWithMesh`를 켤 수 있다. 방법은 §4.3이다.
 
 ### 4.3 메시로 잡기·밀기 — 선택(P2f·P2g, 자동화로만 확인)
@@ -197,6 +216,25 @@ L_Main
 - `AVBoRBoxStand`의 `LoadTarget`은 **레벨에 놓은 인스턴스에서** 고른다(Details의 스포이트). BP 기본값으로는 레벨 Actor를 고를 수 없다. L_Main에는 이미 골라져 있다. 적재 영역을 지우고 새로 놓으면 다시 고른다.
 - 05단계(박스 적재)는 진행자 확인으로 끝난다. 박스가 들어갔는지는 진행자가 본다(U-15).
 
+### 6.5 전원 → 시동 버튼·사이드미러 (자동화로 확인 — P5q, VR 전)
+
+- **전원은 `BP_Car_Core`의 `VehiclePower` 컴포넌트 하나다.**
+  - 레벨에 정확히 하나여야 한다. 0개나 2개 이상이면 Output Log에 경고가 한 번 뜨고, 시동 버튼과 진행자 `E`가 둘 다 듣지 않는다.
+  - 진행자 창 `Power` 버튼은 꺼지고 이유 "No vehicle power"가 보인다.
+- **시동 버튼**은 Actor Tags `Car.StartButton`인 poke 버튼이다.
+  - Play 때 전원이 한 번 찾아서 묶는다(`Interaction/VBoRVehiclePowerComponent.cpp:45`). 여러 개면 모두 묶는다.
+  - 버튼이 없으면 경고가 한 번 뜬다. 진행자 `E`는 그대로 된다.
+- **동작:**
+  - 시작은 꺼짐이고 미러는 접혀 있다. 에디터에서는 펼친 자리로 보인다.
+  - 누르면 켜지고 미러가 펼쳐진다. 다시 누르면 꺼지고 접힌다. 움직이는 중에 누르면 그 각에서 바로 방향을 바꾼다.
+  - 진행자 창 "Power on/off"와 키 `E`도 같은 명령이다. 같은 frame에 손과 진행자가 같이 눌러도 한 번만 바뀐다.
+  - 진행자 `R`은 전원을 끄고 미러를 바로 접는다.
+- **운전석 미러는 레벨 Outliner에서 `BP_Door_FL` 밑에 붙인다**(손잡이와 같은 방법, §6.1). Play 때 문의 `HingePivot`에 붙어 문과 같이 돈다(`Interaction/VBoRFoldingMirror.cpp:36`). 동승석 미러는 문 BP가 없어 차 원점에 둔다.
+- **시동에 다른 동작을 붙일 때는 버튼을 고치지 않는다.**
+  - 그 부품이 전원 컴포넌트의 이벤트 `OnPowerChanged(bOn)`을 받게 한다(`VBoRVehiclePowerComponent.h:22`). 미러가 첫 예다.
+  - 이벤트는 BP에서도 받을 수 있지만, BP에 로직을 넣지 않는 규칙(§4.1-7)이 있다. 새 동작은 Claude에게 알려 명세로 만든다.
+- `Car.StartButton`은 시나리오 단계가 쓰지 않는다(§7 표에 없음). 평가 단계 중에 눌러도 미러만 움직인다.
+
 ## 7. 시나리오 태그 표 — `Main/Data/DA_Main_Scenario`
 
 | 단계 | 판정 | 대상 태그 | 대상 종류 |
@@ -238,7 +276,11 @@ L_Main
    - **박스를 트렁크에 놓아 바닥에 착지하는지** 본다. `Approx`의 근사 트렁크를 지운 뒤에는 CAD 트렁크 충돌이 받친다(§2-3).
    - 메시로 잡는 부품은 hover가 메시에 닿을 때만 켜지는지 본다. 얇은 손잡이가 잡히는지, 가까운 부품끼리 맞게 골라지는지도 본다. 콘솔 변수 `Meta.InteractionSDK.DebugInteractionVisuals 1`은 잡는 충돌의 bounds 상자를 그린다. 메시 충돌 모양은 뷰포트 Show → Collision으로 본다.
    - 메시 표면으로 미는 문은 바깥 면과 안쪽 트림을 밀어 본다. 보이는 면에 닿을 때 밀리기 시작하는지, 돌출부와 창문 자리에서 어떻게 되는지 본다.
+   - **선바이저:** 잡아 내리고 놓은 자리에 남는지 본다. 앞·뒤 면을 밀어 보고, 잡으려다 밀려 버리지 않는지 본다.
+   - **시동 버튼·미러:** 누르면 두 미러가 펼쳐지고 다시 누르면 접히는지 본다. 운전석 문을 연 채로도 해 본다. 진행자 `E`와 `R`도 본다(§6.5). 미러가 접히며 차체·창문과 겹치지 않는지 본다.
 6. **자동화 시험** `vBoR.*`를 돌린다(Agent-Workflow §2.4). `Approx`를 지운 뒤에는 `vBoR.P4i.E2`가 근사 차 비교를 건너뛴다(Info 한 줄). 다른 P4i 시험(BP 부모, 차 원점 배치, 정렬 점 4개, 연결, 참조 규칙)은 그대로 통과해야 한다.
+   - `vBoR.P5p.*`는 선바이저 BP의 값을 읽어 시험한다. 실패하면 경첩 방향·`bReverse`를 본다(§4.2 주의).
+   - `vBoR.P5q.E13`은 L_Main에 전원 하나, 시동 버튼 하나, 미러 L·R과 L의 부모(`BP_Door_FL`)가 있는지 본다.
 7. **VR(Quest 3 Link):** 계획서 §7 시험 ID로 기록한다. 확인 전까지 상태는 `not-tested`다.
 
 막힌 곳은 부품 이름, Output Log 줄, 진행자 창 이유를 그대로 적어 Claude에게 넘긴다. Claude가 명세로 고친다.
