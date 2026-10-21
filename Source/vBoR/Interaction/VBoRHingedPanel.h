@@ -70,6 +70,7 @@ public:
 	UFUNCTION(CallInEditor, Category="Hinged panel|Setup", meta=(DisplayName="설정 검사")) void CheckSetup();
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category="Hinged panel|Setup", meta=(DisplayName="설정 검사 결과", MultiLine="true")) FString SetupReport;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Push face", meta=(DisplayName="미는 면 상자 사용")) bool bUsePushFaceBox = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Push face", meta=(DisplayName="메시 표면으로 밀기")) bool bPushOnMeshSurface = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Push face", meta=(Units="cm", ClampMin="0", DisplayName="메시 두께 경고 기준")) float PushFaceWarnThicknessCm = 20;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Hinged panel|Push face", meta=(DisplayName="미는 면 상자", ToolTip="HingePivot 좌표의 상자. 사용을 켠 뒤 위치·크기·scale을 조절함. 회전은 0이어야 함 (cm).")) TObjectPtr<UBoxComponent> PushFaceBox;
 	bool BeginGrabFromAxisPart(AVBoRAxisPart* Part);
@@ -120,10 +121,13 @@ private:
 	friend struct FP2cTestAccess;
 	friend struct FP2dTestAccess;
 	friend struct FP2eTestAccess;
+	friend struct FP2gTestAccess;
 	struct FSetupAssessment
 	{
 		AVBoRAxisPart* Handles[2] = {nullptr, nullptr};
 		TArray<FString> Problems;
+		TArray<FString> Notices;
+		bool bMeshTraceable = false;
 	};
 	FSetupAssessment EvaluateSetup() const;
 	void CollectHandleCandidates(TArray<AVBoRAxisPart*> (&Candidates)[2]) const;
@@ -132,6 +136,10 @@ private:
 	bool CanConnectAxisHandle(AVBoRAxisPart* Part, TArray<FString>& Problems) const;
 	void ApplyAxisHandle(int32 Handle, AVBoRAxisPart* Part);
 	FBox MeshFaceBounds() const;
+	void ConfigurePushCollision();
+	bool QueryMeshFace(const FVector& DoorPoint, int32 Face, double& OutY) const;
+	bool HasTraceableMesh() const;
+	bool bMeshPushReady = false;
 	UPROPERTY() TObjectPtr<AVBoRAxisPart> HoldingAxisPart;
 	int32 AxisHoldHand = INDEX_NONE, AxisHoldHandle = INDEX_NONE;
 	double AxisHoldStartSeconds = 0;

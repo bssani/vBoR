@@ -38,6 +38,8 @@ struct FVBoRDoorMotion
 	int32 PushHand = INDEX_NONE, PushFace = INDEX_NONE;
 	double PalmAngleDeg[2] = {-1, -1};
 	FVBoRDoorMetrics Metrics;
+	// 문 좌표의 점·면 → 면 Y (cm). 빈 질의는 기존 평면 유지 (P2g D5)
+	TFunction<bool(const FVector&, int32, double&)> QueryFace;
 	bool BeginGrab(int32 Hand, int32 Handle, const FVBoRDoorHand& Input);
 	bool Unlock(int32 Handle = INDEX_NONE);
 	bool ReleaseGrab(bool bTracked);

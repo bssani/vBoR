@@ -107,7 +107,7 @@ void AVBoRHingedPanel::SyncSettings()
 	if (DoorMesh->GetStaticMesh() || bUsePushFaceBox)
 	{
 		FBox Bounds = MeshFaceBounds();
-		if (bUsePushFaceBox && PushFaceBox->GetRelativeRotation().IsNearlyZero())
+		if (!bPushOnMeshSurface && bUsePushFaceBox && PushFaceBox->GetRelativeRotation().IsNearlyZero())
 		{
 			const FVector Extent = PushFaceBox->GetUnscaledBoxExtent() * PushFaceBox->GetRelativeScale3D().GetAbs();
 			Bounds = FBox(PushFaceBox->GetRelativeLocation() - Extent, PushFaceBox->GetRelativeLocation() + Extent);
@@ -119,6 +119,11 @@ void AVBoRHingedPanel::SyncSettings()
 	Motion.LatchAngleDeg = LatchAngleDeg; Motion.RearmAngleDeg = RearmAngleDeg;
 	Motion.PalmLimitDeg = PalmLimitDeg; Motion.MinAxisDistanceCm = MinAxisDistanceCm;
 	Motion.bAllowPalmOpening = bAllowPalmOpening;
+	if (bPushOnMeshSurface && bMeshPushReady)
+	{
+		Motion.QueryFace = [this](const FVector& Point, int32 Face, double& Y) { return QueryMeshFace(Point, Face, Y); };
+	}
+	else { Motion.QueryFace = nullptr; }
 	UpdateGrabAreas();
 }
 
@@ -126,6 +131,7 @@ void AVBoRHingedPanel::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	DoorMesh->SetRelativeTransform(MeshRestFromRoot.GetRelativeTransform(HingePivot->GetRelativeTransform()));
+	ConfigurePushCollision();
 	if (!bUsePushFaceBox && DoorMesh->GetStaticMesh())
 	{
 		const FBox Bounds = MeshFaceBounds();
@@ -148,6 +154,47 @@ void AVBoRHingedPanel::SetAxisHandle(int32 Handle, AVBoRAxisPart* Part)
 FBox AVBoRHingedPanel::MeshFaceBounds() const
 {
 	return DoorMesh->GetStaticMesh() ? DoorMesh->GetStaticMesh()->GetBoundingBox().TransformBy(DoorMesh->GetRelativeTransform()) : FBox(Motion.FaceMinCm, Motion.FaceMaxCm);
+}
+
+void AVBoRHingedPanel::ConfigurePushCollision()
+{
+	// 컴포넌트 trace 만 허용함 (손 감지·짐·월드 질의와 분리, P2g D6)
+	DoorMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
+	DoorMesh->SetGenerateOverlapEvents(false);
+	DoorMesh->SetCollisionEnabled(bPushOnMeshSurface ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
+}
+
+bool AVBoRHingedPanel::QueryMeshFace(const FVector& Point, int32 Face, double& OutY) const
+{
+	const FBox Bounds = MeshFaceBounds();
+	OutY = Face == 0 ? Bounds.Max.Y : Bounds.Min.Y;
+	constexpr double TraceMarginCm = 1; // bounds 밖에서 시작함 (면 위 시작의 모호함 방지, P2g §5)
+	FVector Start(Point.X, Bounds.Max.Y + TraceMarginCm, Point.Z);
+	FVector End(Point.X, Bounds.Min.Y - TraceMarginCm, Point.Z);
+	if (Face == 1) { Swap(Start, End); }
+	const FTransform Frame = HingePivot->GetComponentTransform();
+	FCollisionQueryParams Params;
+	Params.bTraceComplex = true;
+	FHitResult Hit;
+	if (!DoorMesh->LineTraceComponent(Hit, Frame.TransformPosition(Start), Frame.TransformPosition(End), Params)) { return false; }
+	OutY = Frame.InverseTransformPosition(Hit.ImpactPoint).Y;
+	return true;
+}
+
+bool AVBoRHingedPanel::HasTraceableMesh() const
+{
+	const FBox Bounds = MeshFaceBounds();
+	// 모서리는 피하고 내부 3×3만 검사함 (시작·설정 검사 공통, P2g D7)
+	for (int32 X = 1; X <= 3; ++X)
+	{
+		for (int32 Z = 1; Z <= 3; ++Z)
+		{
+			double Y;
+			if (QueryMeshFace(FVector(FMath::Lerp(Bounds.Min.X, Bounds.Max.X, X / 4.0), 0,
+				FMath::Lerp(Bounds.Min.Z, Bounds.Max.Z, Z / 4.0)), 0, Y)) { return true; }
+		}
+	}
+	return false;
 }
 
 void AVBoRHingedPanel::CollectHandleCandidates(TArray<AVBoRAxisPart*> (&Candidates)[2]) const
@@ -244,11 +291,17 @@ AVBoRHingedPanel::FSetupAssessment AVBoRHingedPanel::EvaluateSetup() const
 	{
 		Result.Problems.Add(TEXT("Non-cube DoorMesh still uses mock MeshRestFromRoot; check CAD car-origin pivot (usually identity)."));
 	}
-	if (!bUsePushFaceBox && MeshFaceBounds().GetSize().Y > PushFaceWarnThicknessCm)
+	if (bPushOnMeshSurface)
+	{
+		Result.bMeshTraceable = HasTraceableMesh();
+		if (!Result.bMeshTraceable) { Result.Problems.Add(TEXT("DoorMesh has no traceable collision; push uses bounds.")); }
+		if (bUsePushFaceBox) { Result.Notices.Add(TEXT("PushFaceBox ignored while pushing on the mesh surface.")); }
+	}
+	if (!bPushOnMeshSurface && !bUsePushFaceBox && MeshFaceBounds().GetSize().Y > PushFaceWarnThicknessCm)
 	{
 		Result.Problems.Add(FString::Printf(TEXT("Mesh face thickness %.2f cm exceeds %.2f cm; check merged protrusions or use PushFaceBox."), MeshFaceBounds().GetSize().Y, PushFaceWarnThicknessCm));
 	}
-	if (bUsePushFaceBox && !PushFaceBox->GetRelativeRotation().IsNearlyZero())
+	if (!bPushOnMeshSurface && bUsePushFaceBox && !PushFaceBox->GetRelativeRotation().IsNearlyZero())
 	{
 		Result.Problems.Add(TEXT("PushFaceBox relative rotation must be zero; using mesh bounds."));
 	}
@@ -259,6 +312,7 @@ void AVBoRHingedPanel::CheckSetup()
 {
 	const FSetupAssessment Setup = EvaluateSetup();
 	SetupReport = Setup.Problems.IsEmpty() ? TEXT("문제 없음") : FString::Join(Setup.Problems, TEXT("\n"));
+	for (const FString& Notice : Setup.Notices) { SetupReport += TEXT("\n") + Notice; }
 	UE_LOG(LogAxisDoor, Log, TEXT("%s setup check:\n%s"), *GetName(), *SetupReport);
 }
 
@@ -337,6 +391,7 @@ bool AVBoRHingedPanel::BeginAxisGrab(AVBoRAxisPart* Part, const FVBoRDoorHand& I
 
 void AVBoRHingedPanel::PreInitializeComponents()
 {
+	ConfigurePushCollision();
 	SyncSettings();
 	HandleVisualRestCm[0] = OutsideHandleMesh->GetRelativeLocation();
 	HandleVisualRestCm[1] = InsideHandleMesh->GetRelativeLocation();
@@ -365,7 +420,10 @@ void AVBoRHingedPanel::BeginPlay()
 	OutsideGrab->GetInteractionPointerEventDelegate().AddUniqueDynamic(this, &AVBoRHingedPanel::HandleOutsidePointer);
 	InsideGrab->GetInteractionPointerEventDelegate().AddUniqueDynamic(this, &AVBoRHingedPanel::HandleInsidePointer);
 	const FSetupAssessment Setup = EvaluateSetup();
+	bMeshPushReady = Setup.bMeshTraceable;
+	SyncSettings();
 	for (const FString& Problem : Setup.Problems) { UE_LOG(LogAxisDoor, Warning, TEXT("%s P2e setup: %s"), *GetName(), *Problem); }
+	for (const FString& Notice : Setup.Notices) { UE_LOG(LogAxisDoor, Log, TEXT("%s: %s"), *GetName(), *Notice); }
 	ApplyAxisHandle(0, Setup.Handles[0]); ApplyAxisHandle(1, Setup.Handles[1]);
 	if (bUseLatch && !bUseOutsideGrabArea && !bUseInsideGrabArea && !OutsideAxisHandle && !InsideAxisHandle)
 	{
