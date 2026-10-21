@@ -2,7 +2,7 @@
 
 > 읽는 사람: 회사 PC에서 실제 차 CAD로 L_Main을 채우는 사람과 그 PC의 AI.
 > 먼저 읽을 것: [Company-PC-Guide.md](Company-PC-Guide.md)(지금 상태, CAD에서 뽑을 값 §4).
-> 기준: `main` 2026-10-21(PR #54 뒤 — L_Main이 BP 차, 선바이저·시동 버튼·사이드미러 추가). 코드 위치는 `Source/vBoR/` 아래다.
+> 기준: `main` 2026-10-21(PR #59 뒤 — L_Main이 BP 차, 선바이저·시동 버튼·사이드미러 추가, 부품별 소리 칸). 코드 위치는 `Source/vBoR/` 아래다.
 
 ## 0. 상태 — 무엇이 확인됐고 무엇이 아닌가
 
@@ -19,7 +19,8 @@
   - L_Main PIE에서 흐름 시작 차단이 없다(P4i E6, 정렬 없이 `O`로 시작).
   - 메시로 잡기·밀기(P2f·P2g, §4.3)는 엔진 기본 메시로만 자동화 시험했다.
   - 선바이저 잡기·밀기와 놓은 자리 유지(P5p), 시동 버튼 → 전원 → 사이드미러 접기·펴기(P5q, §6.5).
-- **아직 안 된 것:** VR(Quest 3) 확인 전부, CAD 메시로 바꾼 상태, 버튼 두 개의 CAD 피벗 처리(§4.2 버튼 줄).
+  - 소리 칸(P5r·P5s, §4.4): 이벤트마다 재생 요청이 나는 수와 frame만 시험했다. 소리는 끈 채로 돌렸다.
+- **아직 안 된 것:** VR(Quest 3) 확인 전부, CAD 메시로 바꾼 상태, 버튼 두 개의 CAD 피벗 처리(§4.2 버튼 줄), 실제로 들리는 소리·타이밍·위치감.
   - 막히면 그 부품 하나만 Claude에게 알려 명세로 고친다. 부모 C++를 BP 로직으로 우회하지 않는다.
 - **CAD를 넣은 뒤의 BP·L_Main을 리포에 올릴지는 미정이다.** 지금 BP 틀은 CAD가 없어서 리포에 있다. CAD 메시를 넣으면 BP와 L_Main이 CAD를 참조하게 된다. 정하기 전에는 커밋하지 않는다(Company-PC-Guide §5).
 
@@ -126,6 +127,7 @@ L_Main
   - CAD 미러 경첩이 기울어 있으면 `HingeRotation`으로 기울인다.
   - **하우징과 거울면을 merge해서 `MirrorMesh` 하나로 넣는다.** 안쪽 거울면은 따로 움직이지 않는다(사용자 2026-10-21).
 - 콘솔박스·글러브박스도 `bPushOnMeshSurface`를 켤 수 있다. 1축 부품(레버 포함)·스티어링 휠·룸미러·노브도 `bGrabWithMesh`를 켤 수 있다. 방법은 §4.3이다.
+- 소리 파일과 타이밍은 §4.4에서 바꾼다.
 
 ### 4.3 메시로 잡기·밀기 — 선택(P2f·P2g, 자동화로만 확인)
 
@@ -172,6 +174,86 @@ L_Main
   - 빼려면 그 메시의 Collision Complexity를 Use Simple Collision As Complex로 두고, 미러가 없는 simple 충돌을 만든다(P2g §1).
 - Nanite 메시는 복합 충돌이 원본보다 거친 대체 메시로 만들어질 수 있다(확인 안 함). 밀리는 면이 보이는 면과 다르면 알려 달라.
 - 문에 붙은 손잡이는 위 "잡기"대로 따로 한다.
+
+### 4.4 소리 바꾸기 — 소리 칸(P5r·P5s, 자동화로만 확인)
+
+부품마다 이벤트별 **소리 칸**이 있다. 칸마다 소리 파일과 타이밍을 BP 값으로 넣는다. Event Graph는 쓰지 않는다(§4.1-7).
+
+**어디서:**
+- BP를 열고 Class Defaults → Details에서 아래 표의 "분류" 칸(`…|Sound`)을 찾는다.
+- 전원은 `BP_Car_Core`에서 `VehiclePower` 컴포넌트를 골라 본다.
+- 소리 파일은 `Content/Main/Audio/`에 둔다(권장). `Development/`의 소리를 쓰면 P4i 참조 시험이 실패한다.
+
+**칸 하나의 값**(`Interaction/VBoRSoundCue.h`):
+
+| 값 | 뜻 | 기본 |
+|---|---|---|
+| `Sound` | 소리 에셋(SoundWave·SoundCue·MetaSound). 비우면 무음 | 아래 표 |
+| `StartDelaySeconds` (s) | 이벤트 뒤 소리가 나기까지. frame 시간으로 센다 | 0 |
+| `VolumeMultiplier`·`PitchMultiplier` | 재생할 때 곱하는 값 | 1·1 |
+| `Attenuation` | 감쇠 설정. 비우면 소리 에셋의 설정을 쓴다(아래 "소리 자리") | 비움 |
+| `RepeatSeconds` (s) — 지속 칸만 | 0이면 시작 때 한 번 낸다. 루프 에셋이면 상태 동안 계속 난다. 0보다 크면 그 간격으로 다시 낸다. 0.05 s보다 작으면 0.05 s로 쓴다 | 0 |
+| `FadeOutSeconds` (s) — 지속 칸만 | 상태가 끝날 때 줄이며 멈추는 시간. 0이면 바로 멈춘다 | 0 |
+
+**칸 표:**
+- "ISDK"는 지금 들리는 ISDK poke 누름 소리(지연 0)다. 기본값이 지금 소리 그대로다.
+- "무음"은 새로 생긴 칸이다.
+- "순간" 칸은 이벤트마다 한 번 난다. "지속" 칸은 상태가 이어지는 동안 난다.
+
+| 부품 BP | 분류 | 칸 | 종류 | 언제 | 기본 |
+|---|---|---|---|---|---|
+| 버튼 `BP_GearButton`·`BP_ReachButton`·`BP_StartButton` | `Poke Button\|Sound` | `PressedCue` | 순간 | 누를 때마다. 부품이 받지 않은 누름도 낸다(키를 쥔 손 등) | ISDK |
+| | | `ReleasedCue` | 순간 | 뗄 때마다 | 무음 |
+| 리프트게이트 `BP_Liftgate` | `Powered Panel\|Sound` | `ButtonPressedCue`·`ButtonReleasedCue` | 순간 | 열기·닫기 버튼을 누름·뗌. 버튼은 Play 때 생기므로 여기서 바꾼다 | ISDK·무음 |
+| | | `OpenAcceptedCue`·`CloseAcceptedCue` | 순간 | 열기·닫기 요청을 받은 다음 frame. 대기·움직이는 중 같은 쪽 요청에는 안 난다 | 무음 |
+| | | `WarningCue` | 지속 | 받은 다음 frame부터 열림·닫힘 도착까지(대기·움직임 동안) | ISDK, 0.5 s 반복 |
+| | | `MotorCue` | 지속 | 움직이기 시작한 frame부터 도착까지. 끼여서 다시 열려도 이어진다 | 무음 |
+| | | `OpenedCue`·`ClosedCue` | 순간 | 열림·닫힘 도착 frame | 무음 |
+| | | `ObstructedCue` | 순간 | 끼임 감지 frame | 무음 |
+| 키 `BP_KeyFob_Front`·`_Rear` | `Key\|Sound` | `ButtonPressedCue`·`ButtonReleasedCue` | 순간 | 열림·잠금 버튼을 누름·뗌 | ISDK·무음 |
+| 문·콘솔·글러브박스 `BP_Door_FL`·`BP_ConsoleLid`·`BP_Glovebox` | `Hinged panel\|Sound` | `UnlockedCue` | 순간 | 손잡이로 걸쇠가 풀린 순간 | ISDK |
+| | | `LatchedCue` | 순간 | 닫혀 잠긴 순간 | ISDK |
+| 손잡이·선바이저 `BP_DoorHandle_FL_*`·`BP_GloveboxHandle`·`BP_SunVisor_*` | `Axis part\|Sound` | `OpenedCue`·`ClosedCue` | 순간 | 열림 기준(`OpenThreshold`)·닫힘 기준(`ClosedThreshold`)을 넘은 frame | ISDK |
+| 기어·방향지시 레버 `BP_GearLever`·`BP_TurnSignalLever` | `Axis part\|Sound` | `DetentCue` | 순간 | 걸림 위치가 바뀐 frame. 한 frame에 둘을 넘으면 두 번 | ISDK |
+| | | `NudgeCue` | 순간 | 방향지시 레버의 차선 변경 걸림 | ISDK |
+| 노브 `BP_ConsoleKnob` | `Knob\|Sound` | `StepCue` | 순간 | 한 칸 넘을 때마다 | ISDK |
+| 스티어링 휠 `BP_SteeringWheel` | `Steering wheel\|Sound` | `LimitCue` | 순간 | 한계 각도에 닿은 frame | ISDK |
+| 사이드미러 `BP_SideMirror_L`·`_R` | `Mirror folding\|Sound` | `UnfoldMotorCue`·`FoldMotorCue` | 지속 | 펼치는·접는 동안. 도중에 방향이 바뀌면 앞 모터는 그 칸의 페이드대로 멈추고 새 모터가 같은 frame에 시작한다 | 무음 |
+| | | `UnfoldedCue`·`FoldedCue` | 순간 | 펼침·접힘 도착 | 무음 |
+| 전원 `BP_Car_Core` → `VehiclePower` | `Vehicle power\|Sound` | `PowerOnCue`·`PowerOffCue` | 순간 | 켜짐·꺼짐이 실제로 바뀐 순간(시동 버튼·진행자 `E`). 같은 frame에 손과 진행자가 같이 눌러도 한 번 | 무음 |
+| 박스(BP 없음 — 아래) | `Carry\|Sound` | `BlockedCue` | 순간 | 막힘에 들어간 순간. 막힌 동안 다시 안 난다 | ISDK |
+| | | `PausedCue` | 지속 | 손에 든 채 추적을 잃은 동안 | ISDK, 0.25 s 반복 |
+
+- 1축 부품은 부모가 같아서 BP마다 네 칸이 다 보인다. 걸림 부품(레버)은 열림·닫힘 칸이 나지 않는다. 나머지(손잡이·선바이저)는 걸림 칸이 나지 않는다.
+- 룸미러·2열 시트·키 쥐기·문 여닫는 움직임에는 소리 칸이 없다(P5s 범위 밖).
+
+**재생 규칙:**
+- 같은 칸이 소리가 끝나기 전에 다시 울리면 처음부터 다시 난다. 다른 칸끼리는 서로 끊지 않는다.
+- 진행자 `R`, 부품 초기화, Play 끝에서는 예약된 소리가 지워지고 나는 소리가 바로 멈춘다(페이드 없음). `R`과 Play 시작 때는 전원·미러 소리가 나지 않는다.
+- 각도 지점 소리(예: 닫히기 3° 전)는 없다. 비슷한 효과가 필요하면 소리 파일 앞의 빈 부분을 줄이거나 늘린다.
+
+**소리 자리와 감쇠:**
+- **감쇠가 없으면 소리가 위치 없이 들린다.** 칸의 `Attenuation`과 소리 에셋 둘 다 감쇠가 없으면 엔진이 공간화하지 않는다(엔진 `Engine/Private/Components/AudioComponent.cpp:1306-1320`, `Engine/Private/ActiveSound.cpp:1088`). 지금 기본 ISDK 소리도 에셋에 감쇠가 없다(에셋 파일만 봤고 소리로는 확인 안 함).
+- **부품 쪽에서 들리게 하려면 감쇠를 넣는다.** 감쇠 에셋 하나를 만들어 여러 칸에 같이 써도 된다.
+- **감쇠를 넣으면 이 자리에서 들린다:**
+  - 문·콘솔·글러브박스·리프트게이트: 경첩 축(`HingePivot`). 잠김 소리도 걸쇠 쪽이 아니라 경첩 쪽에서 난다.
+  - 1축 부품·휠: `AxisPivot`. 노브: `Pivot`.
+  - 버튼: 버튼 메시. 미러: `MirrorMesh`. 박스: 박스 메시.
+  - 전원: 차 원점(바닥 가운데). 시동 버튼 쪽이 아니다.
+- 자리가 거슬리면 Claude에게 알린다. 명세로 고친다.
+
+**박스 소리를 바꾸려면 박스 BP가 필요하다 — 확인 안 함.**
+- 박스는 받침(`AVBoRBoxStand`)이 Play 때 만든다. 지금 받침의 `BoxClass`는 C++ 기본(`AVBoRCarryObject`)이라 소리를 바꿀 곳이 없다.
+- 방법:
+  1. `Content/Main/Car/Parts/`에 `AVBoRCarryObject` 자식 BP를 만든다(예 `BP_Box`). 소리 칸만 바꾼다.
+  2. L_Main의 받침 Details에서 `BoxClass`로 그 BP를 고른다.
+- 크기·적재 영역·바닥 높이는 받침이 덮어쓴다(`Interaction/VBoRBoxStand.cpp:47-49`).
+- Play로 박스가 생기고 잡히는지 본다. 그 뒤 `vBoR.*`를 돌린다.
+
+**집 PC에서 바꿀 때 — `Approx`가 있으면 `vBoR.P4i.E2`가 실패한다.**
+- E2는 `Approx`가 있으면 부품 BP의 설정 값을 근사 차와 하나씩 비교하고, 소리 칸도 비교한다(`P3Probe/P4iCarBlueprintTests.cpp:93-103`). 그래서 "`BP_Door_FL setting LatchedCue`"처럼 실패한다.
+- §2-3과 같은 이유다. 회사에서는 `Approx`를 먼저 지우므로 해당 없다.
+- 전원 칸은 컴포넌트 값이라 이 비교에 들지 않는다. 소리를 넣어도 E2가 통과한다(P5s R1-1).
 
 ## 5. 레벨에 놓는 것 — 이미 놓여 있음(P4i), 자리만 옮김
 
@@ -278,6 +360,7 @@ L_Main
    - 메시 표면으로 미는 문은 바깥 면과 안쪽 트림을 밀어 본다. 보이는 면에 닿을 때 밀리기 시작하는지, 돌출부와 창문 자리에서 어떻게 되는지 본다.
    - **선바이저:** 잡아 내리고 놓은 자리에 남는지 본다. 앞·뒤 면을 밀어 보고, 잡으려다 밀려 버리지 않는지 본다.
    - **시동 버튼·미러:** 누르면 두 미러가 펼쳐지고 다시 누르면 접히는지 본다. 운전석 문을 연 채로도 해 본다. 진행자 `E`와 `R`도 본다(§6.5). 미러가 접히며 차체·창문과 겹치지 않는지 본다.
+   - **소리(§4.4):** 넣은 칸마다 이벤트를 한 번씩 일으켜 들어 본다. 지연이 움직임과 맞는지, 감쇠를 넣은 칸이 부품 쪽에서 들리는지 본다. 박스는 든 채 손을 시야 밖으로 빼 보류음 간격(0.25 s)을 듣는다.
 6. **자동화 시험** `vBoR.*`를 돌린다(Agent-Workflow §2.4). `Approx`를 지운 뒤에는 `vBoR.P4i.E2`가 근사 차 비교를 건너뛴다(Info 한 줄). 다른 P4i 시험(BP 부모, 차 원점 배치, 정렬 점 4개, 연결, 참조 규칙)은 그대로 통과해야 한다.
    - `vBoR.P5p.*`는 선바이저 BP의 값을 읽어 시험한다. 실패하면 경첩 방향·`bReverse`를 본다(§4.2 주의).
    - `vBoR.P5q.E13`은 L_Main에 전원 하나, 시동 버튼 하나, 미러 L·R과 L의 부모(`BP_Door_FL`)가 있는지 본다.
