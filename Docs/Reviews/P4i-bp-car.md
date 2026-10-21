@@ -42,3 +42,5 @@
   - **재개 순서:** C++ 수정 → 에디터 닫고 빌드 → 에디터를 열어 남은 BP·`L_Main`(이미 저장된 9개는 중복 생성하지 않음) → 저장 → 에디터 닫기 → 전체 시험 한 번(명세 §6-5).
     - `Saved/P4iRecovery/L_Main.umap` 복사본은 그대로 둔다.
     - wip 커밋 `a932579`의 BP 9개는 이어서 쓴다.
+
+- **Codex 재개 결과 (2026-10-21): 반영함 (`fix: assemble Blueprint car and guard button previews`).** 개정 1·2를 적용함. 제품 변경은 `AVBoRPokeButton::PreInitializeComponents`의 subsystem 보호뿐이며, 두 버튼 BP 저장·썸네일 생성에서 새 crash 없음. BP 18개와 `L_Main` 저장 완료. E1–E5·E7은 최종 전체 실행에서 6/6 성공, 전체 `vBoR.*`는 발견·완료·성공 478/478, 실패 0, 프로세스 exit 0. non-unity·unity 성공, vBoR 컴파일 경고·오류 0. E6 PIE에서 지정 경고 없이 진행자 창의 `Mission 1 of 19 / 01`을 확인함(`Saved/Screenshots/P4iOperatorStep01.png`, `Saved/Logs/P4iResumeEditor.log`). 플레이 영역 비교 불가로 기존 O 명령으로 정렬 없이 시작함. 첫 부분 시험 5/6의 E2 실패는 콘솔 경첩 Roll 부호와 시험의 중복 이름 표시 자식 대응을 고쳤고, E2 재실행 1/1 및 최종 전체 실행에서 통과함. 새 질문 없음. 기기·정식 T-01–T-10은 `not-tested`. 상세 보고는 마지막 구현 커밋 본문과 HANDOFF에 둠. Claude 리뷰 회차는 작성하지 않음.
