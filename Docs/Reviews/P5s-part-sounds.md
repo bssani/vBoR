@@ -2,7 +2,7 @@
 
 명세: [P5s-part-sounds.md](../Specs/P5s-part-sounds.md) · 브랜치: `codex/P5s-part-sounds` · 베이스: `main@630eea8`
 
-상태: **1회차 리뷰 — 문제 1개(R1-1, 내 명세 감사의 빈틈) 열림.** 누가 고칠지 사용자 결정 대기. 질문 없음.
+상태: **1회차 리뷰 — 문제 1개(R1-1, 내 명세 감사의 빈틈), Claude가 직접 반영함(사용자 2026-10-21 "Claude가 고침"). 참고 1도 같이 막음. 열린 항목 없음. 머지 승인 대기.** 질문 없음.
 
 ## 리뷰 1회차 (2026-10-21, Claude — `179972b`)
 
@@ -19,6 +19,7 @@
 - `vBoR.*` **528/528**, `TEST COMPLETE. EXIT CODE: 0`. 로그 `Saved/Logs/P5sReview*.log`.
   - P5s 12, P5r 14, P4i 6, P5p 11, P5q 13개 포함.
   - 도우미가 바뀐 기존 시험도 모두 통과했다: P2d 16, P5b 16, P5c 14, P5d 20, P5f 16, P5m 14.
+- R1-1 반영 뒤: non-unity·unity 성공(고친 세 파일이 다시 컴파일됨), vBoR 경고·오류 0. `vBoR.*` **528/528**(P5s 12, P4i 6 포함), EXIT CODE 0. 로그 `Saved/Logs/P5sR1*.log`.
 
 **Codex 토큰:** 한 세션에 **8.85M**이고, 하위 에이전트는 0이다.
 - 17:58에 Codex 사용량 한도로 멈췄다. 커밋·최종 전체 시험 전이었다. 한도가 풀린 뒤 같은 대화에서 이어서 끝냈다.
@@ -45,7 +46,7 @@
 - **정리(E11).** 부품 8종의 `EndPlay`에서 지연 중인 소리가 모두 지워지고 바로 멈춘다(미러·전원도 실제 예약을 만든 뒤에 본다).
 - 시험 전용 멤버는 `WITH_DEV_AUTOMATION_TESTS` 안에 있다. 주석 말투는 규칙대로다.
 
-### R1-1 시동음을 넣으면 `vBoR.P4i.E2`가 실패함 — 열림
+### R1-1 시동음을 넣으면 `vBoR.P4i.E2`가 실패함 — 반영함 (Claude, 이 커밋)
 
 **문제:**
 - 위치: `Interaction/VBoRVehiclePowerComponent.cpp`(`179972b`) `BeginPlay`의 `for (I < 2) EnsureSoundAudio(I)`.
@@ -61,14 +62,21 @@
 - 첫 재생 frame에 컴포넌트 하나를 등록하는 비용은 무시할 만하다.
 - `UGameplayStatics::SpawnSoundAttached`로 바꾸지 않는다. 장치가 없으면 null이라 P5r D3의 시험 조건에 맞지 않는다.
 
-**확인할 시험:**
+**반영한 것:**
+- `VBoRVehiclePowerComponent.cpp` `BeginPlay`에서 미리 만드는 줄을 지웠다. 오디오는 첫 요청(`SetPowerOn`의 `EnsureSoundAudio`) 때만 생긴다. 주석도 고쳤다.
+- 참고 1도 같이 막았다. `FVBoRSoundPlayback::Advance` 첫 줄에서 frame 시간이 유한하지 않으면 0으로 본다.
+- P5s E9: 소리를 넣고 Play한 뒤 차체 오디오가 0개이고, 첫 켬 뒤 1개가 차 루트에 붙는지 본다. 그 뒤 R로 꺼서 이어지는 기존 단언의 출발 상태를 맞췄다.
+- P5s E4 끝: 1축 부품 지연 중 `Tick(NaN)` 뒤에도 0.3 s에 소리가 난다.
+- 기존 시험(P4i E2 포함)은 바꾸지 않았다.
+
+**확인할 시험(처음 적은 것):**
 - P5s E9를 고친다. 소리를 넣고 Play한 뒤에는 소유 Actor의 scene 컴포넌트 수가 그대로다(오디오 없음).
 - 첫 켬 뒤에는 오디오 컴포넌트가 하나 생기고 차 루트에 붙는다. 지금 `:218` 단언을 첫 켬 뒤로 옮긴다.
 - `vBoR.P4i.E2`는 그대로다.
 
 ### 참고
 
-1. **frame 시간이 NaN이면 그 칸의 지연 소리가 영영 안 난다.**
+1. **frame 시간이 NaN이면 그 칸의 지연 소리가 영영 안 난다 — 반영함 (Claude, 이 커밋, R1-1과 같이).**
    - 1축 부품·노브·휠은 `AdvanceSounds`를 유한성 검사(`if (!FMath::IsFinite(DeltaSeconds) …) return;`)보다 먼저 부른다.
    - `FMath::Max(0.0, NaN)`은 NaN을 돌려준다. 그래서 `Pending`과 `HeldRemaining`이 NaN이 되고, 그 예약은 끝나지 않는다(`VBoRSoundCue.cpp` `Advance` 첫 줄).
    - 실제 엔진의 frame 시간은 유한이라 영향은 거의 없다.

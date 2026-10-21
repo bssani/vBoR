@@ -37,7 +37,8 @@ void FVBoRSoundPlayback::BeginHeld(const FVBoRHeldSoundCue& Cue, UAudioComponent
 
 void FVBoRSoundPlayback::Advance(const FVBoRSoundCue& Cue, UAudioComponent* Audio, double Seconds, uint64 Frame)
 {
-	Seconds = FMath::Max(0.0, Seconds);
+	// NaN 이면 예약이 영영 안 끝나므로 0 으로 봄 (일부 부품은 유한성 검사 전에 부름, P5s 리뷰 참고 1)
+	Seconds = FMath::IsFinite(Seconds) ? FMath::Max(0.0, Seconds) : 0.0;
 	int32 Due = 0;
 	for (int32 I = Pending.Num() - 1; I >= 0; --I)
 	{

@@ -33,7 +33,6 @@ UVBoRVehiclePowerComponent* UVBoRVehiclePowerComponent::FindUnique(UWorld* World
 void UVBoRVehiclePowerComponent::BeginPlay()
 {
 	Super::BeginPlay();
-	for (int32 I = 0; I < 2; ++I) { EnsureSoundAudio(I); }
 	bPowerOn = false;
 	const auto Components = PowerComponents(GetWorld());
 	bAvailable = Components.Num() == 1;
@@ -96,7 +95,7 @@ void UVBoRVehiclePowerComponent::SetPowerOn(bool bOn, EVBoRPowerSource Source)
 
 void UVBoRVehiclePowerComponent::EnsureSoundAudio(int32 Slot)
 {
-	// 무음 기본값은 차체 컴포넌트를 늘리지 않음 (기존 BP/근사 차 비교 유지, P5s D3·§3)
+	// 첫 요청 때만 만듦. 소리를 넣어도 Play 시작 때는 차체 컴포넌트가 늘지 않음 (P4i E2 Core 비교 유지, P5s R1-1)
 	if (SoundAudio[Slot] || !(Slot == 0 ? PowerOnCue.Sound : PowerOffCue.Sound)) { return; }
 	SoundAudio[Slot] = NewObject<UAudioComponent>(GetOwner());
 	SoundAudio[Slot]->bAutoActivate = false; SoundAudio[Slot]->SetupAttachment(GetOwner()->GetRootComponent());

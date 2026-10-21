@@ -155,6 +155,10 @@ bool FP5sDelays::RunTest(const FString&)
 	Tick(.2f); for (auto* Audio : {B,A,P,K,H,X,M,V}) { TestEqual(TEXT("before .3 s"),Audio->Plays,0); }
 	Tick(.1f); for (auto* Audio : {B,A,P,K,H,X,M,V}) { TestEqual(TEXT("at .3 s"),Audio->Plays,1); }
 	TestFalse(TEXT("button idle Tick off"),W.Button->IsActorTickEnabled()); TestFalse(TEXT("power idle Tick off"),W.Power->IsComponentTickEnabled());
+	// NaN frame 시간은 0 으로 봄. 예약이 영영 안 끝나지 않게 함 (P5s 리뷰 참고 1)
+	FP5sTestAccess::Open(W.Axis,false); FP5sTestAccess::Open(W.Axis,true);
+	W.Axis->Tick(std::numeric_limits<float>::quiet_NaN()); TestEqual(TEXT("NaN frame keeps delay"),A->Plays,1);
+	W.Axis->Tick(.3f); TestEqual(TEXT("delay after NaN frame"),A->Plays,2);
 	return true;
 }
 
@@ -215,7 +219,14 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5sPower, "vBoR.P5s.E9Power", EAutomationTestF
 bool FP5sPower::RunTest(const FString&)
 {
 	FP5sWorld W; auto* S = W.Button->PressedCue.Sound.Get(); W.Power->PowerOnCue.Sound = W.Power->PowerOffCue.Sound = S; W.Play();
-	TestTrue(TEXT("power audio on vehicle root"), W.Power->GetSoundAudioForTest(0)->GetAttachParent() == W.Car->GetRootComponent());
+	// 소리를 넣어도 Play 시작 때는 차체에 오디오가 없음. 첫 요청 때 하나 생김 (P4i E2 Core 비교 유지, P5s R1-1)
+	TArray<UAudioComponent*> CarAudio; W.Car->GetComponents(CarAudio);
+	TestEqual(TEXT("no vehicle audio before first request"), CarAudio.Num(), 0);
+	W.Power->SetPowerOn(true); W.Car->GetComponents(CarAudio);
+	TestEqual(TEXT("first request adds one vehicle audio"), CarAudio.Num(), 1);
+	if (TestNotNull(TEXT("power on audio"), W.Power->GetSoundAudioForTest(0)))
+	{ TestTrue(TEXT("power audio on vehicle root"), W.Power->GetSoundAudioForTest(0)->GetAttachParent() == W.Car->GetRootComponent()); }
+	W.Power->SetPowerOn(false, EVBoRPowerSource::Restart);
 	auto* On = FP5sTestAccess::Observe(W.Power,0); auto* Off = FP5sTestAccess::Observe(W.Power,1);
 	W.Poke(W.Button); W.Power->TogglePower(EVBoRPowerSource::Operator); TestEqual(TEXT("same frame coalesced"),On->Plays,1); TestEqual(TEXT("no duplicate off"),Off->Plays,0);
 	++GFrameCounter; W.Power->TogglePower(EVBoRPowerSource::Operator); TestEqual(TEXT("operator off"),Off->Plays,1);
