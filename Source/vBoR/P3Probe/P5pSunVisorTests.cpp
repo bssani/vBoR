@@ -43,7 +43,7 @@ TArray<FProperty*> P5pProperties()
 	return Properties;
 }
 
-AP5mTrackedPart* P5pPart(FP5pWorld& W, UClass* Class)
+AP5mTrackedPart* P5pPart(FP5pWorld& W, UClass* Class, bool bFlipHinge = false)
 {
 	if (!Class) { return nullptr; }
 	const AVBoRAxisPart* Defaults = Class->GetDefaultObject<AVBoRAxisPart>();
@@ -53,6 +53,13 @@ AP5mTrackedPart* P5pPart(FP5pWorld& W, UClass* Class)
 	for (FProperty* Property : P5pProperties()) { Property->CopyCompleteValue_InContainer(Part, Defaults); }
 	Part->AxisPivot->SetRelativeTransform(Defaults->AxisPivot->GetRelativeTransform());
 	Part->PartMesh->SetStaticMesh(Defaults->PartMesh->GetStaticMesh());
+	if (bFlipHinge)
+	{
+		// 회사 CAD 경첩을 반대 방향(local Z 180 deg)으로 넣고 bReverse 로 맞춘 경우. 메시 자리는 그대로 (P5p R1-1)
+		FTransform Pivot = Part->AxisPivot->GetRelativeTransform();
+		Pivot.SetRotation(Pivot.GetRotation() * FQuat(FVector::ZAxisVector, FMath::DegreesToRadians(180.)));
+		Part->AxisPivot->SetRelativeTransform(Pivot); Part->bReverse = !Part->bReverse;
+	}
 	Part->FinishSpawning(FTransform::Identity);
 	return Part;
 }
@@ -98,19 +105,37 @@ void P5pRelease(AVBoRAxisPart* Part, UIsdkGrabberComponent* Grabber, bool Pinch)
 }
 
 // 쉬는 메시의 실제 bounds 에 손 점을 놓음. fixture 입력은 경첩의 쉬는 좌표계임 (P5p E4–E8, cm)
+// 반지름·면 방향은 제품 ConfigurePush 와 같은 규칙으로 bounds 에서 구함 (경첩 방향을 CAD 로 바꿔도 따라감, P5p R1-1)
 struct FP5pSurface
 {
 	FBox Bounds;
-	double Radius;
+	FVector Radial = FVector::ZeroVector, Normal = FVector::ZeroVector;
+	double RadialMin = TNumericLimits<double>::Max(), RadialMax = TNumericLimits<double>::Lowest();
+	double NormalMin = TNumericLimits<double>::Max(), NormalMax = TNumericLimits<double>::Lowest();
 	explicit FP5pSurface(AVBoRAxisPart* Part)
-		: Bounds(Part->PartMesh->GetStaticMesh()->GetBoundingBox().TransformBy(Part->PartMesh->GetRelativeTransform())),
-		  Radius(FMath::Lerp(Bounds.Min.X, Bounds.Max.X, .8)) {}
+		: Bounds(Part->PartMesh->GetStaticMesh()->GetBoundingBox().TransformBy(Part->PartMesh->GetRelativeTransform()))
+	{
+		// 축 Y 에 수직인 Z·X 중 긴 쪽이 반지름, 메시 중심 쪽 부호. 법선 = 축 × 반지름 (VBoRAxisPart.cpp ConfigurePush)
+		const int32 R = Bounds.GetExtent().Z >= Bounds.GetExtent().X ? 2 : 0;
+		Radial[R] = Bounds.GetCenter()[R] < 0 ? -1 : 1;
+		Normal = FVector::CrossProduct(FVector::YAxisVector, Radial);
+		for (int32 Corner = 0; Corner < 8; ++Corner)
+		{
+			const FVector P(Corner & 1 ? Bounds.Max.X : Bounds.Min.X, Corner & 2 ? Bounds.Max.Y : Bounds.Min.Y, Corner & 4 ? Bounds.Max.Z : Bounds.Min.Z);
+			const double A = FVector::DotProduct(P, Radial), B = FVector::DotProduct(P, Normal);
+			RadialMin = FMath::Min(RadialMin, A); RadialMax = FMath::Max(RadialMax, A);
+			NormalMin = FMath::Min(NormalMin, B); NormalMax = FMath::Max(NormalMax, B);
+		}
+	}
+	// 면 0 은 원래 각을 키움. 값 + (내림) 은 bReverse 아니면 면 0, bReverse 면 면 1 (AdvancePush·ValueTransform)
+	static int32 LowerFace(const AVBoRAxisPart* Part) { return Part->bReverse ? 1 : 0; }
 	FVector Point(const AVBoRAxisPart* Part, double AngleDeg, int32 Face, double OutsideCm = 0, double RadialCm = -1) const
 	{
-		// +Y 회전에서 +X 끝의 아래 방향은 -Z. 면 0 은 윗면, 면 1 은 아랫면임 (P5p D2)
-		const double Z = Face == 0 ? Bounds.Max.Z + OutsideCm : Bounds.Min.Z - OutsideCm;
+		// 면 0 은 법선 최소 쪽, 면 1 은 최대 쪽. 바깥은 각 면에서 법선 반대·같은 쪽임
+		const double N = Face == 0 ? NormalMin - OutsideCm : NormalMax + OutsideCm;
+		const double R = RadialCm < 0 ? FMath::Lerp(RadialMin, RadialMax, .8) : RadialCm;
 		return FQuat(FVector::YAxisVector, FMath::DegreesToRadians(AngleDeg * (Part->bReverse ? -1 : 1)))
-			.RotateVector(FVector(RadialCm < 0 ? Radius : RadialCm, Bounds.GetCenter().Y, Z));
+			.RotateVector(Radial * R + Normal * N + FVector(0, Bounds.GetCenter().Y, 0));
 	}
 };
 
@@ -221,32 +246,38 @@ bool FP5pPinch::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5pFront, "vBoR.P5p.E4FrontPushAndMax", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP5pFront::RunTest(const FString&)
 {
-	for (const TCHAR* Name : P5pNames)
+	for (const TCHAR* Name : P5pNames) { for (bool bFlip : {false, true})
 	{
-		FP5pWorld W; auto* Part = P5pPart(W, P5pClass(*this, Name)); if (!TestNotNull(Name, Part)) { continue; }
-		const FP5pSurface Surface(Part); W.Play(); P5pPushStart(Part, Surface, 0);
-		P5pPushTo(Part, Surface, 0, Part->MaxAngleDeg * .5);
-		TestTrue(TEXT("Face zero increases value"), P5pAngle(Part) > 0 && Part->GetDebugText().Contains(TEXT("face=0")));
-		P5pPushTo(Part, Surface, 0, Part->MaxAngleDeg + 1);
-		TestTrue(TEXT("Front push clamps at maximum deg"), FMath::IsNearlyEqual(P5pAngle(Part), static_cast<double>(Part->MaxAngleDeg), .001));
-	}
+		FP5pWorld W; auto* Part = P5pPart(W, P5pClass(*this, Name), bFlip); if (!TestNotNull(Name, Part)) { continue; }
+		const FString Label = FString(Name) + (bFlip ? TEXT(" flipped hinge") : TEXT(""));
+		const FP5pSurface Surface(Part); const int32 Face = FP5pSurface::LowerFace(Part);
+		W.Play(); const double BottomBefore = Part->PartMesh->Bounds.GetBox().Min.Z;
+		P5pPushStart(Part, Surface, Face);
+		P5pPushTo(Part, Surface, Face, Part->MaxAngleDeg * .5);
+		TestTrue(Label + TEXT(" lowering face increases value"), P5pAngle(Part) > 0 && Part->GetDebugText().Contains(FString::Printf(TEXT("face=%d"), Face)));
+		TestTrue(Label + TEXT(" push lowers actual mesh bottom"), Part->PartMesh->Bounds.GetBox().Min.Z < BottomBefore);
+		P5pPushTo(Part, Surface, Face, Part->MaxAngleDeg + 1);
+		TestTrue(Label + TEXT(" front push clamps at maximum deg"), FMath::IsNearlyEqual(P5pAngle(Part), static_cast<double>(Part->MaxAngleDeg), .001));
+	} }
 	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5pBack, "vBoR.P5p.E5BackPushAndZero", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP5pBack::RunTest(const FString&)
 {
-	for (const TCHAR* Name : P5pNames)
+	for (const TCHAR* Name : P5pNames) { for (bool bFlip : {false, true})
 	{
-		FP5pWorld W; auto* Part = P5pPart(W, P5pClass(*this, Name)); if (!TestNotNull(Name, Part)) { continue; }
-		const FP5pSurface Surface(Part); W.Play(); P5pPushStart(Part, Surface, 0);
-		P5pPushTo(Part, Surface, 0, Part->MaxAngleDeg * .5); P5pDetach(Part);
-		const double Before = P5pAngle(Part); TestTrue(TEXT("Visor initially lowered"), Before > 0);
-		P5pPushStart(Part, Surface, 1); P5pPushTo(Part, Surface, 1, Before / 2);
-		TestTrue(TEXT("Face one reduces value"), P5pAngle(Part) < Before && Part->GetDebugText().Contains(TEXT("face=1")));
-		P5pPushTo(Part, Surface, 1, -1);
-		TestTrue(TEXT("Back push clamps at zero deg"), FMath::IsNearlyZero(P5pAngle(Part), .001));
-	}
+		FP5pWorld W; auto* Part = P5pPart(W, P5pClass(*this, Name), bFlip); if (!TestNotNull(Name, Part)) { continue; }
+		const FString Label = FString(Name) + (bFlip ? TEXT(" flipped hinge") : TEXT(""));
+		const FP5pSurface Surface(Part); const int32 Down = FP5pSurface::LowerFace(Part), Up = 1 - Down;
+		W.Play(); P5pPushStart(Part, Surface, Down);
+		P5pPushTo(Part, Surface, Down, Part->MaxAngleDeg * .5); P5pDetach(Part);
+		const double Before = P5pAngle(Part); TestTrue(Label + TEXT(" visor initially lowered"), Before > 0);
+		P5pPushStart(Part, Surface, Up); P5pPushTo(Part, Surface, Up, Before / 2);
+		TestTrue(Label + TEXT(" raising face reduces value"), P5pAngle(Part) < Before && Part->GetDebugText().Contains(FString::Printf(TEXT("face=%d"), Up)));
+		P5pPushTo(Part, Surface, Up, -1);
+		TestTrue(Label + TEXT(" back push clamps at zero deg"), FMath::IsNearlyZero(P5pAngle(Part), .001));
+	} }
 	return true;
 }
 
@@ -256,8 +287,9 @@ bool FP5pPushStay::RunTest(const FString&)
 	for (const TCHAR* Name : P5pNames)
 	{
 		FP5pWorld W; auto* Part = P5pPart(W, P5pClass(*this, Name)); if (!TestNotNull(Name, Part)) { continue; }
-		const FP5pSurface Surface(Part); W.Play(); P5pPushStart(Part, Surface, 0);
-		P5pPushTo(Part, Surface, 0, Part->MaxAngleDeg * .4);
+		const FP5pSurface Surface(Part); const int32 Face = FP5pSurface::LowerFace(Part);
+		W.Play(); P5pPushStart(Part, Surface, Face);
+		P5pPushTo(Part, Surface, Face, Part->MaxAngleDeg * .4);
 		const double Before = P5pAngle(Part); TestTrue(TEXT("Push moved visor"), Before > 0);
 		P5pDetach(Part); Part->Tick(1.f);
 		TestFalse(TEXT("Detached hand ends push"), Part->IsSpectatorInteracting());
@@ -272,15 +304,16 @@ bool FP5pPriority::RunTest(const FString&)
 	for (const TCHAR* Name : P5pNames) { for (int32 Hand : {0, 1})
 	{
 		FP5pWorld W; auto* Part = P5pPart(W, P5pClass(*this, Name)); if (!TestNotNull(Name, Part)) { continue; }
-		const FP5pSurface Surface(Part); auto* Grabber = P5pGrabber(W, Hand); Part->PushGrabbers[Hand] = Grabber; W.Play();
-		P5pPushStart(Part, Surface, 0); P5pPushTo(Part, Surface, 0, Part->MaxAngleDeg * .2);
+		const FP5pSurface Surface(Part); const int32 Face = FP5pSurface::LowerFace(Part);
+		auto* Grabber = P5pGrabber(W, Hand); Part->PushGrabbers[Hand] = Grabber; W.Play();
+		P5pPushStart(Part, Surface, Face); P5pPushTo(Part, Surface, Face, Part->MaxAngleDeg * .2);
 		TestTrue(TEXT("Push active before grab"), Part->IsSpectatorInteracting());
 		const double Before = P5pAngle(Part);
 		if (!P5pGrab(*this, Part, Grabber, true, Hand)) { continue; }
 		TestTrue(TEXT("Grab immediately clears push"), Part->GetDebugText().Contains(TEXT("push=-1")));
 		P5pMoveGrab(Part, Grabber, 5);
 		TestTrue(TEXT("Selected hand drives visor"), FMath::IsNearlyEqual(P5pAngle(Part), Before + 5, .001));
-		P5pPoint(Part, Surface.Point(Part, Before + 15, 0), 1 - Hand);
+		P5pPoint(Part, Surface.Point(Part, Before + 15, Face), 1 - Hand);
 		TestTrue(TEXT("Other contact cannot push held visor"), Part->GetDebugText().Contains(TEXT("push=-1")));
 		TestTrue(TEXT("Held angle follows grab only"), FMath::IsNearlyEqual(P5pAngle(Part), Before + 5, .001));
 		Part->Hands[0] = Part->Hands[1] = FVBoRDoorHand(); P5pRelease(Part, Grabber, true);
@@ -294,10 +327,10 @@ bool FP5pHinge::RunTest(const FString&)
 	for (const TCHAR* Name : P5pNames)
 	{
 		FP5pWorld W; auto* Part = P5pPart(W, P5pClass(*this, Name)); if (!TestNotNull(Name, Part)) { continue; }
-		const FP5pSurface Surface(Part); W.Play();
+		const FP5pSurface Surface(Part); const int32 Face = FP5pSurface::LowerFace(Part); W.Play();
 		const double Radius = Part->PushMinAxisDistanceCm * .1;
-		P5pPushStart(Part, Surface, 0, Radius);
-		const FVector Contact = Surface.Point(Part, 0, 0, -.05, Radius);
+		P5pPushStart(Part, Surface, Face, Radius);
+		const FVector Contact = Surface.Point(Part, 0, Face, -.05, Radius);
 		TestTrue(TEXT("Contact is inside excluded axis radius cm"), FVector(Contact.X, 0, Contact.Z).Size() < Part->PushMinAxisDistanceCm);
 		P5pPoint(Part, Contact);
 		TestFalse(TEXT("Hinge contact does not start push"), Part->IsSpectatorInteracting());
