@@ -3,7 +3,7 @@
 | 항목 | 값 |
 |---|---|
 | 단계 | P5 리허설 준비 — 집 시험 도구(사용자 요청 2026-10-22). 시험 T-01 |
-| 결정 근거 | **사용자(2026-10-22):** "eye level로 맞추는거 L_Main에도 가능하게 되어있나?" → "P0-c 레벨에서 맞추는거 test할때만 맞출 수 있나? 나중에 끌 수 있게 해주고?"<br>**지금:** L_Main은 P0-c에서 저장한 눈 방식 값(version 1)을 **항상** 적용한다. 높이는 바닥 기준이다(`bHeightFromFloor`, U-17).<br>**Claude가 정한 기본안(머지 전에 바꿀 수 있음):**<br>① 스위치는 집 시험 콘솔 변수다. 기본은 꺼짐이다(`vBoR.HomeShift`와 같은 방식, Company-PC-Guide §2 "회사 평가에서는 켜지 않는다")<br>② 켜면 높이도 저장한 눈으로 맞춘다("eye level")<br>③ 집 PC는 리포에 안 올라가는 설정 파일로 늘 켜 둔다. 회사 PC에는 그 파일이 없어 자동으로 꺼진다 |
+| 결정 근거 | **사용자(2026-10-22):** "eye level로 맞추는거 L_Main에도 가능하게 되어있나?" → "P0-c 레벨에서 맞추는거 test할때만 맞출 수 있나? 나중에 끌 수 있게 해주고?" → **개정 1:** "console에서 vbor.eyealignment 켜진 상태에서만 작동되게끔 하자. 꺼진 상태면 적용 안되게 하고 … L_Main에서 eyealignment가 켜져있는 상태면 적용시켜. 그 외는 적용시키지마"<br>**지금:** L_Main은 P0-c에서 저장한 눈 방식 값(version 1)을 **항상** 적용한다. 높이는 바닥 기준이다(`bHeightFromFloor`, U-17).<br>**정한 것:**<br>① 스위치는 집 시험 콘솔 변수다. **켜진 동안에만 적용하고, Play 중에 바꾸면 바로 반영한다**(사용자, 개정 1). 기본은 꺼짐이다(`vBoR.HomeShift`와 같은 방식, Company-PC-Guide §2 "회사 평가에서는 켜지 않는다")<br>② 켜면 높이도 저장한 눈으로 맞춘다("eye level")<br>③ 집 PC는 리포에 안 올라가는 설정 파일로 늘 켜 둔다. 회사 PC에는 그 파일이 없어 자동으로 꺼진다 |
 | 베이스 브랜치 | `main` @ 이 명세 머지 뒤 |
 | 작업 브랜치 | `codex/P5u-eye-alignment-switch` |
 | 리뷰 파일 | `Docs/Reviews/P5u-eye-alignment-switch.md` (첫 리뷰 때 생김) |
@@ -15,11 +15,12 @@
 
 | # | 결정 | 내용 |
 |---|---|---|
-| D1 | **콘솔 변수 `vBoR.EyeAlignment`(int, 기본 0)** | 설명 문구 예: "Home testing only: 1 = L_Main applies the P0-c head alignment save (version 1), height from the saved eye. 0 = point alignment only. Read when the level starts and on reapply."<br>- 다른 집 시험 변수(`Interaction/VBoRScenarioRunner.cpp:37-40`)와 같은 방식(`TAutoConsoleVariable`)이다. 두는 파일은 구현자가 정한다 |
-| D2 | **꺼짐(0): L_Main은 파일의 눈 방식 값을 적용하지 않는다** | - 판정하는 곳은 **파일에서 읽을 때 한 곳**이다(`LoadSetupAlignment`, `Interaction/VBoRVehicleAlignmentComponent.cpp:46-53`). Play 시작(`:28`)과 진행자 재적용(`:222`)이 둘 다 이곳을 지난다.<br>- 읽은 값이 version 1이면 저장값이 없는 것처럼 다룬다. Pawn을 옮기지 않는다. 흐름은 지금처럼 정렬 필요로 막히고, 진행자 `O`(무시하고 시작)는 그대로 된다.<br>- 이유 문장에 꺼져서 쓰지 않았다는 것과 켜는 방법을 쓴다. 예: "저장값 없음 — 눈 방식 저장값(집 시험용)은 vBoR.EyeAlignment 0이라 쓰지 않음. 진행자 창 P로 점 정렬". 영어 이유(`EnglishReason`, `:176`)에도 같은 뜻을 넣는다(진행자 창·TV가 씀).<br>- **version 2(4점 정렬)는 스위치와 상관없이 지금 그대로다.**<br>- 파일 값을 거치지 않고 `InitializeAlignment`에 값을 직접 넣는 경로는 바꾸지 않는다. 실제 실행에서는 이 경로를 파일 읽기만 쓰고, 기존 시험 24곳이 이 경로로 version 1 값을 넣는다(§3) |
-| D3 | **켜짐(1): 눈 방식 값을 적용하고 높이도 눈으로 맞춘다** | - version 1이면 `bHeightFromFloor`를 무시하고 저장한 눈 높이로 Pawn을 놓는다(`FVBoRBuckAlignment::CalculatePawn`, 지금 분기 `Interaction/VBoRPointAlignment.cpp:67-69`). 그래서 P0-c 레벨과 같이 머리가 운전석 눈 점에 온다.<br>- **방식은 파일을 읽을 때 한 번 정해 저장값과 같이 둔다.** Play 중에 변수를 바꿔도 좌석 전환·복귀(`PawnFor`, `VBoRVehicleAlignmentComponent.cpp:34-44`)는 읽을 때 정한 방식 그대로다. 다음 재적용이나 다음 Play부터 바뀐다.<br>- **진행자에게 보이게 한다.** 눈 방식으로 적용된 동안 `Describe()`(`:274-279`)에 "눈 방식(집 시험)"을 붙인다. 진행자 창과 VR 진행자 정보(`I`)가 이 문장을 쓴다 |
+| D1 | **콘솔 변수 `vBoR.EyeAlignment`(int, 기본 0)** | 설명 문구 예: "Home testing only: 1 = L_Main applies the P0-c head alignment save (version 1), height from the saved eye. 0 = point alignment only. Changes take effect while playing."<br>- 다른 집 시험 변수(`Interaction/VBoRScenarioRunner.cpp:37-40`)와 같은 방식(`TAutoConsoleVariable`)이다. 두는 파일은 구현자가 정한다 |
+| D2 | **꺼짐(0): L_Main은 파일의 눈 방식 값을 적용하지 않는다** | - 파일에서 읽는 곳(`LoadSetupAlignment`, `Interaction/VBoRVehicleAlignmentComponent.cpp:46-53`)에서 판정한다. Play 시작(`:28`)과 진행자 재적용(`:222`)이 둘 다 이곳을 지난다. Play 중에 끄는 경우는 D6이다.<br>- 읽은 값이 version 1이면 저장값이 없는 것처럼 다룬다. Pawn을 옮기지 않는다(정렬 전 자리 그대로). 흐름은 지금처럼 정렬 필요로 막히고, 진행자 `O`(무시하고 시작)는 그대로 된다.<br>- 이유 문장에 꺼져서 쓰지 않았다는 것과 켜는 방법을 쓴다. 예: "저장값 없음 — 눈 방식 저장값(집 시험용)은 vBoR.EyeAlignment 0이라 쓰지 않음. 진행자 창 P로 점 정렬". 영어 이유(`EnglishReason`, `:176`)에도 같은 뜻을 넣는다(진행자 창·TV가 씀).<br>- **version 2(4점 정렬)는 스위치와 상관없이 지금 그대로다.**<br>- 파일 값을 거치지 않고 `InitializeAlignment`에 값을 직접 넣는 경로는 바꾸지 않는다. 실제 실행에서는 이 경로를 파일 읽기만 쓰고, 기존 시험 24곳이 이 경로로 version 1 값을 넣는다(§3) |
+| D3 | **켜짐(1): 눈 방식 값을 적용하고 높이도 눈으로 맞춘다** | - version 1이면 `bHeightFromFloor`를 무시하고 저장한 눈 높이로 Pawn을 놓는다(`FVBoRBuckAlignment::CalculatePawn`, 지금 분기 `Interaction/VBoRPointAlignment.cpp:67-69`). 그래서 P0-c 레벨과 같이 머리가 운전석 눈 점에 온다.<br>- 좌석 전환·복귀(`PawnFor`, `VBoRVehicleAlignmentComponent.cpp:34-44`)도 같은 눈 높이 기준을 쓴다. Play 중에 켜는 경우는 D6이다.<br>- **진행자에게 보이게 한다.** 눈 방식으로 적용된 동안 `Describe()`(`:274-279`)에 "눈 방식(집 시험)"을 붙인다. 진행자 창과 VR 진행자 정보(`I`)가 이 문장을 쓴다 |
 | D4 | **P0-c가 4점 정렬 저장값을 덮어쓰기 전에 복사한다** | P0-c 벤치와 L_Main은 같은 파일(`Saved/Calibration/BuckEye.json`)을 쓴다(`P0Probe/P0BuckBench.cpp:100`, `VBoRVehicleAlignmentComponent.cpp:31-32`). 그래서 P0-c에서 `C`를 누르면 4점 정렬 저장값이 사라진다.<br>- 벤치가 저장하기 직전(`P0BuckBench.cpp:255`)에, 지금 파일이 version 2면 같은 폴더에 `<파일 이름>.points-backup.json`(기본 `BuckEye.points-backup.json`)으로 복사하고 로그 한 줄을 남긴다. 이미 백업이 있으면 덮어쓴다(가장 최근 4점 값).<br>- **복사가 실패하면 저장하지 않는다.** 4점 값을 그대로 두고 이유를 남긴다.<br>- 되돌리기는 백업 파일 이름을 손으로 바꾼다(코드 없음).<br>- 지금 파일이 version 1이거나 없으면 지금처럼 저장한다. P0-c 레벨 자신의 적용 규칙은 바꾸지 않는다 |
 | D5 | **집 PC에서 늘 켜 두는 방법** | 리포에 안 올라가는 사용자 설정 파일 `Saved/Config/WindowsEditor/Engine.ini`에 다음을 넣는다:<br>`[ConsoleVariables]`<br>`vBoR.EyeAlignment=1`<br>- 엔진은 엔진 설정의 `[ConsoleVariables]` 절을 시작 때 적용한다(`Engine/Source/Runtime/Core/Private/Misc/ConfigCacheIni.cpp:6665`).<br>- `Config/DefaultEngine.ini`에는 넣지 않는다. 리포에 올라가 회사에서도 켜진다.<br>- 실제로 되는지는 Codex가 로컬에서 확인해 보고한다(§7). 안 되면 멈추고 질문에 적는다 |
+| D6 | **Play 중에 콘솔로 바꾸면 바로 반영한다**(개정 1) | 변수 값이 바뀐 것을 다음 frame 안에 알아챈다(감지 방법은 구현자).<br>**켬(0 → 1):** 파일 값이 version 1이고 아직 눈 방식으로 적용되지 않았으면, 진행자 재적용과 같은 길(암전 → 파일 다시 읽기 → 적용, `RequestReapply` `:166-174`)로 적용한다. 재적용이 거절되는 동안(점 정렬 중·시점 전환 중, `ReapplyRejection` `:158-164`)은 기다렸다가 허용되면 한 번 한다. 파일이 version 2거나 없으면 아무것도 하지 않는다.<br>**끔(1 → 0):** 지금 정렬이 **파일의 눈 방식으로 적용된 것**이면:<br>- 그 frame에 상태를 "저장값 없음"(D2의 이유)으로 바꾼다. 그래서 좌석 전환·흐름 시작이 지금 규칙대로 거절된다. 진행 중인 시점 전환은 지금처럼 버려진다(`AdvanceSwitch` `:205-214`).<br>- 암전한 뒤 Pawn을 **정렬 전 자리**(정렬 컴포넌트 `BeginPlay`에서 첫 적용 전에 기억한 Pawn 자세)로 되돌린다. 시점은 기준(운전석)으로, `HomeShiftCm`은 0으로 돌린다. 동승석·2열에 있어도 같다.<br>- 진행 중인 흐름은 멈추지 않는다. 다음에 좌석 전환이 필요하면 지금 규칙대로 "Saved alignment required"로 거절된다.<br>지금 정렬이 version 2거나 정렬이 없으면 끄고 켜도 아무것도 바뀌지 않는다(재적용·암전 없음).<br>**`InitializeAlignment`에 직접 넣은 값**(D2 마지막 줄, 시험 경로)은 이 감지의 대상이 아니다. "파일의 눈 방식으로 적용됨"을 따로 표시해 구분한다 |
 
 ## 1. 왜 만드는가
 
@@ -73,10 +74,12 @@
 | E3 | 꺼짐 + 파일 version 2 | 지금처럼 적용된다(바닥 높이) |
 | E4 | 켜짐 + 파일 version 1 | 적용된다. Pawn이 `CalculatePawn`(눈 높이)과 같다(±0.01 cm·0.01°). 바닥 기준 결과와 높이가 다른 값으로 시험한다. `Describe()`에 "눈 방식"이 있다 |
 | E5 | 켜짐 + 파일 version 2 | E3과 같다(스위치와 상관없음) |
-| E6 | Play 중에 바꿈 | 켜고 version 1 적용 → 끔 → 동승석 전환·복귀 뒤에도 기준 높이가 눈 방식 그대로다. 그다음 재적용하면 E2처럼 적용되지 않는다 |
-| E7 | 직접 넣는 경로 | 꺼짐에서 `InitializeAlignment`에 version 1을 넣으면 지금처럼 바닥 높이로 적용된다(기존 시험 보호, D2) |
-| E8 | P0-c 백업(D4) | version 2 파일 위에 벤치 저장 → 백업 파일이 원래 version 2 내용과 같고, 본 파일은 version 1이다. version 1 파일 위나 파일이 없을 때는 백업이 생기지 않는다. 백업 자리를 막아 복사가 실패하면 저장하지 않고 본 파일은 version 2 그대로다 |
-| E9 | 기존 시험 | §3 감사대로 통과한다 |
+| E6 | Play 중에 켬(D6) | 꺼짐 + version 1 파일로 시작(적용 안 됨) → 켬 → 암전 뒤 E4와 같은 자리에 적용된다. 점 정렬 중에 켜면 점 정렬이 끝날(취소) 때까지 적용되지 않고, 끝난 뒤 한 번 적용된다. 켬 상태에서 다시 켜도(값 같음) 재적용이 없다 |
+| E7 | Play 중에 끔(D6) | 켬 + version 1로 적용된 상태 → 끔 → 같은 frame에 상태가 "저장값 없음"이고 이유에 `vBoR.EyeAlignment`가 있다. 암전 뒤 Pawn이 정렬 전 자리다(±0.01 cm·0.01°). 동승석에 있을 때 꺼도 같고, 시점이 기준으로 돌아온다. 전환 중에 끄면 그 전환은 버려진다. 끈 뒤 좌석 명령은 "Saved alignment required"로 거절된다 |
+| E8 | version 2는 그대로(D6) | 4점으로 적용된 상태에서 켜고 끄면 Pawn·상태·전환 수가 그대로이고 암전이 없다 |
+| E9 | 직접 넣는 경로 | 꺼짐에서 `InitializeAlignment`에 version 1을 넣으면 지금처럼 바닥 높이로 적용된다. 그 뒤 켜고 꺼도 바뀌지 않는다(기존 시험 보호, D2·D6) |
+| E10 | P0-c 백업(D4) | version 2 파일 위에 벤치 저장 → 백업 파일이 원래 version 2 내용과 같고, 본 파일은 version 1이다. version 1 파일 위나 파일이 없을 때는 백업이 생기지 않는다. 백업 자리를 막아 복사가 실패하면 저장하지 않고 본 파일은 version 2 그대로다 |
+| E11 | 기존 시험 | §3 감사대로 통과한다 |
 
 ## 5. 구현자가 정할 것
 
@@ -87,8 +90,8 @@
 
 ## 6. 완료 조건
 
-1. D1–D5를 지킨다.
-2. E1–E9가 통과한다.
+1. D1–D6을 지킨다.
+2. E1–E11이 통과한다.
 3. 기존 `vBoR.*` 시험이 모두 통과한다.
 4. non-unity·unity 빌드에서 vBoR 경고가 없다.
 5. 보고는 AGENTS.md "작업 방식" 형식으로, 커밋 본문과 HANDOFF "Codex 결과"에 쓴다.
@@ -99,7 +102,8 @@
 - **사용자(VR, 끝에 한꺼번에, T-01):**
   1. 집 PC에 D5 파일을 넣는다.
   2. P0-c에서 `C`로 저장하고 L_Main을 Play한다. 머리가 운전석 눈 점에 오는지(높이 포함) 본다. 진행자 창에 "눈 방식"이 보이는지 본다.
-  3. 그 줄을 지우고 다시 Play한다. "정렬 필요"로 막히고 이유에 변수 이름이 보이는지 본다.
+  3. Play 중에 콘솔에서 `vBoR.EyeAlignment 0`을 친다. 암전 뒤 정렬 전 자리로 돌아가고 "정렬 필요"가 보이는지 본다. `vBoR.EyeAlignment 1`을 치면 다시 눈 방식으로 맞는지 본다.
+  4. 설정 파일 줄을 지우고 다시 Play한다. 처음부터 적용되지 않는지 본다.
 - **회사:** D5 파일을 만들지 않는다. 4점 정렬만 쓴다. P0-c에서 `C`를 눌렀다면 `BuckEye.points-backup.json`을 `BuckEye.json`으로 되돌린다.
 
 ## 8. 확인한 근거
@@ -119,3 +123,4 @@
 | 날짜 | 내용 |
 |---|---|
 | 2026-10-22 | 처음 작성(Claude) |
+| 2026-10-22 | 개정 1(머지 전, 사용자): Play 중 콘솔로 켜고 끄면 바로 반영(D6). 끄면 정렬 전 자리로 돌아감. 시험 E6–E9 다시 씀, E10·E11로 번호 바꿈 |
