@@ -169,7 +169,9 @@ protected:
 private:
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FP5sTestAccess;
+	friend struct FP5tTestAccess;
 #endif
+	void WarnIfOffCenterPivot(const FBox& Bounds, const FVector& Scale) const;
 	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
 	FVBoRSoundPlayback SoundPlayback[2];
 	uint64 SoundFrame = 0;
