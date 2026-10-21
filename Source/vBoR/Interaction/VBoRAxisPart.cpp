@@ -1,4 +1,5 @@
 #include "VBoRAxisPart.h"
+#include "VBoRGrabCollider.h"
 #include "VBoRHingedPanel.h"
 #include "VBoRHandRigPawn.h"
 #include "Components/StaticMeshComponent.h"
@@ -186,10 +187,10 @@ void AVBoRAxisPart::PreInitializeComponents()
 		if (!bDetentValid)
 		{
 			UE_LOG(LogAxisPart, Warning, TEXT("%s: Invalid detent: %s; grabbing disabled"), *GetName(), *Problem);
-			GrabBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		}
 	}
-	Grabbable->SetGrabCollider(GrabBox);
+	Grabbable->SetGrabCollider(ConfigureVBoRGrabCollider(PartMesh, GrabBox, bGrabWithMesh,
+		PartMesh->GetStaticMesh() != nullptr && bDetentValid, MeshRestFromRoot));
 	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, bAllowPalmGrab && PartMesh->GetStaticMesh() != nullptr && bDetentValid);
 	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch, bAllowPinchGrab && PartMesh->GetStaticMesh() != nullptr && bDetentValid);
 	ConfigurePush();

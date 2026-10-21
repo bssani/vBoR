@@ -66,6 +66,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Knob") TObjectPtr<UIsdkGrabbableComponent> Grabbable;
 	UPROPERTY(VisibleAnywhere, Category="Knob") TObjectPtr<UVBoRKnobGrabComponent> GrabComponent;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Knob") TObjectPtr<UAudioComponent> StateAudio;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob|Input", meta=(DisplayName="메시 충돌로 잡기")) bool bGrabWithMesh = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob") FTransform MeshRestFromRoot = FTransform(FQuat::Identity,FVector(0,0,1.25),FVector(0.06,0.06,0.025));
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob") FTransform MarkerRestFromPivot = FTransform(FQuat::Identity,FVector(2.2,0,2.65),FVector(0.012,0.006,0.003));
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob", meta=(Units="deg", ClampMin="0")) float StepDeg = 15;

@@ -62,6 +62,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Two axis part") TObjectPtr<UBoxComponent> GrabBox;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Two axis part") TObjectPtr<UIsdkGrabbableComponent> Grabbable;
 	UPROPERTY(VisibleAnywhere, Category="Two axis part") TObjectPtr<UVBoRTwoAxisGrabComponent> GrabComponent;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Two axis part|Input", meta=(DisplayName="메시 충돌로 잡기")) bool bGrabWithMesh = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Two axis part") FTransform MeshRestFromRoot = FTransform(FQuat::Identity,FVector(-3,0,0),FVector(0.02,0.25,0.07));
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Two axis part", meta=(Units="deg", ClampMin="0")) float YawLimitDeg = 25;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Two axis part", meta=(Units="deg", ClampMin="0")) float PitchLimitDeg = 15;

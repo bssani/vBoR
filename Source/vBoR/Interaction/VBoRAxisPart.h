@@ -91,6 +91,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Axis part") TObjectPtr<UBoxComponent> GrabBox;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Axis part") TObjectPtr<UIsdkGrabbableComponent> Grabbable;
 	UPROPERTY(VisibleAnywhere, Category="Axis part") TObjectPtr<UVBoRAxisGrabComponent> GrabComponent;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Input", meta=(DisplayName="메시 충돌로 잡기")) bool bGrabWithMesh = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part") FTransform MeshRestFromRoot;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Input") bool bAllowPalmGrab = true;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Input") bool bAllowPinchGrab = false;

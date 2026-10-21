@@ -1,4 +1,5 @@
 #include "VBoRKnob.h"
+#include "VBoRGrabCollider.h"
 #include "VBoRHandRigPawn.h"
 #include "Components/BoxComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -72,8 +73,7 @@ void AVBoRKnob::PreInitializeComponents()
 	// 저장된 레벨도 실행 때 검사함. construction 은 배치만 맡음 (P5f §2·E12)
 	if (!bValid) { UE_LOG(LogKnob,Warning,TEXT("%s: Missing mesh or invalid knob settings; grabbing disabled | approximate geometry | not-tested"),*GetName()); }
 	if (bValid) { Layout(); }
-	GrabBox->SetCollisionEnabled(bValid ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision); GrabBox->SetGenerateOverlapEvents(bValid);
-	Grabbable->SetGrabCollider(GrabBox); Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm,bValid); Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch,false);
+	Grabbable->SetGrabCollider(ConfigureVBoRGrabCollider(KnobMesh, GrabBox, bGrabWithMesh, bValid, MeshRestFromRoot)); Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm,bValid); Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch,false);
 	GrabComponent->Configure(); GrabComponent->SetTransformTarget(RotationAxis); GrabComponent->SetSingleGrabTransformerObject(Transformer); Grabbable->SetGrabTransformer(GrabComponent);
 	Super::PreInitializeComponents();
 }
