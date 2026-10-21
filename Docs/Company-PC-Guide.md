@@ -33,12 +33,12 @@
 - **시험:** 자동화 시험 `vBoR.*` 424개는 집 PC에서 통과했다. Quest 3 실기 확인은 대부분 **`not-tested`**다. 집에서 일부를 보는 중이다.
 - **레벨·에셋 폴더(2026-10-20 정리):**
   - `Content/Main/`: 산출물. `L_Main`(기본 맵, GameMode `BP_vBoRGameMode`), `Core/`(`BP_vBoRPawn`·`BP_vBoRGameMode`), `Data/DA_Main_Scenario`(19단계 시나리오).
-    - 지금 `L_Main`은 근사 차 `AP3VehicleMock`을 자리 표시로 쓴다. 진행자 창에서 4점 정렬을 저장한다(P4h).
+    - 지금 `L_Main`의 차는 **BP 틀**이다(P4i). `Main/Car/Core/BP_Car_Core`와 `Main/Car/Parts/BP_*` 17개가 근사 차와 같은 값(엔진 Cube 메시)으로 놓여 있고, 근사 판·근사 트렁크는 Outliner `Approx` 폴더에 있다. 진행자 창에서 4점 정렬을 저장한다(P4h).
   - `Content/Development/`: 개발 시험대. `P0/L_P0c_BuckEye`(머리 방식 정렬 저장 — 집 시험용), `P3/L_P3_Flow`(L_Main 이전의 통합 흐름), 나머지 P0–P2 레벨.
   - C++ 시험대·근사 차 코드는 그대로 `Source/vBoR/P0Probe`–`P3Probe`에 있다.
 - **근사 차는 실제 차가 아니다**(U-07). 부품 약 20개를 C++ `BeginPlay`에서 만들고 서로 잇는다(`Source/vBoR/P3Probe/P3VehicleMock.cpp`).
   - 자동화 시험 상당수가 근사 차로 돈다. 그래서 **지우지 않는다.**
-  - 실제 차는 CAD 메시와 부품 Blueprint로 새 레벨(L_Main)에 만든다(§5).
+  - 근사 차는 이제 `Development/P3/L_P3_Flow`에만 있다. 실제 차는 L_Main의 BP 틀에 CAD 메시를 넣어 만든다([Blueprint-Guide.md](Blueprint-Guide.md) §0·§2-3).
 - **집 시험 도구(콘솔 변수, 기본 꺼짐):**
   - `vBoR.HomeShift`: 키패드로 1 m씩 옮김
   - `vBoR.RouteIgnorePlayArea`: 플레이 영역 밖이어도 바닥 경로를 그림
@@ -89,19 +89,20 @@
 | 결정 | 지금 상태 |
 |---|---|
 | Buck 정렬 방법 | **정함.** 높이는 바닥 기준(U-17, `bHeightFromFloor`·`FloorWorldZCm`). 앞뒤·좌우·Yaw는 실물 좌석의 점 4개를 손끝으로 짚어 CAD 좌표에 맞춘다(U-18, Research-Log 2026-10-20). 구현은 P4h. 사람이 쓴 채 눈 위치를 저장하는 방식은 집 시험·대체용 |
-| L_Main에서 정렬 저장 | 사용자 요청(2026-10-19). 지금은 `L_P0c_BuckEye`에서만 저장한다. P4h에서 진행자 창에 4점 정렬을 넣는다 |
+| L_Main에서 정렬 저장 | **만듦(P4h).** 진행자 창에서 4점 정렬을 짚고 저장한다. 눈 위치 저장(`L_P0c_BuckEye`)은 집 시험·대체용 |
 | 실제 CAD 에셋을 리포에 올릴지 | **미정**(용량·보안). 정하기 전에는 올리지 않는다 |
-| L_Main 구조 | 계획: CAD 메시는 그대로 두고, 부품 Blueprint를 레벨에 놓고, 태그로 잇는다(`Car.Footprint`, `Route.*`, 단계의 `MarkerTag`·`TargetTag`). 시나리오는 `Main/Data/DA_Main_Scenario` 한 벌만 쓴다(옛 `DA_P3_Scenario`를 옮기고 이름만 바꿈, 두 벌이면 어긋남) — CAD 부품 Blueprint에 같은 태그를 붙인다. `L_Main`은 `L_P3_Flow`를 복제하고 GameMode만 `BP_vBoRGameMode`로 바꿔 만들었다(2026-10-20) |
+| L_Main 구조 | 계획: CAD 메시는 그대로 두고, 부품 Blueprint를 레벨에 놓고, 태그로 잇는다(`Car.Footprint`, `Route.*`, 단계의 `MarkerTag`·`TargetTag`). 시나리오는 `Main/Data/DA_Main_Scenario` 한 벌만 쓴다(옛 `DA_P3_Scenario`를 옮기고 이름만 바꿈, 두 벌이면 어긋남) — CAD 부품 Blueprint에 같은 태그를 붙인다. `L_Main`은 `L_P3_Flow`를 복제하고 GameMode만 `BP_vBoRGameMode`로 바꿔 만들었다(2026-10-20). **차량 BP 틀은 만듦(P4i, 2026-10-21)** — 근사 차를 BP 18개와 레벨 배치로 옮겼다 |
 | Pawn·GameMode | **만듦(P4f).** `AVBoRPawn`(손 메시·재질 교체 프로퍼티. ISDK 손은 본 이름 매핑이라 Meta 손 뼈대와 같은 본 이름이어야 그대로 움직임)과 `AVBoRGameMode`, `/Game/Main/Core/BP_vBoRPawn`·`BP_vBoRGameMode` |
 
 ## 6. 다음 작업 순서 (제안)
 
 1. §4의 CAD 값 뽑기
-2. 정렬 4점 방식(P4h, U-18)
+2. ~~정렬 4점 방식(P4h, U-18)~~ — 끝
 3. ~~`AVBoRPawn`·`AVBoRGameMode`~~ — 끝(P4f)
-4. ~~L_Main~~ — 만듦(`Content/Main/L_Main`). 남은 것: 차량 Blueprint 틀
-5. 부품 Blueprint — [Blueprint-Guide.md](Blueprint-Guide.md)대로 만든다(문서 2026-10-20).
-   - 근사 차가 C++에서 이어 주던 연결을 문서 §6에 적었다. 확인된 것은 문·손잡이(P2e)뿐이다. 기어 끝 버튼·키 태그·박스 받침 연결은 처음 만들 때 확인한다.
+4. ~~L_Main·차량 Blueprint 틀~~ — 만듦(`Content/Main/L_Main`, P4i)
+5. CAD 넣기 — [Blueprint-Guide.md](Blueprint-Guide.md)대로 `Approx`를 지우고, CAD 정적 메시를 넣고, BP마다 메시와 축 자리를 바꾼다.
+   - 잡는 부품의 피벗·메시 충돌은 아트 디자이너가 한다(Blueprint-Guide §4.3).
+   - 연결(손잡이·기어 끝 버튼·키 태그·박스 받침)은 BP 틀로 자동화 확인했다(P4i). VR 확인은 아직이다.
 6. 산출물:
    - 설치·정렬 절차서
    - 진행자 매뉴얼
