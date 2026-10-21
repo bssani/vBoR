@@ -1,7 +1,10 @@
 #include "VBoRVehiclePowerComponent.h"
+#include "Components/AudioComponent.h"
 
 #include "VBoRPokeButton.h"
 #include "CoreGlobals.h"
+#include "Components/SceneComponent.h"
+#include "GameFramework/Actor.h"
 #include "EngineUtils.h"
 #include "UObject/UObjectIterator.h"
 
@@ -18,7 +21,7 @@ TArray<UVBoRVehiclePowerComponent*> PowerComponents(UWorld* World)
 }
 }
 
-UVBoRVehiclePowerComponent::UVBoRVehiclePowerComponent() { PrimaryComponentTick.bCanEverTick = false; }
+UVBoRVehiclePowerComponent::UVBoRVehiclePowerComponent() { PrimaryComponentTick.bCanEverTick = true; PrimaryComponentTick.bStartWithTickEnabled = false; SoundAudio.SetNum(2); }
 
 UVBoRVehiclePowerComponent* UVBoRVehiclePowerComponent::FindUnique(UWorld* World, int32* Count)
 {
@@ -30,6 +33,7 @@ UVBoRVehiclePowerComponent* UVBoRVehiclePowerComponent::FindUnique(UWorld* World
 void UVBoRVehiclePowerComponent::BeginPlay()
 {
 	Super::BeginPlay();
+	for (int32 I = 0; I < 2; ++I) { EnsureSoundAudio(I); }
 	bPowerOn = false;
 	const auto Components = PowerComponents(GetWorld());
 	bAvailable = Components.Num() == 1;
@@ -50,6 +54,7 @@ void UVBoRVehiclePowerComponent::BeginPlay()
 
 void UVBoRVehiclePowerComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	for (int32 I = 0; I < 2; ++I) { SoundPlayback[I].Reset(SoundAudio[I], false); }
 	for (AVBoRPokeButton* Button : Buttons)
 	{ if (IsValid(Button)) { Button->OnButtonPressed.RemoveDynamic(this, &UVBoRVehiclePowerComponent::HandleStartButton); } }
 	Buttons.Reset(); bAvailable = false;
@@ -70,9 +75,38 @@ void UVBoRVehiclePowerComponent::TogglePower(EVBoRPowerSource Source)
 
 void UVBoRVehiclePowerComponent::SetPowerOn(bool bOn, EVBoRPowerSource Source)
 {
+	// 같은 꺼짐값인 R 도 이전 지연 예약을 지움 (P5s D11)
+	if (Source == EVBoRPowerSource::Restart)
+	{
+		for (int32 I = 0; I < 2; ++I) { SoundPlayback[I].Reset(SoundAudio[I], true); }
+		SetComponentTickEnabled(false);
+	}
 	if (!bAvailable || bPowerOn == bOn) { return; }
 	bPowerOn = bOn;
 	const TCHAR* Who = Source == EVBoRPowerSource::Participant ? TEXT("Participant") : Source == EVBoRPowerSource::Operator ? TEXT("Operator") : Source == EVBoRPowerSource::Restart ? TEXT("Restart") : TEXT("Direct");
 	UE_LOG(LogTemp, Display, TEXT("Vehicle power: %s | %s"), bOn ? TEXT("on") : TEXT("off"), Who);
+	if (Source != EVBoRPowerSource::Restart)
+	{
+		EnsureSoundAudio(bOn ? 0 : 1);
+		SoundPlayback[bOn ? 0 : 1].Queue(bOn ? PowerOnCue : PowerOffCue, SoundAudio[bOn ? 0 : 1], SoundFrame);
+		SetComponentTickEnabled(SoundPlayback[0].HasPending() || SoundPlayback[1].HasPending());
+	}
 	OnPowerChanged.Broadcast(bOn);
+}
+
+void UVBoRVehiclePowerComponent::EnsureSoundAudio(int32 Slot)
+{
+	// 무음 기본값은 차체 컴포넌트를 늘리지 않음 (기존 BP/근사 차 비교 유지, P5s D3·§3)
+	if (SoundAudio[Slot] || !(Slot == 0 ? PowerOnCue.Sound : PowerOffCue.Sound)) { return; }
+	SoundAudio[Slot] = NewObject<UAudioComponent>(GetOwner());
+	SoundAudio[Slot]->bAutoActivate = false; SoundAudio[Slot]->SetupAttachment(GetOwner()->GetRootComponent());
+	GetOwner()->AddInstanceComponent(SoundAudio[Slot]); SoundAudio[Slot]->RegisterComponent();
+}
+
+void UVBoRVehiclePowerComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction); ++SoundFrame;
+	SoundPlayback[0].Advance(PowerOnCue, SoundAudio[0], DeltaTime, SoundFrame);
+	SoundPlayback[1].Advance(PowerOffCue, SoundAudio[1], DeltaTime, SoundFrame);
+	SetComponentTickEnabled(SoundPlayback[0].HasPending() || SoundPlayback[1].HasPending());
 }

@@ -58,7 +58,7 @@ struct FP2dTestAccess
 	static UP2dAudioObserver* ObserveAudio(AVBoRHingedPanel* Panel)
 	{
 		UP2dAudioObserver* Audio = NewObject<UP2dAudioObserver>(Panel);
-		Audio->SetSound(Panel->StateAudio->Sound); Panel->StateAudio = Audio; return Audio;
+		Audio->SetSound(Panel->StateAudio->Sound); Panel->StateAudio = Audio; for (auto& Slot : Panel->SoundAudio) { Slot = Audio; } return Audio;
 	}
 };
 #endif

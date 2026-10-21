@@ -1,4 +1,5 @@
 #include "VBoRKeyFob.h"
+#include "Sound/SoundBase.h"
 #include "VBoRKeyTable.h"
 #include "VBoRPokeButton.h"
 #include "Components/StaticMeshComponent.h"
@@ -33,6 +34,8 @@ void UVBoRKeyGrabbableComponent::PostEvent(const FIsdkInteractionPointerEvent& E
 
 AVBoRKeyFob::AVBoRKeyFob()
 {
+	static ConstructorHelpers::FObjectFinder<USoundBase> ButtonSound(IsdkContentAssetPaths::Audio::Interaction_BasicPoke_ButtonPress);
+	ButtonPressedCue.Sound = ButtonSound.Object;
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PrePhysics;
 	KeyMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ApproximateKey")); SetRootComponent(KeyMesh);
@@ -81,6 +84,7 @@ AVBoRPokeButton* AVBoRKeyFob::CreateButton(FVector OffsetCm, FLinearColor Color)
 	Button->ButtonMesh->SetRelativeScale3D(ButtonSizeCm.ComponentMax(FVector(0.1)) / 100);
 	Button->PressDepthMm = 1;
 	Button->PressFilter.BindUObject(this, &AVBoRKeyFob::CanPress);
+	Button->PressedCue = ButtonPressedCue; Button->ReleasedCue = ButtonReleasedCue;
 	Button->FinishSpawning(ButtonWorld);
 	Button->Poke->Deactivate();
 	Button->AttachToComponent(KeyMesh, FAttachmentTransformRules::KeepWorldTransform);

@@ -84,6 +84,12 @@ AVBoRCarryObject::AVBoRCarryObject()
 	StateAudio->bAutoActivate = false;
 	static ConstructorHelpers::FObjectFinder<USoundBase> Sound(IsdkContentAssetPaths::Audio::Interaction_BasicPoke_ButtonPress);
 	StateAudio->SetSound(Sound.Object);
+	SoundAudio.SetNum(2); SoundAudio[0] = StateAudio;
+	SoundAudio[1] = CreateDefaultSubobject<UAudioComponent>(TEXT("PausedCueAudio")); SoundAudio[1]->SetupAttachment(Mesh); SoundAudio[1]->bAutoActivate = false;
+	BlockedCue.Sound = StateAudio->Sound;
+	PausedCue.Sound = StateAudio->Sound;
+	PausedCue.RepeatSeconds = 0.25f;
+
 }
 
 void AVBoRCarryObject::OnConstruction(const FTransform& Transform)
@@ -374,7 +380,7 @@ void AVBoRCarryObject::MoveHeldPose(const FTransform& Desired, float DeltaSecond
 	const double Angle = FVBoRCarryMotion::AngleDeg(Request, GetActorTransform());
 	const bool bNewBlocked = bBlocked ? !(Distance < BlockedExitDistanceCm && Angle < BlockedExitAngleDeg) :
 		Distance >= BlockedEnterDistanceCm || Angle >= BlockedEnterAngleDeg;
-	if (bNewBlocked && !bBlocked) { ++BlockedCount; StateAudio->Play(); }
+	if (bNewBlocked && !bBlocked) { ++BlockedCount; SoundPlayback[0].Queue(BlockedCue, SoundAudio[0], SoundFrame); }
 	bBlocked = bNewBlocked;
 	// 잡은 자리 오프셋을 빼고 막혀서 못 간 거리만 잼 (P1 R1-5, cm)
 	if (bBlocked) { MaxRequestedGapCm = FMath::Max(MaxRequestedGapCm, FVector::Distance(Desired.GetLocation(), GetActorLocation())); }
@@ -440,6 +446,7 @@ void AVBoRCarryObject::FinishPlacement()
 void AVBoRCarryObject::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	++SoundFrame; AdvanceSounds(DeltaSeconds);
 	if (Session.Hand != INDEX_NONE)
 	{
 		const bool bRecovering = Session.bPaused;
@@ -488,10 +495,13 @@ void AVBoRCarryObject::Tick(float DeltaSeconds)
 		}
 	}
 	UpdateVisual();
+	SoundPlayback[1].Advance(PausedCue, SoundAudio[1], DeltaSeconds, SoundFrame);
 }
 
 void AVBoRCarryObject::ResetToPose(const FTransform& Pose)
 {
+	for (int32 I = 0; I < 2; ++I) { SoundPlayback[I].Reset(SoundAudio[I], true); }
+	bPausedSoundActive = false;
 	// 소유 손을 먼저 지움 (ForceCancel 의 동기 callback 을 놓기로 세지 않음, P1 R reset)
 	Session = FVBoRCarrySession();
 	Session.SetRestPose(Pose);
@@ -558,6 +568,13 @@ FString AVBoRCarryObject::GetMeasurementText() const
 
 void AVBoRCarryObject::UpdateVisual()
 {
+	const bool bPauseSound = Session.bPaused && Session.Hand != INDEX_NONE;
+	if (bPauseSound != bPausedSoundActive)
+	{
+		bPausedSoundActive = bPauseSound;
+		if (bPauseSound) { SoundPlayback[1].BeginHeld(PausedCue, SoundAudio[1], SoundFrame); }
+		else { SoundPlayback[1].EndHeld(PausedCue, SoundAudio[1]); }
+	}
 	// Held 상태가 같아도 그 frame 의 실제 박스 자세로 다시 계산함 (P1c E11)
 	UpdateLandingPreview();
 	const FString State = GetStateText();
@@ -573,13 +590,19 @@ void AVBoRCarryObject::UpdateVisual()
 		Mesh->SetOverlayMaterial(StateOverlay);
 	}
 	else { Mesh->SetOverlayMaterial(nullptr); }
-	if (bPaused) { StateAudio->Play(); }
+
 }
 
 void AVBoRCarryObject::EndPlay(const EEndPlayReason::Type Reason)
 {
+	for (int32 I = 0; I < 2; ++I) { SoundPlayback[I].Reset(SoundAudio[I], false); }
 	ClearHoldingRig();
 	Grabbable->GetInteractionPointerEventDelegate().RemoveDynamic(this, &AVBoRCarryObject::HandlePointer);
 	Mesh->SetOverlayMaterial(nullptr);
 	Super::EndPlay(Reason);
+}
+
+void AVBoRCarryObject::AdvanceSounds(double Seconds)
+{
+	SoundPlayback[0].Advance(BlockedCue, SoundAudio[0], Seconds, SoundFrame);
 }

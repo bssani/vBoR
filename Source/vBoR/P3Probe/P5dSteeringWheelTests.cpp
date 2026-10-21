@@ -26,7 +26,7 @@ struct FP5dTestAccess
 	static bool Paused(AVBoRSteeringWheel* Wheel) { return Wheel->bPaused; }
 	static double Discard(AVBoRSteeringWheel* Wheel) { return Wheel->RecoveryDiscardDeg; }
 	static FTransform Rest(AVBoRSteeringWheel* Wheel) { return Wheel->RestPivot * Wheel->GetActorTransform(); }
-	static UP5bAudioObserver* Audio(AVBoRSteeringWheel* Wheel) { auto* Audio = NewObject<UP5bAudioObserver>(Wheel); Wheel->StateAudio = Audio; return Audio; }
+	static UP5bAudioObserver* Audio(AVBoRSteeringWheel* Wheel) { auto* Audio = NewObject<UP5bAudioObserver>(Wheel); Wheel->StateAudio = Audio; for (auto& Slot : Wheel->SoundAudio) { Slot = Audio; } return Audio; }
 	static void Pointer(AVBoRSteeringWheel* Wheel, UIsdkGrabberComponent* Grabber, EIsdkPointerEventType Type)
 	{ FIsdkInteractionPointerEvent Event; Event.Interactor = Grabber; Event.Type = Type; Wheel->HandlePointer(Event); }
 	static UMaterialInstanceDynamic* Overlay(AVBoRSteeringWheel* Wheel) { return Wheel->StateOverlay; }

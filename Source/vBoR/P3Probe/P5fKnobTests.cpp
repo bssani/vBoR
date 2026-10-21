@@ -184,7 +184,7 @@ bool FP5fVisual::RunTest(const FString&)
 	FP5fTestAccess::Pointer(K,G,EIsdkPointerEventType::Hover); K->Tick(0.016f); Check(K->HoverColor); FP5fTestAccess::Pointer(K,G,EIsdkPointerEventType::Select); P5fMove(K,20); Check(K->GrabColor);
 	TestTrue(TEXT("Marker follows knob"),K->RotationMarker->GetComponentTransform().Equals(K->MarkerRestFromPivot*K->RotationAxis->GetComponentTransform(),0.001));
 	TestTrue(TEXT("Marker turns toward pivot right"),FVector::DotProduct(K->RotationMarker->GetComponentLocation()-K->Pivot->GetComponentLocation(),K->Pivot->GetRightVector())>0); FP5fTestAccess::Pointer(K,G,EIsdkPointerEventType::Unselect); FP5fTestAccess::Pointer(K,G,EIsdkPointerEventType::Unhover); K->Tick(0.016f); Check(FLinearColor::Transparent);
-	TestNotNull(TEXT("Click sound assigned"),K->StateAudio->Sound.Get()); return true;
+	TestNotNull(TEXT("Click sound assigned"),K->StepCue.Sound.Get()); return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5fCar,"vBoR.P5f.E14CarPlacementSignAndClearance",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

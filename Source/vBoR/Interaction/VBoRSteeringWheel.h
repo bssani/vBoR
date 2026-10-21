@@ -5,6 +5,7 @@
 #include "Interaction/Grabbable/IsdkTransformer.h"
 #include "Interaction/Grabbable/IsdkGrabTransformerComponent.h"
 #include "VBoRSpectatorPart.h"
+#include "VBoRSoundCue.h"
 #include "VBoRSteeringWheel.generated.h"
 
 class UStaticMeshComponent;
@@ -53,6 +54,14 @@ class VBOR_API AVBoRSteeringWheel : public AActor, public IVBoRSpectatorPart
 	GENERATED_BODY()
 public:
 	AVBoRSteeringWheel();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Steering wheel|Sound") FVBoRSoundCue LimitCue;
+	// 칸 순서는 위 프로퍼티 순서와 같음 (P5s D12)
+#if WITH_DEV_AUTOMATION_TESTS
+	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
+	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return SoundAudio[Slot]; }
+	uint64 GetSoundFrameForTest() const { return SoundFrame; }
+#endif
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spectator") FText SpectatorName;
 	virtual FText GetSpectatorName() const override { return SpectatorName; }
 	virtual bool IsSpectatorInteracting() const override { return !HandOrder.IsEmpty(); }
@@ -86,6 +95,14 @@ protected:
 	virtual bool ReadHand(int32 Hand, FTransform& Pose) const;
 	virtual bool ReadPalmClosed(int32 Hand, bool& Closed) const;
 private:
+#if WITH_DEV_AUTOMATION_TESTS
+	friend struct FP5sTestAccess;
+#endif
+	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
+	FVBoRSoundPlayback SoundPlayback[1];
+	uint64 SoundFrame = 0;
+	void AdvanceSounds(double Seconds);
+
 	friend struct FP5dTestAccess;
 	UPROPERTY() TObjectPtr<UVBoRWheelTransformer> Transformer;
 	UPROPERTY() TArray<TObjectPtr<UIsdkGrabberComponent>> HoldingGrabbers;

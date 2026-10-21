@@ -30,6 +30,7 @@ struct VBOR_API FVBoRHeldSoundCue : public FVBoRSoundCue
 struct VBOR_API FVBoRSoundPlayback
 {
 	int32 Requests = 0;
+	bool HasPending() const { return !Pending.IsEmpty() || bHeld; }
 	void Queue(const FVBoRSoundCue& Cue, UAudioComponent* Audio, uint64 Frame);
 	void BeginHeld(const FVBoRHeldSoundCue& Cue, UAudioComponent* Audio, uint64 Frame);
 	void Advance(const FVBoRSoundCue& Cue, UAudioComponent* Audio, double Seconds, uint64 Frame);
@@ -47,5 +48,5 @@ private:
 	bool bHeld = false;
 	bool bHeldPlayed = false;
 	uint64 LastPlayFrame = MAX_uint64;
-	void Play(const FVBoRSoundCue& Cue, UAudioComponent* Audio, int32 Count, uint64 Frame);
+	void Play(const FVBoRSoundCue& Cue, UAudioComponent* Audio, int32 Count, uint64 Frame, bool bCoalesce = true);
 };

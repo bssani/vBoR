@@ -5,6 +5,7 @@
 #include "Interaction/Grabbable/IsdkTransformer.h"
 #include "Interaction/Grabbable/IsdkGrabTransformerComponent.h"
 #include "VBoRCarryMotion.h"
+#include "VBoRSoundCue.h"
 #include "VBoRCarryObject.generated.h"
 
 class UStaticMeshComponent;
@@ -71,6 +72,15 @@ class VBOR_API AVBoRCarryObject : public AActor
 	GENERATED_BODY()
 public:
 	AVBoRCarryObject();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Carry|Sound") FVBoRSoundCue BlockedCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Carry|Sound") FVBoRHeldSoundCue PausedCue;
+	// 칸 순서는 위 프로퍼티 순서와 같음 (P5s D12)
+#if WITH_DEV_AUTOMATION_TESTS
+	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
+	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return SoundAudio[Slot]; }
+	uint64 GetSoundFrameForTest() const { return SoundFrame; }
+#endif
+
 	virtual void OnConstruction(const FTransform& Transform) override;
 	UFUNCTION(BlueprintCallable, Category = "Carry") void ApplyBoxSize();
 	virtual void PreInitializeComponents() override;
@@ -157,6 +167,14 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 private:
+#if WITH_DEV_AUTOMATION_TESTS
+	friend struct FP5sTestAccess;
+#endif
+	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
+	FVBoRSoundPlayback SoundPlayback[2];
+	uint64 SoundFrame = 0;
+	void AdvanceSounds(double Seconds);
+
 	friend struct FP4dTestAccess;
 	friend class FP1cLevelTest;
 	friend class FP5nBoxSnapTest;
@@ -221,6 +239,7 @@ private:
 #if WITH_DEV_AUTOMATION_TESTS
 	mutable int32 PoseClearCalls = 0;
 #endif
+	bool bPausedSoundActive = false;
 	FString LastState;
 	FDelegateHandle PalmSelectHandles[2];
 	FDelegateHandle PalmReleaseHandles[2];

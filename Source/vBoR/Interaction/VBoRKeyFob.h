@@ -5,6 +5,7 @@
 #include "Interaction/IsdkGrabbableComponent.h"
 #include "Interaction/Grabbable/IsdkGrabTransformerComponent.h"
 #include "VBoRSpectatorPart.h"
+#include "VBoRSoundCue.h"
 #include "VBoRKeyFob.generated.h"
 
 class UStaticMeshComponent;
@@ -40,6 +41,8 @@ class VBOR_API AVBoRKeyFob : public AActor, public IVBoRSpectatorPart
 	GENERATED_BODY()
 public:
 	AVBoRKeyFob();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Key|Sound") FVBoRSoundCue ButtonPressedCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Key|Sound") FVBoRSoundCue ButtonReleasedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spectator") FText SpectatorName;
 	virtual FText GetSpectatorName() const override { return SpectatorName; }
 	virtual bool IsSpectatorInteracting() const override { return GetHoldingHand() != INDEX_NONE; }

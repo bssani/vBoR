@@ -156,6 +156,15 @@ AVBoRAxisPart::AVBoRAxisPart()
 	StateAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("StateAudio")); StateAudio->SetupAttachment(AxisPivot); StateAudio->bAutoActivate = false;
 	static ConstructorHelpers::FObjectFinder<USoundBase> Sound(IsdkContentAssetPaths::Audio::Interaction_BasicPoke_ButtonPress);
 	StateAudio->SetSound(Sound.Object);
+	SoundAudio.SetNum(4); SoundAudio[0] = StateAudio;
+	SoundAudio[1] = CreateDefaultSubobject<UAudioComponent>(TEXT("ClosedCueAudio")); SoundAudio[1]->SetupAttachment(AxisPivot); SoundAudio[1]->bAutoActivate = false;
+	SoundAudio[2] = CreateDefaultSubobject<UAudioComponent>(TEXT("DetentCueAudio")); SoundAudio[2]->SetupAttachment(AxisPivot); SoundAudio[2]->bAutoActivate = false;
+	SoundAudio[3] = CreateDefaultSubobject<UAudioComponent>(TEXT("NudgeCueAudio")); SoundAudio[3]->SetupAttachment(AxisPivot); SoundAudio[3]->bAutoActivate = false;
+	OpenedCue.Sound = StateAudio->Sound;
+	ClosedCue.Sound = StateAudio->Sound;
+	DetentCue.Sound = StateAudio->Sound;
+	NudgeCue.Sound = StateAudio->Sound;
+
 }
 
 void AVBoRAxisPart::OnConstruction(const FTransform& Transform)
@@ -498,12 +507,14 @@ void AVBoRAxisPart::EndDoorHold(bool bLatch)
 void AVBoRAxisPart::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	++SoundFrame; AdvanceSounds(DeltaSeconds);
 	if (!FMath::IsFinite(DeltaSeconds) || DeltaSeconds <= 0) { return; }
 	// 확정은 Move 에서 유지하고 알림만 미룸 (SDK 선택 배열 재진입 방지, P5b R1-1)
 	const TArray<FDetentNotification> Notifications = MoveTemp(PendingDetents);
 	for (const FDetentNotification& Notification : Notifications)
 	{
-		StateAudio->Play();
+		const int32 Slot = Notification.bNudge ? 3 : 2;
+		SoundPlayback[Slot].Queue(Notification.bNudge ? NudgeCue : DetentCue, SoundAudio[Slot], SoundFrame);
 		if (Notification.bNudge) { OnDetentNudge.Broadcast(Notification.Value); }
 		else { OnDetentChanged.Broadcast(Notification.Value); }
 		if (IsActorBeingDestroyed()) { return; }
@@ -586,8 +597,8 @@ void AVBoRAxisPart::EvaluateState()
 	const float Ratio = GetOpenRatio(); MaximumRatio = FMath::Max(MaximumRatio, static_cast<double>(Ratio));
 	if (Ratio <= OpenRearm) { bOpenArmed = true; }
 	if (Ratio >= ClosedRearm) { bClosedArmed = true; }
-	if (bOpenArmed && Ratio >= OpenThreshold) { bOpenArmed = false; ++Opens; StateAudio->Play(); OnPartOpened.Broadcast(); UE_LOG(LogAxisPart, Log, TEXT("%s opened | %s"), *GetName(), *GetDebugText()); }
-	if (bClosedArmed && Ratio <= ClosedThreshold) { bClosedArmed = false; ++Closes; StateAudio->Play(); OnPartClosed.Broadcast(); UE_LOG(LogAxisPart, Log, TEXT("%s closed | %s"), *GetName(), *GetDebugText()); }
+	if (bOpenArmed && Ratio >= OpenThreshold) { bOpenArmed = false; ++Opens; SoundPlayback[0].Queue(OpenedCue, SoundAudio[0], SoundFrame); OnPartOpened.Broadcast(); UE_LOG(LogAxisPart, Log, TEXT("%s opened | %s"), *GetName(), *GetDebugText()); }
+	if (bClosedArmed && Ratio <= ClosedThreshold) { bClosedArmed = false; ++Closes; SoundPlayback[1].Queue(ClosedCue, SoundAudio[1], SoundFrame); OnPartClosed.Broadcast(); UE_LOG(LogAxisPart, Log, TEXT("%s closed | %s"), *GetName(), *GetDebugText()); }
 	if (StateOverlay)
 	{
 		StateOverlay->SetVectorParameterValue(TEXT("ColorParam"), HoldingHand != INDEX_NONE ? GrabColor : PushHand != INDEX_NONE ? PushingColor : Ratio >= OpenThreshold ? OpenColor : Hovering.IsEmpty() ? FLinearColor::Transparent : HoverColor);
@@ -607,8 +618,17 @@ FString AVBoRAxisPart::GetDebugText() const
 }
 void AVBoRAxisPart::EndPlay(const EEndPlayReason::Type Reason)
 {
+	for (int32 I = 0; I < 4; ++I) { SoundPlayback[I].Reset(SoundAudio[I], false); }
 	Grabbable->GetInteractionPointerEventDelegate().RemoveDynamic(this, &AVBoRAxisPart::HandlePointer);
 	PartMesh->SetOverlayMaterial(nullptr);
 	ClearPush();
 	Super::EndPlay(Reason);
+}
+
+void AVBoRAxisPart::AdvanceSounds(double Seconds)
+{
+	SoundPlayback[0].Advance(OpenedCue, SoundAudio[0], Seconds, SoundFrame);
+	SoundPlayback[1].Advance(ClosedCue, SoundAudio[1], Seconds, SoundFrame);
+	SoundPlayback[2].Advance(DetentCue, SoundAudio[2], Seconds, SoundFrame);
+	SoundPlayback[3].Advance(NudgeCue, SoundAudio[3], Seconds, SoundFrame);
 }

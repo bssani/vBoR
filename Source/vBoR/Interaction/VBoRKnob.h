@@ -6,6 +6,7 @@
 #include "Interaction/Grabbable/IsdkGrabTransformerComponent.h"
 #include "VBoRKnobMotion.h"
 #include "VBoRSpectatorPart.h"
+#include "VBoRSoundCue.h"
 #include "VBoRKnob.generated.h"
 
 class UBoxComponent;
@@ -51,6 +52,14 @@ class VBOR_API AVBoRKnob : public AActor, public IVBoRSpectatorPart
 	GENERATED_BODY()
 public:
 	AVBoRKnob();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob|Sound") FVBoRSoundCue StepCue;
+	// 칸 순서는 위 프로퍼티 순서와 같음 (P5s D12)
+#if WITH_DEV_AUTOMATION_TESTS
+	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
+	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return SoundAudio[Slot]; }
+	uint64 GetSoundFrameForTest() const { return SoundFrame; }
+#endif
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spectator") FText SpectatorName;
 	virtual FText GetSpectatorName() const override { return SpectatorName; }
 	virtual bool IsSpectatorInteracting() const override { return Motion.GrabHand != INDEX_NONE; }
@@ -87,6 +96,14 @@ protected:
 	virtual bool ReadClosed(bool& Closed) const;
 	virtual void PlayStepSound();
 private:
+#if WITH_DEV_AUTOMATION_TESTS
+	friend struct FP5sTestAccess;
+#endif
+	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
+	FVBoRSoundPlayback SoundPlayback[1];
+	uint64 SoundFrame = 0;
+	void AdvanceSounds(double Seconds);
+
 	friend struct FP5fTestAccess;
 	UPROPERTY() TObjectPtr<UVBoRKnobTransformer> Transformer;
 	UPROPERTY() TObjectPtr<UIsdkGrabberComponent> HoldingGrabber;

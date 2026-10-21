@@ -45,6 +45,9 @@ AVBoRKnob::AVBoRKnob()
 	GrabComponent = CreateDefaultSubobject<UVBoRKnobGrabComponent>(TEXT("KnobGrab")); Transformer = CreateDefaultSubobject<UVBoRKnobTransformer>(TEXT("KnobTransformer"));
 	StateAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("StepClick")); StateAudio->SetupAttachment(Pivot); StateAudio->bAutoActivate = false;
 	static ConstructorHelpers::FObjectFinder<USoundBase> Sound(IsdkContentAssetPaths::Audio::Interaction_BasicPoke_ButtonPress); StateAudio->SetSound(Sound.Object);
+	SoundAudio.SetNum(1); SoundAudio[0] = StateAudio;
+	StepCue.Sound = StateAudio->Sound;
+
 }
 
 void AVBoRKnob::Layout()
@@ -144,11 +147,12 @@ void AVBoRKnob::ApplyPose()
 	RotationAxis->SetRelativeRotation(FQuat(FVector::ZAxisVector,FMath::DegreesToRadians(FMath::Fmod(Motion.AngleDeg,360.0))));
 }
 
-void AVBoRKnob::PlayStepSound() { StateAudio->Play(); }
+void AVBoRKnob::PlayStepSound() { SoundPlayback[0].Queue(StepCue, SoundAudio[0], SoundFrame); }
 
 void AVBoRKnob::Tick(float DeltaSeconds)
 {
-	Super::Tick(DeltaSeconds); if (!FMath::IsFinite(DeltaSeconds) || DeltaSeconds <= 0) { return; }
+	Super::Tick(DeltaSeconds);
+	++SoundFrame; AdvanceSounds(DeltaSeconds); if (!FMath::IsFinite(DeltaSeconds) || DeltaSeconds <= 0) { return; }
 	if (bValid)
 	{
 		AdvanceGrab();
@@ -183,6 +187,12 @@ FString AVBoRKnob::GetDebugText() const
 
 void AVBoRKnob::EndPlay(const EEndPlayReason::Type Reason)
 {
+	for (int32 I = 0; I < 1; ++I) { SoundPlayback[I].Reset(SoundAudio[I], false); }
 	Grabbable->GetInteractionPointerEventDelegate().RemoveDynamic(this,&AVBoRKnob::HandlePointer); KnobMesh->SetOverlayMaterial(nullptr);
 	Motion.ReleaseGrab(); Motion.PendingSteps.Empty(); HoldingGrabber = nullptr; Hovering.Empty(); Super::EndPlay(Reason);
+}
+
+void AVBoRKnob::AdvanceSounds(double Seconds)
+{
+	SoundPlayback[0].Advance(StepCue, SoundAudio[0], Seconds, SoundFrame);
 }

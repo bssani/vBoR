@@ -3,8 +3,10 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "VBoRSpectatorPart.h"
+#include "VBoRSoundCue.h"
 #include "VBoRFoldingMirror.generated.h"
 
+class UAudioComponent;
 class UStaticMeshComponent;
 class UVBoRVehiclePowerComponent;
 
@@ -17,6 +19,17 @@ class VBOR_API AVBoRFoldingMirror : public AActor, public IVBoRSpectatorPart
 	GENERATED_BODY()
 public:
 	AVBoRFoldingMirror();
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding|Sound") FVBoRHeldSoundCue UnfoldMotorCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding|Sound") FVBoRHeldSoundCue FoldMotorCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding|Sound") FVBoRSoundCue UnfoldedCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding|Sound") FVBoRSoundCue FoldedCue;
+	// 칸 순서는 위 프로퍼티 순서와 같음 (P5s D12)
+#if WITH_DEV_AUTOMATION_TESTS
+	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
+	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return SoundAudio[Slot]; }
+	uint64 GetSoundFrameForTest() const { return SoundFrame; }
+#endif
+
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void Tick(float DeltaSeconds) override;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spectator") FText SpectatorName;
@@ -38,6 +51,14 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 private:
+#if WITH_DEV_AUTOMATION_TESTS
+	friend struct FP5sTestAccess;
+#endif
+	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
+	FVBoRSoundPlayback SoundPlayback[4];
+	uint64 SoundFrame = 0;
+	void AdvanceSounds(double Seconds);
+
 	UPROPERTY() TObjectPtr<UVBoRVehiclePowerComponent> Power;
 	EVBoRFoldingMirrorState State = EVBoRFoldingMirrorState::Unfolded;
 	float AngleDeg = 0;

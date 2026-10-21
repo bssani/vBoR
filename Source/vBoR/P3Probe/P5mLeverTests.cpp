@@ -23,7 +23,7 @@ struct FP5mTestAccess
 	static bool Pinch(AVBoRAxisPart* P) { return P->bPinch; }
 	static bool Enabled(AVBoRAxisPart* P) { return P->bPushEnabled; }
 	static FLinearColor Color(AVBoRAxisPart* P) { return P->StateOverlay->K2_GetVectorParameterValue(TEXT("ColorParam")); }
-	static UP5bAudioObserver* Audio(AVBoRAxisPart* P) { auto* A=NewObject<UP5bAudioObserver>(P); P->StateAudio=A; return A; }
+	static UP5bAudioObserver* Audio(AVBoRAxisPart* P) { auto* A=NewObject<UP5bAudioObserver>(P); P->StateAudio=A; for (auto& Slot : P->SoundAudio) { Slot = A; } return A; }
 	static void RequireOpen(AVBoRAxisPart* P) { P->bNeedsPalmOpen[0]=true; P->bNeedsPinchOpen[0]=true; }
 	static bool NeedsOpen(AVBoRAxisPart* P) { return P->bNeedsPalmOpen[0]; }
 };
