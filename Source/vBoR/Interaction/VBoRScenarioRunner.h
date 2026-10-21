@@ -19,8 +19,9 @@ class STextBlock;
 class SBorder;
 class AVBoRFloorRoute;
 class AVBoRKeyFob;
+class UVBoRVehiclePowerComponent;
 
-enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel, ReapplyAlignment, FoldSeat, UnfoldSeat, CapturePoint, SavePoints, CancelPoints };
+enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel, ReapplyAlignment, FoldSeat, UnfoldSeat, CapturePoint, SavePoints, CancelPoints, Power };
 enum class EVBoRCommandSource : uint8 { Participant, Operator };
 struct FVBoRFlowToken { int32 StepIndex = INDEX_NONE; uint64 Generation = 0; };
 struct FVBoRFlowCommand
@@ -90,6 +91,8 @@ private:
 	friend struct FP3bTestAccess;
 	friend struct FP4cTestAccess;
 	friend struct FP4eTestAccess;
+	friend struct FP5qTestAccess;
+	TWeakObjectPtr<UVBoRVehiclePowerComponent> VehiclePower;
 	UPROPERTY() TObjectPtr<UVBoRVehicleAlignmentComponent> Alignment;
 	UPROPERTY() TObjectPtr<UVBoRApproachZoneComponent> Approach;
 	UPROPERTY() TObjectPtr<UVBoRSeatZoneComponent> Seat;
@@ -178,6 +181,7 @@ private:
 	void KeyFreeMode(); void KeyReloadLevel();
 	void KeyReapply();
 	void KeyFoldSeat(); void KeyUnfoldSeat();
+	void KeyPower();
 	void KeyCapturePoint(); void KeySavePoints(); void KeyCancelPoints();
 	void KeyHomeShift(FKey Key);
 	bool HandleHomeShiftKey(FKey Key, bool bRepeat = false);
