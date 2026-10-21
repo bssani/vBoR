@@ -16,7 +16,7 @@
 | # | 결정 | 내용 |
 |---|---|---|
 | D1 | **콘솔 변수 `vBoR.EyeAlignment`(int, 기본 0)** | 설명 문구 예: "Home testing only: 1 = L_Main applies the P0-c head alignment save (version 1), height from the saved eye. 0 = point alignment only. Changes take effect while playing."<br>- 다른 집 시험 변수(`Interaction/VBoRScenarioRunner.cpp:37-40`)와 같은 방식(`TAutoConsoleVariable`)이다. 두는 파일은 구현자가 정한다 |
-| D2 | **꺼짐(0): L_Main은 파일의 눈 방식 값을 적용하지 않는다** | - 파일에서 읽는 곳(`LoadSetupAlignment`, `Interaction/VBoRVehicleAlignmentComponent.cpp:46-53`)에서 판정한다. Play 시작(`:28`)과 진행자 재적용(`:222`)이 둘 다 이곳을 지난다. Play 중에 끄는 경우는 D6이다.<br>- 읽은 값이 version 1이면 저장값이 없는 것처럼 다룬다. Pawn을 옮기지 않는다(정렬 전 자리 그대로). 흐름은 지금처럼 정렬 필요로 막히고, 진행자 `O`(무시하고 시작)는 그대로 된다.<br>- 이유 문장에 꺼져서 쓰지 않았다는 것과 켜는 방법을 쓴다. 예: "저장값 없음 — 눈 방식 저장값(집 시험용)은 vBoR.EyeAlignment 0이라 쓰지 않음. 진행자 창 P로 점 정렬". 영어 이유(`EnglishReason`, `:176`)에도 같은 뜻을 넣는다(진행자 창·TV가 씀).<br>- **version 2(4점 정렬)는 스위치와 상관없이 지금 그대로다.**<br>- 파일 값을 거치지 않고 `InitializeAlignment`에 값을 직접 넣는 경로는 바꾸지 않는다. 실제 실행에서는 이 경로를 파일 읽기만 쓰고, 기존 시험 24곳이 이 경로로 version 1 값을 넣는다(§3) |
+| D2 | **꺼짐(0): L_Main은 파일의 눈 방식 값을 적용하지 않는다** | - 파일에서 읽는 곳(`LoadSetupAlignment`, `Interaction/VBoRVehicleAlignmentComponent.cpp:46-53`)에서 판정한다. Play 시작(`:28`)과 진행자 재적용(`:222`)이 둘 다 이곳을 지난다. Play 중에 끄는 경우는 D6이다.<br>- 읽은 값이 version 1이면 저장값이 없는 것처럼 다룬다. Pawn을 옮기지 않는다(정렬 전 자리 그대로). 흐름은 지금처럼 정렬 필요로 막히고, 진행자 `O`(무시하고 시작)는 그대로 된다.<br>- 이유 문장에 꺼져서 쓰지 않았다는 것과 켜는 방법을 쓴다. 예: "저장값 없음 — 눈 방식 저장값(집 시험용)은 vBoR.EyeAlignment 0이라 쓰지 않음. 진행자 창 P로 점 정렬". 영어 이유(`EnglishReason`, `:176`)에도 같은 뜻을 넣는다(진행자 창·TV가 씀).<br>- **version 2(4점 정렬)는 스위치와 상관없이 지금 그대로다.**<br>- 파일 값을 거치지 않고 `InitializeAlignment`에 값을 직접 넣는 경로는 바꾸지 않는다. 실제 실행에서는 파일 읽기만 이 경로를 쓴다. 기존 시험 대부분이 이 경로로 version 1 값을 넣는다. 파일로 version 1을 읽는 시험 도우미는 `FP5iWorld` 하나다(§3, 개정 2) |
 | D3 | **켜짐(1): 눈 방식 값을 적용하고 높이도 눈으로 맞춘다** | - version 1이면 `bHeightFromFloor`를 무시하고 저장한 눈 높이로 Pawn을 놓는다(`FVBoRBuckAlignment::CalculatePawn`, 지금 분기 `Interaction/VBoRPointAlignment.cpp:67-69`). 그래서 P0-c 레벨과 같이 머리가 운전석 눈 점에 온다.<br>- 좌석 전환·복귀(`PawnFor`, `VBoRVehicleAlignmentComponent.cpp:34-44`)도 같은 눈 높이 기준을 쓴다. Play 중에 켜는 경우는 D6이다.<br>- **진행자에게 보이게 한다.** 눈 방식으로 적용된 동안 `Describe()`(`:274-279`)에 "눈 방식(집 시험)"을 붙인다. 진행자 창과 VR 진행자 정보(`I`)가 이 문장을 쓴다 |
 | D4 | **P0-c가 4점 정렬 저장값을 덮어쓰기 전에 복사한다** | P0-c 벤치와 L_Main은 같은 파일(`Saved/Calibration/BuckEye.json`)을 쓴다(`P0Probe/P0BuckBench.cpp:100`, `VBoRVehicleAlignmentComponent.cpp:31-32`). 그래서 P0-c에서 `C`를 누르면 4점 정렬 저장값이 사라진다.<br>- 벤치가 저장하기 직전(`P0BuckBench.cpp:255`)에, 지금 파일이 version 2면 같은 폴더에 `<파일 이름>.points-backup.json`(기본 `BuckEye.points-backup.json`)으로 복사하고 로그 한 줄을 남긴다. 이미 백업이 있으면 덮어쓴다(가장 최근 4점 값).<br>- **복사가 실패하면 저장하지 않는다.** 4점 값을 그대로 두고 이유를 남긴다.<br>- 되돌리기는 백업 파일 이름을 손으로 바꾼다(코드 없음).<br>- 지금 파일이 version 1이거나 없으면 지금처럼 저장한다. P0-c 레벨 자신의 적용 규칙은 바꾸지 않는다 |
 | D5 | **집 PC에서 늘 켜 두는 방법** | 리포에 안 올라가는 사용자 설정 파일 `Saved/Config/WindowsEditor/Engine.ini`에 다음을 넣는다:<br>`[ConsoleVariables]`<br>`vBoR.EyeAlignment=1`<br>- 엔진은 엔진 설정의 `[ConsoleVariables]` 절을 시작 때 적용한다(`Engine/Source/Runtime/Core/Private/Misc/ConfigCacheIni.cpp:6665`).<br>- `Config/DefaultEngine.ini`에는 넣지 않는다. 리포에 올라가 회사에서도 켜진다.<br>- 실제로 되는지는 Codex가 로컬에서 확인해 보고한다(§7). 안 되면 멈추고 질문에 적는다 |
@@ -58,7 +58,13 @@
   - 문장을 늘리는 것은 괜찮다.
 - **P0-c 벤치:** 저장 성공 시 version 1을 쓰는 것, 저장 실패 시 앞 값을 지키는 것은 그대로다(P0Buck E8, P4h E6).
 - **기존 시험 감사 — 모두 그대로 통과해야 한다:**
-  - `InitializeAlignment` 직접 호출: `P3FlowTests.cpp` 4곳(도우미 `:147` 포함), `P4hPointAlignmentTests.cpp` 12곳, `P5gFreeModeTests.cpp` 2곳, `P5hSpectatorTests.cpp` 1곳, `P5iOperatorPanelTests.cpp` 2곳, `P5iTestFixture.h`. 스위치 기본 꺼짐에서 동작이 같다(D2 마지막 줄).
+  - `InitializeAlignment` 직접 호출: `P3FlowTests.cpp` 4곳(도우미 `:147` 포함), `P4hPointAlignmentTests.cpp` 12곳, `P5gFreeModeTests.cpp` 2곳, `P5hSpectatorTests.cpp` 1곳, `P5iOperatorPanelTests.cpp` 2곳. 스위치 기본 꺼짐에서 동작이 같다(D2 마지막 줄).
+  - **파일에서 읽는 시험 도우미는 둘이다**(개정 2 — 처음 감사가 빠뜨림, 리뷰 Q1):
+    - `UP4hTestAlignment`(`P3Probe/P4hTestFixture.h:8-24`): 파일에는 version 2만 쓴다(`P4hPointAlignmentTests.cpp:80-82`, `:141-151`은 저장소만 시험). version 1은 직접 넣는다(`:212-214`). 바꾸지 않는다.
+    - `UP5iStoredAlignment`를 쓰는 `FP5iWorld`(`P3Probe/P5iTestFixture.h:8-16`, `P5iOperatorPanelTests.cpp:74-115`): version 1을 임시 파일에 쓰고 Play 시작·재적용 때 파일로 읽는다(`:97-99`, `:276`, `:299`, `:349`, `:468`). 기본 꺼짐에서는 이 도우미를 쓰는 P3c·P4c·P5i·P5o 시험 22개가 정렬이 없어 실패한다.
+    - **허용하는 변경 — `FP5iWorld` 도우미 본문만:** 생성자에서 `NotifyBeginPlay` 전에 `vBoR.EyeAlignment`를 1로 켜고, 소멸자에서 world를 지운 **뒤에** 원래 값으로 되돌린다(끄는 감지 D6이 정리 중에 돌지 않게). 그 파일의 시험 본문·기대값은 바꾸지 않는다.
+    - **높이 기대값은 그대로다.** 켜면 눈 높이(D3)를 쓰지만, 근사 차 눈 점 높이 115 cm(`P3VehicleMock.h:41`)와 저장값 높이 115 cm(`P5iOperatorPanelTests.cpp:98`)가 같다. 그래서 눈 기준과 바닥 기준이 모두 Pawn Z = 0을 낸다(`VBoRBuckAlignment.cpp:61-68`). 차를 Yaw로만 돌리는 시험(`:548`·`:566`)도 같다. P5i E19(`:351`)는 이미 `CalculatePawn`(눈 기준)과 같기를 기대한다.
+    - 안내 문장 기대는 `Contains`·같은 시험 안의 전후 비교뿐이다. D3의 "눈 방식(집 시험)" 표시가 붙어도 깨지지 않는다.
   - P4h E6 `P4hPointAlignmentTests.cpp:162-176`: version 2 파일 위에 벤치가 version 1을 쓴다. 이제 백업 파일도 생긴다. 시험 폴더(`Saved/Automation`)에 백업이 남지 않게, 새 시험이나 구현이 정리 방법을 정한다. 이 시험 파일은 바꾸지 않는다.
   - P0Buck 시험 `P0Probe/P0BuckAlignmentTests.cpp`: 저장소를 직접 쓰거나 version 1 파일만 쓴다. 그대로다.
   - 시험 시작 때 `Saved/Calibration/BuckEye.json`을 읽는 경로(정렬 컴포넌트 `BeginPlay`)는 사용자 PC 파일에 따라 결과가 달라진다. 새 시험은 그 파일에 기대지 않는다(§5).
@@ -79,7 +85,7 @@
 | E8 | version 2는 그대로(D6) | 4점으로 적용된 상태에서 켜고 끄면 Pawn·상태·전환 수가 그대로이고 암전이 없다 |
 | E9 | 직접 넣는 경로 | 꺼짐에서 `InitializeAlignment`에 version 1을 넣으면 지금처럼 바닥 높이로 적용된다. 그 뒤 켜고 꺼도 바뀌지 않는다(기존 시험 보호, D2·D6) |
 | E10 | P0-c 백업(D4) | version 2 파일 위에 벤치 저장 → 백업 파일이 원래 version 2 내용과 같고, 본 파일은 version 1이다. version 1 파일 위나 파일이 없을 때는 백업이 생기지 않는다. 백업 자리를 막아 복사가 실패하면 저장하지 않고 본 파일은 version 2 그대로다 |
-| E11 | 기존 시험 | §3 감사대로 통과한다 |
+| E11 | 기존 시험 | §3 감사대로 통과한다. `FP5iWorld` 도우미 변경 뒤 P3c·P4c·P5i·P5o가 기대값을 바꾸지 않고 통과한다 |
 
 ## 5. 구현자가 정할 것
 
@@ -124,3 +130,4 @@
 |---|---|
 | 2026-10-22 | 처음 작성(Claude) |
 | 2026-10-22 | 개정 1(머지 전, 사용자): Play 중 콘솔로 켜고 끄면 바로 반영(D6). 끄면 정렬 전 자리로 돌아감. 시험 E6–E9 다시 씀, E10·E11로 번호 바꿈 |
+| 2026-10-22 | 개정 2(Claude, 리뷰 Q1): §3 감사에 파일에서 읽는 시험 도우미 둘을 더함. `FP5iWorld` 도우미 본문만 변수를 켜고 끄게 허용. 높이 기대값이 같은 근거. D2 마지막 줄 고침. E11 |
