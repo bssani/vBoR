@@ -65,7 +65,7 @@ bool UVBoRVehicleAlignmentComponent::BasePawn(FTransform& Out, FString& Failure)
 		Out = Fit.Pawn; return true;
 	}
 	if (!BaseEye) { Failure = TEXT("BaseEye missing"); return false; }
-	Out = bHeightFromFloor ? FVBoRBuckAlignment::CalculatePawnOnFloor(Saved.Capture,BaseEye->GetComponentTransform(),BaseEye->GetComponentTransform(),FloorWorldZCm)
+	Out = bHeightFromFloor && !bFileEyeAlignment ? FVBoRBuckAlignment::CalculatePawnOnFloor(Saved.Capture,BaseEye->GetComponentTransform(),BaseEye->GetComponentTransform(),FloorWorldZCm)
 		: FVBoRBuckAlignment::CalculatePawn(Saved.Capture,BaseEye->GetComponentTransform());
 	return true;
 }

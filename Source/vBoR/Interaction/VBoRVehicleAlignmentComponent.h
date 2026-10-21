@@ -87,11 +87,17 @@ private:
 	FVector2D HomeShiftCm = FVector2D::ZeroVector;
 	bool bHasSaved = false, bSwitching = false, bMoved = false;
 	bool bReapplying = false;
+	bool bAlignmentFromFile = false, bFileEyeAlignment = false;
+	bool bEyeEnabled = false, bPendingEyeEnable = false, bRestoringEye = false;
+	FTransform BeforeSetupPawn;
 	double SwitchElapsed = 0;
 	FDelegateHandle RecenterHandle;
 	void HandleRecenter();
 	bool RequestSwitch(UVBoRViewpointComponent* Viewpoint);
 	void LoadSetupAlignment();
+	void InitializeSetup(APawn* Pawn, const FVBoRBuckSavedAlignment* Value, int32 Origin, const FVector2D& PlayArea, bool bFromFile);
+	void UpdateEyeAlignment();
+	void RestoreBeforeEyeAlignment();
 	bool PawnFor(const UVBoRViewpointComponent* Viewpoint, FTransform& Out, FString& Failure) const;
 	bool BasePawn(FTransform& Out, FString& Failure) const;
 	USceneComponent* DriverSeatReference(FString& Failure) const;
