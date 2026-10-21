@@ -113,7 +113,8 @@
    - 사이드미러 같은 돌출을 밀 때 어떻게 되는지.
    - 창문(유리 있음·없음) 자리에서 어떻게 되는지.
 3. **Nanite 메시라면** 복합 충돌이 원본보다 거친 대체 메시로 만들어질 수 있다. 그러면 밀리는 면이 보이는 면과 조금 다를 수 있으니 같이 본다(확인 안 한 엔진 동작).
-4. 시험 상태는 VR 전까지 `not-tested`(T-03).
+4. **문 메시 에셋에서 `Double Sided Geometry`를 켠다(개정 1).** 복합 trace는 기본으로 뒷면을 무시한다(`Engine/Classes/PhysicsEngine/BodySetup.h:160-166` 기본 거짓 → `Experimental/ChaosInterfaceUtils.cpp:323` → `Chaos/Private/Chaos/TriangleMeshImplicitObject.cpp:210-214`). CAD 겉판이 한 장짜리이거나 면 방향이 일부 뒤집혀 있으면, 켜지 않은 메시는 그 자리 trace가 빠진다. 켠 뒤 안팎 몇 자리에서 밀리는지 본다.
+5. 시험 상태는 VR 전까지 `not-tested`(T-03).
 
 ## 8. 확인한 API 근거
 
@@ -132,3 +133,4 @@
 | 날짜 | 내용 |
 |---|---|
 | 2026-10-21 | 처음 작성(Claude) |
+| 2026-10-21 | 개정 1(Claude, 리뷰 1회차 참고 1): §7-4 `Double Sided Geometry` 확인 추가. 복합 trace가 뒷면을 무시하는 것을 명세에 적지 않았다. 코드 변경 없음 |
