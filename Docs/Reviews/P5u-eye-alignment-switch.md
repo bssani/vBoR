@@ -2,7 +2,7 @@
 
 ## 질문
 
-### Q1 — 파일 기반 기존 시험과 D2·§3 감사 충돌 (답함 — 명세 개정 2, 2026-10-22 Claude)
+### Q1 — 파일 기반 기존 시험과 D2·§3 감사 충돌 (반영함 (test: enable eye alignment in stored-file fixture))
 
 **문제**
 
@@ -43,3 +43,26 @@
   - 빌드와 전체 시험을 한 번 돌린다(E11).
   - D5 에디터 확인을 한다.
   - 실패가 남으면 다시 멈춘다.
+
+**반영 확인 (Codex, 2026-10-22):** `FP5iWorld` 도우미 안에서만 원래 값을 기억하고, 생성자에서 1로 켠 뒤 world 정리 후 복구함. 시험 본문·기대값 수정 없음. `P5uQ1NonUnityBuild.log`·`P5uQ1UnityBuild.log` 성공(exit 0), `P5uQ1AllAutomation.log` 발견/완료/성공 547/547/547, 실패 0, 로그·프로세스 exit 0. 신규 P5u 11/11과 기존 536/536 모두 성공. 이번 반영의 빌드 각 1회·전체 실행 1회다. D5는 아래 Q2로 중단함.
+
+### Q2 — D5의 Saved Engine.ini가 유지되지 않음 (열림, 2026-10-22 Codex)
+
+**문제**
+
+- 명세 D5·§7의 `Saved/Config/WindowsEditor/Engine.ini`에 지정된 두 줄(`[ConsoleVariables]`, `vBoR.EyeAlignment=1`)만 넣어 확인했다. 작업 전 파일은 없었다.
+- 첫 GUI 에디터 실행에서 `Saved/Logs/P5uQ1D5EditorFirst.log:737`은 설정 1을 읽었고, `:1673-1678`의 콘솔 조회는 `vBoR.EyeAlignment = "1" LastSetBy: SystemSettingsIni`다. 첫 실행의 설정 적용 자체는 성공했다.
+- 그러나 에디터 시작 후 파일이 없어졌고, 정상 종료 후에도 없었다. 파일을 다시 만들지 않고 두 번째 GUI 에디터를 실행했다. `Saved/Logs/P5uQ1D5EditorSecond.log:1672-1673`의 조회는 `vBoR.EyeAlignment = "0" LastSetBy: Constructor`다. D5의 재시작 유지 조건은 실패다.
+- 두 실행 모두 렌더링 GUI 에디터다(`-nullrhi`·PIE·VR 아님). 시작 인자의 `-ExecCmds=vBoR.EyeAlignment`는 값을 바꾸지 않는 조회만 했다. 로컬 도구·샘플 플러그인은 껐고 두 번 모두 `CloseMainWindow()`로 정상 종료했다. 에디터가 모두 닫힌 것과 파일이 없는 원래 상태를 확인했다. 프로젝트 Config·BP·레벨은 수정하지 않았다.
+
+**엔진 소스 근거 / 제안·질문**
+
+- UE 5.7 `Engine/Config/Base.ini:3-9`는 `SectionsToSave`와 기본 `bCanSaveAllSections=false`를 정한다. `BaseEngine.ini:5-10`의 허용 목록에는 `ConsoleVariables`가 없다.
+- `Engine/Source/Runtime/Core/Private/Misc/ConfigContext.cpp:605-624`는 해당 설정과 config 이름으로 `bCanSaveAllSections`를 계산한다. `ConfigCacheIni.cpp:2647-2673`은 허용 목록 밖의 절을 저장에서 제외한다. `:6664-6665`가 설정을 읽는다는 근거만으로 재시작 유지까지 보장되지는 않는다.
+- **D5의 같은 사용자 파일에 `[SectionsToSave]` / `bCanSaveAllSections=true`를 추가하는 안으로 명세를 개정해도 되는가?** 소스상 수정 후보이며 이번에는 적용·검증하지 않았다. Claude가 저장 정책과 범위를 확인해 명세에 확정할 필요가 있다. `Config/DefaultEngine.ini`나 엔진 설정을 수정하는 안은 적용하지 않았다.
+
+**확인할 시험**
+
+- 개정된 D5 내용으로 사용자 설정을 넣고 첫 실행 값 1, 정상 종료 후 절 유지, 두 번째 실행 값 1을 확인한다. 확인 뒤 원래 파일 상태로 복구한다.
+- 이번 제품 코드·Q1 fixture 변경은 빌드와 전체 시험이 모두 통과했다. D5 외 추가 변경이 없으면 이를 반복 실행하지 않는다. 설정 유지 확인을 대신해 완료로 선언하지 않는다.
+- D5 실패 시 질문 후 중단하라는 명세에 따라 여기서 멈춤. Quest 3 Link/VR 및 T-01은 `not-tested`다.

@@ -81,9 +81,13 @@ namespace
 		FVBoRBuckSavedAlignment Saved;
 		TSharedPtr<IXRTrackingSystem,ESPMode::ThreadSafe> OriginalXR = GEngine->XRSystem;
 		TSharedPtr<FP5iHead,ESPMode::ThreadSafe> Head = MakeShared<FP5iHead,ESPMode::ThreadSafe>();
+		IConsoleVariable* EyeAlignment = IConsoleManager::Get().FindConsoleVariable(TEXT("vBoR.EyeAlignment"));
+		int32 OriginalEyeAlignment = EyeAlignment->GetInt();
 		FString Path;
 		FP5iWorld(bool bSave = true)
 		{
+			// 파일의 version 1 을 쓰는 시험만 켬 (P5u §3 개정 2, Q1)
+			EyeAlignment->Set(1, ECVF_SetByCode);
 			GEngine->XRSystem = Head;
 			GEngine->CreateNewWorldContext(EWorldType::Game).SetCurrentWorld(World);
 			auto* PC = World->SpawnActor<APlayerController>(); Pawn = World->SpawnActor<APawn>();
@@ -107,7 +111,11 @@ namespace
 			Runner->InitializeFlow(); Ready();
 		}
 		~FP5iWorld()
-		{ World->EndPlay(EEndPlayReason::Quit); GEngine->DestroyWorldContext(World); World->DestroyWorld(false); GEngine->XRSystem = OriginalXR; IFileManager::Get().Delete(*Path); }
+		{
+			World->EndPlay(EEndPlayReason::Quit); GEngine->DestroyWorldContext(World); World->DestroyWorld(false); GEngine->XRSystem = OriginalXR; IFileManager::Get().Delete(*Path);
+			// world 정리 뒤 복구함 (D6 의 끄는 감지가 정리 중 돌지 않게, P5u Q1)
+			EyeAlignment->Set(OriginalEyeAlignment, ECVF_SetByCode);
+		}
 		void Ready() { Runner->ProcessFlow(0); Runner->ProcessFlow(1); }
 		void Button(B Id) { FP5iTestAccess::NewFrame(Runner); Runner->PressOperatorButton(Id); Runner->ProcessFlow(0); }
 		void Free() { Button(B::Free); Ready(); }
