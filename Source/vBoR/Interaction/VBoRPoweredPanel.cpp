@@ -36,8 +36,17 @@ AVBoRPoweredPanel::AVBoRPoweredPanel()
 	WarningAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("WarningAudio"));
 	WarningAudio->SetupAttachment(HingePivot);
 	WarningAudio->bAutoActivate = false;
+	SoundAudio.SetNum(static_cast<int32>(EVBoRPoweredSound::Count));
+	const TCHAR* Names[] = {TEXT("OpenAcceptedAudio"), TEXT("CloseAcceptedAudio"), TEXT("WarningAudio"), TEXT("MotorAudio"), TEXT("OpenedAudio"), TEXT("ClosedAudio"), TEXT("ObstructedAudio")};
+	for (int32 I = 0; I < SoundAudio.Num(); ++I)
+	{
+		SoundAudio[I] = I == static_cast<int32>(EVBoRPoweredSound::Warning) ? WarningAudio.Get() : CreateDefaultSubobject<UAudioComponent>(Names[I]);
+		SoundAudio[I]->SetupAttachment(HingePivot);
+		SoundAudio[I]->bAutoActivate = false;
+	}
 	static ConstructorHelpers::FObjectFinder<USoundBase> Sound(IsdkContentAssetPaths::Audio::Interaction_BasicPoke_ButtonPress);
-	WarningSound = Sound.Object;
+	WarningCue.Sound = Sound.Object;
+	WarningCue.RepeatSeconds = 0.5f;
 }
 
 void AVBoRPoweredPanel::OnConstruction(const FTransform& Transform)
@@ -81,7 +90,7 @@ void AVBoRPoweredPanel::EndPlay(const EEndPlayReason::Type Reason)
 {
 	if (OpenButton) { OpenButton->Destroy(); }
 	if (CloseButton) { CloseButton->Destroy(); }
-	WarningAudio->Stop();
+	for (int32 I = 0; I < SoundAudio.Num(); ++I) { SoundPlayback[I].Reset(SoundAudio[I], false); }
 	Super::EndPlay(Reason);
 }
 
@@ -106,10 +115,10 @@ void AVBoRPoweredPanel::ResetPanel(bool bClearCounts)
 	Motion = FVBoRPoweredMotion();
 	Motion.State = bStartOpen ? EVBoRPoweredState::Open : EVBoRPoweredState::Closed;
 	Motion.AngleDeg = bStartOpen ? FMath::Clamp(OpenAngleDeg, 1.0f, 170.0f) : 0;
-	bPendingCommand = false; WarningElapsed = 0;
+	bPendingCommand = false;
 	// B 는 다음 시도에도 누적을 이어감 (P4b R1-1)
-	if (bClearCounts) { WarningRequests = 0; ObstructionCount = 0; }
-	WarningAudio->Stop();
+	if (bClearCounts) { ObstructionCount = 0; }
+	for (int32 I = 0; I < SoundAudio.Num(); ++I) { SoundPlayback[I].Reset(SoundAudio[I], bClearCounts); }
 	ApplyAngle();
 	PublishState();
 }
@@ -151,16 +160,48 @@ AVBoRCarryObject* AVBoRPoweredPanel::FindObstruction(float FromAngle, float ToAn
 	return nullptr;
 }
 
-void AVBoRPoweredPanel::WarnFor(double Seconds)
+const FVBoRSoundCue& AVBoRPoweredPanel::GetSoundCue(EVBoRPoweredSound Slot) const
 {
-	WarningElapsed += Seconds;
-	const double Interval = FMath::Max(0.05f, WarningIntervalSeconds);
-	while (WarningElapsed + UE_DOUBLE_SMALL_NUMBER >= Interval)
+	switch (Slot)
 	{
-		WarningElapsed = FMath::Max(0.0, WarningElapsed - Interval);
-		++WarningRequests;
-		WarningAudio->SetSound(WarningSound); WarningAudio->Play();
+	case EVBoRPoweredSound::OpenAccepted: return OpenAcceptedCue;
+	case EVBoRPoweredSound::CloseAccepted: return CloseAcceptedCue;
+	case EVBoRPoweredSound::Warning: return WarningCue;
+	case EVBoRPoweredSound::Motor: return MotorCue;
+	case EVBoRPoweredSound::Opened: return OpenedCue;
+	case EVBoRPoweredSound::Closed: return ClosedCue;
+	case EVBoRPoweredSound::Obstructed: return ObstructedCue;
+	default: checkNoEntry(); return OpenAcceptedCue;
 	}
+}
+
+void AVBoRPoweredPanel::QueueSound(EVBoRPoweredSound Slot)
+{
+	const int32 I = static_cast<int32>(Slot);
+	SoundPlayback[I].Queue(GetSoundCue(Slot), SoundAudio[I], SoundFrame);
+}
+
+void AVBoRPoweredPanel::BeginHeldSound(EVBoRPoweredSound Slot, const FVBoRHeldSoundCue& Cue)
+{
+	const int32 I = static_cast<int32>(Slot);
+	SoundPlayback[I].BeginHeld(Cue, SoundAudio[I], SoundFrame);
+}
+
+void AVBoRPoweredPanel::AdvanceSounds(double Seconds, bool bIncludeHeld)
+{
+	for (int32 I = 0; I < SoundAudio.Num(); ++I)
+	{
+		const EVBoRPoweredSound Slot = static_cast<EVBoRPoweredSound>(I);
+		if (!bIncludeHeld && (Slot == EVBoRPoweredSound::Warning || Slot == EVBoRPoweredSound::Motor)) { continue; }
+		SoundPlayback[I].Advance(GetSoundCue(Slot), SoundAudio[I], Seconds, SoundFrame);
+	}
+}
+
+void AVBoRPoweredPanel::StopHeldSounds()
+{
+	const int32 Warning = static_cast<int32>(EVBoRPoweredSound::Warning), Motor = static_cast<int32>(EVBoRPoweredSound::Motor);
+	SoundPlayback[Warning].EndHeld(WarningCue, SoundAudio[Warning]);
+	SoundPlayback[Motor].EndHeld(MotorCue, SoundAudio[Motor]);
 }
 
 void AVBoRPoweredPanel::PublishState()
@@ -177,22 +218,24 @@ FString AVBoRPoweredPanel::GetStateText() const
 void AVBoRPoweredPanel::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if (!Motion.IsActive()) { return; }
+	++SoundFrame;
+	if (!Motion.IsActive()) { AdvanceSounds(DeltaSeconds); return; }
 	double Remaining = FMath::Max(0.0f, DeltaSeconds);
 	if (bPendingCommand)
 	{
 		bPendingCommand = false;
-		WarningElapsed = FMath::Max(0.05f, WarningIntervalSeconds);
-		WarnFor(0);
+		QueueSound(Motion.State == EVBoRPoweredState::OpeningWait ? EVBoRPoweredSound::OpenAccepted : EVBoRPoweredSound::CloseAccepted);
+		BeginHeldSound(EVBoRPoweredSound::Warning, WarningCue);
 		PublishState();
 	}
 	if (Motion.IsWaiting())
 	{
 		const double Before = Remaining;
 		const bool bReady = Motion.ConsumeWait(Remaining);
-		WarnFor(Before - Remaining);
+		AdvanceSounds(Before - Remaining);
 		if (!bReady) { return; }
 		Motion.State = Motion.State == EVBoRPoweredState::OpeningWait ? EVBoRPoweredState::Opening : EVBoRPoweredState::Closing;
+		BeginHeldSound(EVBoRPoweredSound::Motor, MotorCue);
 		PublishState();
 	}
 	const bool bOpening = Motion.State == EVBoRPoweredState::Opening;
@@ -209,23 +252,30 @@ void AVBoRPoweredPanel::Tick(float DeltaSeconds)
 			if (AVBoRCarryObject* Box = FindObstruction(Motion.AngleDeg, Next))
 			{
 				ApplyAngle();
-				WarnFor(FMath::Abs(Motion.AngleDeg - Start) / Speed);
+				const double Used = FMath::Abs(Motion.AngleDeg - Start) / Speed;
+				AdvanceSounds(Used);
 				Motion.State = EVBoRPoweredState::Opening;
 				++ObstructionCount;
 				PublishState();
+				QueueSound(EVBoRPoweredSound::Obstructed);
 				OnObstructed.Broadcast(this, Box);
+				// 움직임이 버린 frame 나머지는 순간 소리 예약에만 적용함 (기존 끼임 동작 유지, P5r §3)
+				AdvanceSounds(FMath::Max(0.0, Remaining - Used), false);
 				return;
 			}
 		}
 		Motion.AngleDeg = Next;
 	}
 	ApplyAngle();
-	WarnFor(Travel / Speed);
+	const double Used = Travel / Speed;
+	AdvanceSounds(Used);
 	if (FMath::IsNearlyEqual(Motion.AngleDeg, Target))
 	{
 		Motion.State = bOpening ? EVBoRPoweredState::Open : EVBoRPoweredState::Closed;
-		WarningAudio->Stop();
+		StopHeldSounds();
 		PublishState();
+		QueueSound(bOpening ? EVBoRPoweredSound::Opened : EVBoRPoweredSound::Closed);
 		if (bOpening) { OnOpened.Broadcast(this); } else { OnClosed.Broadcast(this); }
 	}
+	AdvanceSounds(FMath::Max(0.0, Remaining - Used), false);
 }

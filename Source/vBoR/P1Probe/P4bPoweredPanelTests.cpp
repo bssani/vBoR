@@ -89,7 +89,7 @@ bool FP4bOpenTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("E1 accepts open"), F.Gate->GetState() == EVBoRPoweredState::OpeningWait);
 	F.Gate->Tick(0.75);
 	TestEqual(TEXT("E1 stationary during wait"), F.Gate->GetAngleDeg(), 0.0f);
-	TestTrue(TEXT("E1 warning requested during wait"), F.Gate->GetWarningRequests() >= 2 && F.Gate->WarningSound != nullptr);
+	TestTrue(TEXT("E1 warning requested during wait"), F.Gate->GetWarningRequests() >= 2 && F.Gate->WarningCue.Sound != nullptr);
 	F.Gate->Tick(0.25);
 	TestTrue(TEXT("E1 starts at delay boundary"), F.Gate->GetState() == EVBoRPoweredState::Opening);
 	F.Gate->Tick(4);
