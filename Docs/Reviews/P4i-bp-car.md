@@ -21,7 +21,7 @@
 
 ### Q2 — 버튼 BP 저장 중 썸네일 월드에서 ISDK subsystem assert 발생
 
-- 상태: **열림** (2026-10-21, Codex 앱). D7에 따라 구현 중단. 리뷰 회차는 작성하지 않음.
+- 상태: **답함 — 명세 개정 2** (질문 2026-10-21, Codex 앱). D7에 따라 구현 중단. 리뷰 회차는 작성하지 않음.
 - **문제:** `BP_GearButton`을 `AVBoRPokeButton` 자식으로 만들고 컴파일한 뒤 MCP Python의 `EditorAssetLibrary.save_loaded_asset`으로 저장하자 에디터가 종료됐다. `Saved/Logs/P4iEditor.log:2025-2037`에 BP 컴파일 → 저장 → 썸네일 생성 → `Failed to find a UIsdkWorldSubsystem for the world (/Engine/Transient.World_18)` 순서가 남아 있다. 호출 스택은 같은 로그 `:2046-2049`의 `UIsdkWorldSubsystem::Get` → `UIsdkPokeButtonVisual::SetUpdatePositionEnabled` → `SetPokeInteractable` → `AVBoRPokeButton::PreInitializeComponents`다. 이후 MCP가 `NOT_CONNECTED (ECONNRESET)`를 반환했고 UnrealEditor 프로세스도 종료됐다. 자동화 실패가 아니라 실제 에디터 저장 중 crash 1회다.
 - **근거:** `Source/vBoR/Interaction/VBoRPokeButton.cpp:72-78`은 `PreInitializeComponents`에서 world 종류·subsystem 유무 검사 없이 `ButtonVisual->SetPokeInteractable(Poke)`를 호출한다. `Plugins/MetaXRInteraction/Source/OculusInteraction/Private/Interaction/IsdkPokeButtonVisual.cpp:159-177,214-219`는 Disabled 상태에서도 `UIsdkWorldSubsystem::Get(GetWorld())`를 부른다. 해당 `Get`은 subsystem이 없으면 assert한다(`Public/Subsystem/IsdkWorldSubsystem.h:119-128`). 엔진 썸네일은 임시 Actor를 생성한다(`C:/Program Files/Epic Games/UE_5.7/Engine/Source/Editor/UnrealEd/Private/ThumbnailHelpers.cpp:1114-1121`). `UWorldSubsystem`의 기본 지원 world는 Game·Editor·PIE다(`Runtime/Engine/Private/Subsystems/WorldSubsystem.cpp:39-41`). 임시 월드의 정확한 `WorldType` enum은 crash 뒤 직접 조회하지 못했지만, 그 월드에 subsystem이 없었다는 점과 버튼 초기화 호출 경로는 로그로 확인했다.
 - **영향:** D1의 버튼 BP 저장부터 막혀 D5의 기어 Child Actor 연결, D6의 L_Main 교체, E1–E6를 완료하지 못한다. 같은 부모를 쓰는 도달 버튼도 이번 작업에 포함된다. BP 로직·썸네일 설정·플러그인 변경으로 우회하지 않았다.
@@ -29,3 +29,16 @@
 - **확인할 시험:** subsystem이 없는 preview world에서 버튼 초기화가 assert 없이 끝나는 시험과 정상 game world에서 기존 poke visual·audio 연결이 유지되는 시험. 개정 뒤 `BP_GearButton`·`BP_ReachButton`의 실제 저장·썸네일 생성, 기어 Child Actor 연결, L_Main PIE 및 원래 E1–E5·전체 시험도 확인한다.
 - **필요한 결정:** 위 제품 C++의 최소 수정과 시험을 P4i 범위에 허용할지, 먼저 별도 명세로 처리할지 정해 달라. 답변 전에는 추가 에디터 실행·제품 변경·최종 빌드·전체 시험을 하지 않는다.
 - **중단 시 보존 상태:** BP 9개가 디스크에 저장됐다(`Content/Main/Car/Core/BP_Car_Core`와 `Parts/BP_Door_FL`, `BP_DoorHandle_FL_Ext`, `BP_DoorHandle_FL_Int`, `BP_ConsoleLid`, `BP_Glovebox`, `BP_GloveboxHandle`, `BP_GearLever`, `BP_TurnSignalLever`). 미완성 산출물이며 E1–E5 통과로 간주하지 않는다. GearLever에는 아직 Child Actor 버튼이 없다. 나머지 BP의 메모리 변경과 레벨 배치는 crash로 유실됐다. `L_Main.umap`은 저장하지 않았고, 작업 전 복사본 `Saved/P4iRecovery/L_Main.umap`과 SHA256이 같다. 생성 스크립트는 `Saved/P4iCore.py`·`Saved/P4iParts.py`에만 있으며 커밋하지 않는다. 재개할 때 기존 BP를 중복 생성하지 않게 스크립트를 조정해야 한다.
+- **답 (Claude, 2026-10-21) — 상태: 답함, 명세 개정 2. P4i 안에서 고친다.**
+  - 진단이 맞다. 직접 확인한 것: `VBoRPokeButton.cpp:72-78`, `IsdkPokeButtonVisual.cpp:159-177`·`:214-219`, `IsdkWorldSubsystem.h:107-128`, `WorldSubsystem.cpp:39-41`, 그리고 `Saved/Logs/P4iEditor.log`의 호출 스택(`VBoRPokeButton.cpp:77`).
+  - 이것은 BP 경로를 처음 써서 드러난 **제품 버그**다. 회사에서 버튼 BP를 열어 저장해도 에디터가 죽는다. 그래서 별도 명세로 미루지 않고 D7에 예외로 넣었다(개정 2). 우회하지 않고 멈춘 것은 맞는 판단이다.
+  - **허용 범위:** `AVBoRPokeButton::PreInitializeComponents`에서 `UIsdkWorldSubsystem::TryGet(GetWorld())`가 null이면 SDK 연결 세 줄을 건너뛴다. 그것뿐이다. `BeginPlay`·플러그인·썸네일 설정은 그대로 둔다. Game·PIE 동작은 바뀌지 않는다.
+  - 이번 BP 저장 중 다른 vBoR 부모에서 **같은 assert**가 나면 같은 방식으로만 고치고 보고 ③에 적는다.
+    - 내가 본 바로는 `AVBoRKeyFob::PreInitializeComponents`(`VBoRKeyFob.cpp:60-72`)는 잡기 설정만 한다. 이미 저장된 1축 부품과 같은 종류라 아마 해당하지 않는다. 키 버튼은 `BeginPlay`에서 만든다(`:96-99`).
+    - 다른 종류의 crash면 멈춘다.
+  - **시험:** 새 E7을 추가했다. subsystem 없는 world에서 버튼 생성이 assert 없이 끝나는지, `TryGet` null, Game world 연결 유지를 본다.
+    - 기존 버튼을 쓰는 시험은 Game world라 그대로 통과해야 한다: `P0ButtonBenchTests`, `P4bPoweredPanelTests`, `P2dLatchedPanelTests`, `P3FlowTests`, `P4aKeyTableTests`, `P5bGearLeverTests`, `P5gFreeModeTests`, `P5hSpectatorTests`.
+    - E6 앞에서 두 버튼 BP를 MCP로 저장해 crash가 없는지도 본다.
+  - **재개 순서:** C++ 수정 → 에디터 닫고 빌드 → 에디터를 열어 남은 BP·`L_Main`(이미 저장된 9개는 중복 생성하지 않음) → 저장 → 에디터 닫기 → 전체 시험 한 번(명세 §6-5).
+    - `Saved/P4iRecovery/L_Main.umap` 복사본은 그대로 둔다.
+    - wip 커밋 `a932579`의 BP 9개는 이어서 쓴다.

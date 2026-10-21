@@ -20,7 +20,7 @@
 | D4 | **`BP_Car_Core`는 근사 차의 차 기준 컴포넌트 그대로** | 정렬 1, 정렬 점 4(`Order`·`Label`·자리), Eye Point 1(`DriverEye` 자리), 시점 3, 앉음 구역 1, 접근 구역 1, `Car.Footprint` 상자 1, `Car.Start` 표시 1(`P3VehicleMock.cpp:39-64`·`:74-111`).<br>- **시점은 셋 다 둔다:** `Car.DriverView`(근사 차의 `DriverEye` 자리), `Car.PassengerView`, `Car.RearView`.<br>  - 근사 차에는 `Car.DriverView`가 없다. 그래서 기준 좌석점으로 눈 점을 쓴다(P4h D6).<br>  - `Car.DriverView`를 눈 점과 같은 자리에 두면 기준 좌석점이 같은 자리라 결과가 같다. 회사에서는 세 시점을 SgRP로 옮기기만 하면 된다(Blueprint-Guide §3 주의 1).<br>- 근사 판(차체·좌석·대시보드)은 이 BP에 넣지 않는다(D6) |
 | D5 | **연결은 Blueprint-Guide §6 방식으로** | **§6.1 손잡이:** 바깥·안쪽 손잡이는 `DoorHandleSide`를 바깥·안쪽으로 둔다. 레벨 Outliner에서 문 Actor 밑에 붙인다. 글러브박스 손잡이도 `DoorHandleSide` = 바깥으로 두고 글러브박스 밑에 붙인다. 근사 차처럼 `OutsideAxisHandle`을 직접 넣지 않는다.<br>**§6.2 기어 버튼:** `BP_GearLever` 안에 Child Actor 컴포넌트(클래스 `BP_GearButton`)를 `AxisPivot` 밑에 둔다. 자리는 근사 차의 `ButtonFromPivot`이다(`:211`).<br>**§6.3 키:** 키 테이블 두 개(`AVBoRKeyTable`)를 레벨에 놓는다. 각 테이블의 `KeyClass`를 `BP_KeyFob_Front`·`BP_KeyFob_Rear`로 바꾼다. 키 BP의 Actor Tags는 `Car.FrontKey`·`Car.RearKey`, `SpectatorName`은 "Key"다.<br>  - 키 버튼 태그(`.Unlock`·`.Lock`)는 넣지 않는다. 단계가 쓰지 않는다(Blueprint-Guide §6.3).<br>**§6.4 박스 받침:** 레벨의 `AVBoRBoxStand` 인스턴스에서 `LoadTarget`으로 레벨의 `AVBoRLoadTarget`을 고른다 |
 | D6 | **`L_Main` 바꾸기** | **뺀다:** `AP3VehicleMock` Actor.<br>**놓는다:**<br>- `BP_Car_Core`와 부품 BP를 근사 차가 있던 transform에 놓는다(차 원점, 원점이 아니면 보고 ⑤에 적음).<br>- 레벨 Actor: 바닥 경로 둘(`AVBoRFloorRoute`, 태그·점은 `:133-140`), 키 테이블 둘(`:117-118`), 적재 영역(`:358-364`), 박스 받침(`:365-368`).<br>- **근사 형상**은 Outliner 폴더 `Approx`(회사에서 통째로 지움)에 둔다:<br>  - 근사 판 — 엔진 Cube `StaticMeshActor`, 충돌 없음. 근사 차의 `Plates` 0–11, 미러 받침, 노브 받침, 2열 방석, 근사 차와 같은 자리·크기(`:90-106`·`:80-85`·`:121-126`). 스티어링 판(12)은 근사 차도 Play 때 숨기므로 넣지 않는다.<br>  - 근사 트렁크 `AP1TrunkMock` — 자리는 `:347-348`. 짐이 착지할 막는 충돌이 이 Actor에 있다(`P1Probe/P1TrunkMock.cpp:25-26`).<br>  - 근사 표시 글자 하나 — "근사 형상·자리값 — 회사에서 Approx 폴더를 지우고 CAD로" 뜻, 시작 표시 근처. 근사 차의 `MockLabel`을 대신한다(AGENTS.md "근사 형상임을 드러낸다").<br>**그대로 둔다:** `VBoRScenarioRunner`, World Settings(GameMode Override), PlayerStart, 조명·바닥 등 그 밖의 모든 Actor.<br>- **레벨 Blueprint가 근사 차를 참조하면**(예: 키 이벤트에 웰컴 라이트 연결) 멈추고 리뷰 파일 "질문"에 적는다 |
-| D7 | **C++ 제품 코드는 바꾸지 않는다** | 바꿀 것은 BP·`L_Main`과 새 시험 파일이다.<br>- BP·레벨만으로 근사 차와 같게 못 하는 것이 나오면 멈추고 "질문"에 적는다. 예: Child Actor 버튼이 레버를 안 따라옴, `Template Mismatch during attachment`, 연결이 안 됨. BP 로직으로 우회하지 않는다(Blueprint-Guide §0) |
+| D7 | **C++ 제품 코드는 바꾸지 않는다 — 예외 하나(개정 2)** | 바꿀 것은 BP·`L_Main`과 새 시험 파일이다.<br>- BP·레벨만으로 근사 차와 같게 못 하는 것이 나오면 멈추고 "질문"에 적는다. 예: Child Actor 버튼이 레버를 안 따라옴, `Template Mismatch during attachment`, 연결이 안 됨. BP 로직으로 우회하지 않는다(Blueprint-Guide §0)<br>**예외 — 버튼 초기화 보호(Q2):** `AVBoRPokeButton::PreInitializeComponents`(`Interaction/VBoRPokeButton.cpp:72-78`)를 고친다. 그 world에 ISDK subsystem이 없으면(`UIsdkWorldSubsystem::TryGet`이 null, `Plugins/MetaXRInteraction/Source/OculusInteraction/Public/Subsystem/IsdkWorldSubsystem.h:107-111`) SDK 연결 세 줄(`SetPokeInteractable`·`SetPointable`·`SetSelectAudio`)을 건너뛴다.<br>- **이유:** 썸네일·BP 편집기 미리보기 world에는 subsystem이 없다. world subsystem은 기본으로 Game·Editor·PIE에만 생긴다(`Engine/Private/Subsystems/WorldSubsystem.cpp:39-41`). `SetPokeInteractable`은 Disabled에서도 `UIsdkWorldSubsystem::Get`을 부르고(`IsdkPokeButtonVisual.cpp:159-177`·`:214-219`), `Get`은 없으면 assert한다(`IsdkWorldSubsystem.h:119-128`). 그래서 지금은 `AVBoRPokeButton`의 BP 자식을 저장하면 에디터가 죽는다. 회사에서 버튼 BP를 저장해도 같다.<br>- Game·PIE는 subsystem이 있으므로 지금과 같다. `BeginPlay`와 다른 부모는 고치지 않는다.<br>- 이번 BP 저장 중에 다른 vBoR 부모에서 **같은 assert**("Failed to find a UIsdkWorldSubsystem")가 나면 같은 방식으로만 고치고 보고 ③에 적는다. 다른 종류의 crash는 멈추고 질문한다 |
 
 ## 1. 왜 만드는가
 
@@ -34,6 +34,7 @@
 1. D1의 BP 18개(MCP).
 2. D6의 `L_Main` 변경(MCP), 저장.
 3. 자동화 시험 §4(`vBoR.P4i.*`).
+4. D7 예외 — `AVBoRPokeButton` 초기화 보호와 E7(개정 2).
 
 ### 범위 밖 — 하지 말 것
 
@@ -63,7 +64,8 @@
 | E3 | 연결(BeginPlay 뒤) | 문의 바깥·안쪽 손잡이와 글러브박스 손잡이가 연결되고 `HingePivot` 밑에 붙는다(P2e). 기어 버튼이 레버 `AxisPivot` 밑의 Child Actor다. 키 테이블이 만든 키가 BP 키이고 태그가 맞다. `Car.*` 태그마다 Actor·컴포넌트가 정확히 하나다 |
 | E4 | `L_Main` 정적 검사 | 맵 패키지를 읽어(Play 없이) 다음을 본다.<br>- `AP3VehicleMock`이 없다.<br>- D1의 BP가 하나씩 있다. `BP_KeyFob_*`는 테이블이 만들므로 레벨에 없다.<br>- 정렬 컴포넌트가 정확히 하나다.<br>- 손잡이 셋의 부모 Actor가 맞다.<br>- 키 테이블의 `KeyClass`가 맞다. 받침의 `LoadTarget`이 레벨의 적재 영역이다.<br>- 경로 둘의 태그·점이 근사 차와 같다.<br>- `Approx` 폴더 Actor에는 `Car.`·`Route.` 태그가 없다 |
 | E5 | 참조 규칙 | `/Game/Main/` 아래 에셋의 의존성(Asset Registry)에 `/Game/Development/`가 없다 |
-| E6 | **Play 한 번 — MCP PIE**(자동화 아님) | `L_Main`을 PIE로 한 번 돌리고 Output Log를 본다.<br>- `시작 차단:`이 없다.<br>- `P2e setup:` 경고가 없다.<br>- `Template Mismatch during attachment`가 없다.<br>- `Non-cube DoorMesh`·`grab mesh`·`DoorMesh has no traceable` 경고가 없다.<br>- 진행자 정보에 단계 01이 보인다.<br>로그 경로를 보고 ⑤에 적는다. headless `-game` 맵 로드는 쓰지 않는다(Agent-Workflow §2.5) |
+| E7 | 버튼 초기화 보호(D7 예외) | subsystem이 없는 world(예: `EWorldType::EditorPreview`, Actor 초기화까지)에 `AVBoRPokeButton`을 만들어도 assert 없이 끝난다. 그 world에서 `TryGet`이 null인 것도 단언한다. Game world 버튼은 지금처럼 poke·소리가 연결된다. 기존 버튼 시험(`vBoR.P0ButtonBench.*` 등)은 그대로 통과한다 |
+| E6 | **Play 한 번 — MCP PIE**(자동화 아님) | `L_Main`을 PIE로 한 번 돌리고 Output Log를 본다.<br>- `시작 차단:`이 없다.<br>- `P2e setup:` 경고가 없다.<br>- `Template Mismatch during attachment`가 없다.<br>- `Non-cube DoorMesh`·`grab mesh`·`DoorMesh has no traceable` 경고가 없다.<br>- 그 전에 `BP_GearButton`·`BP_ReachButton`을 MCP로 저장해도(썸네일 생성 포함) 에디터가 죽지 않는다(D7 예외).<br>- 진행자 정보에 단계 01이 보인다.<br>로그 경로를 보고 ⑤에 적는다. headless `-game` 맵 로드는 쓰지 않는다(Agent-Workflow §2.5) |
 
 ## 5. 구현자가 정할 것
 
@@ -75,7 +77,7 @@
 ## 6. 완료 조건
 
 1. D1–D7을 지킨다.
-2. E1–E5가 통과하고, E6 결과를 보고 ⑤에 적는다.
+2. E1–E5·E7이 통과하고, E6 결과를 보고 ⑤에 적는다.
 3. 기존 `vBoR.*` 시험이 모두 통과한다.
 4. non-unity·unity 빌드에서 vBoR 경고가 없다.
 5. 순서: C++ 빌드 → 에디터를 열어 MCP 작업 → 저장 → 에디터 닫기 → 전체 시험 한 번(Agent-Workflow §2.10).
@@ -110,3 +112,4 @@
 |---|---|
 | 2026-10-21 | 처음 작성(Claude) |
 | 2026-10-21 | 개정 1(Claude, Codex Q1): D3를 규칙으로 고침 — Actor 기준 값에만 근사 차 Actor transform을 곱하고, 경첩·축 기준 값은 그대로 둔다. 처음 쓴 D3는 리프트게이트 버튼(경첩 기준)에도 오프셋을 더하라고 했고(235 cm 이중 적용), 문은 `MeshRestFromRoot`(Actor 기준)를 빠뜨렸다. 내 명세 실수. E2에 닫힌 버튼 자리 확인 추가 |
+| 2026-10-21 | 개정 2(Claude, Codex Q2): D7에 예외 하나 — `AVBoRPokeButton::PreInitializeComponents`에서 ISDK subsystem이 없는 world면 SDK 연결을 건너뜀(썸네일 world assert로 버튼 BP 저장 시 에디터 crash). E7 추가, E6에 버튼 BP 저장 확인. 명세 작성 때 버튼 BP가 미리보기 world에서 초기화된다는 것을 보지 못했다 |
