@@ -101,18 +101,18 @@ L_Main
 
 | 부품(INT) | 부모 클래스 | 메시 / 축 | 꼭 넣을 값 | 태그·연결 | 근사 차 예 | 확인 |
 |---|---|---|---|---|---|---|
-| 운전석 문 — `BP_Door_FL` | `AVBoRHingedDoor` | `DoorMesh` / `HingePivot`(+Z가 경첩축) | `MaxAngleDeg`, `bUseLatch`, 미는 면 — 메시 표면(`bPushOnMeshSurface`, §4.3) 또는 미는 면 상자(`bUsePushFaceBox`) | `Car.DriverDoor` — 07·08·11·18·20단계 | `:141-144` | 자동화(P2e·P2g·P4i) |
+| 운전석 문 — `BP_Door_FL` | `AVBoRHingedDoor` | `DoorMesh` / `HingePivot`(+Z가 경첩축) | `MaxAngleDeg`, `bUseLatch`, 미는 면 — 메시 표면(`bPushOnMeshSurface`, §4.3) 또는 미는 면 상자(`bUsePushFaceBox`) | `Car.DriverDoor` — 07·08·11·18·20단계 | `:141-163` | 자동화(P2e·P2g·P4i) |
 | 문 손잡이 바깥·안쪽(001·002) — `BP_DoorHandle_FL_Ext`·`_Int` | `AVBoRAxisPart` | `PartMesh` / `AxisPivot` + `Axis`·`bReverse` | **`DoorHandleSide` = 바깥/안쪽**, `MaxAngleDeg`, `Release`, 메시로 잡기(`bGrabWithMesh`, §4.3) | 문 BP 밑에 붙인다(§6.1) | `:146-162` | 자동화(P2e·P2f·P4i) |
-| 콘솔박스(005) — `BP_ConsoleLid` | `AVBoRHingedPanel` | `DoorMesh` / `HingePivot` | `bUseLatch` 켬, `bAllowPalmOpening` 끔, `MaxAngleDeg` 100 | 손잡이 자리(`OutsideHandle` 상자) | `:164-179` | 자동화(P4i) |
-| 글러브박스(006) — `BP_Glovebox` + `BP_GloveboxHandle` | `AVBoRHingedPanel` + 손잡이 `AVBoRAxisPart` | 같음 | `bUseLatch` 켬, `bAllowPalmOpening` 끔, 손잡이 `Release` = Return | 손잡이는 문과 같은 방식(§6.1, 바깥) | `:181-198` | 자동화(P4i) |
-| 기어 레버(008) — `BP_GearLever` | `AVBoRAxisPart` | `PartMesh` / `AxisPivot`, `Axis` X | `Release` = Detent, `DetentAnglesDeg`, 시작 1, pinch 켬·손바닥 끔·밀기 켬(U-13) | 끝 버튼은 §6.2 | `:200-209` | 자동화(P4i) |
-| 기어 끝 버튼 — `BP_GearButton` | `AVBoRPokeButton` | `ButtonMesh` | `HitAreaScale` 1 | `BP_GearLever` 안 Child Actor로 이미 들어 있음(§6.2). Actor가 버튼 자리에 있음 — CAD 피벗 처리 확인 안 함 | `:211-216` | 자동화(P4i) |
-| 방향지시 레버(009) — `BP_TurnSignalLever` | `AVBoRAxisPart` | 같음, 왼쪽이면 `bReverse` | Detent + `DetentNudgeDeg`(자동 복귀) | — | `:218-228` | 자동화(P4i) |
-| 스티어링 휠 — `BP_SteeringWheel` | `AVBoRSteeringWheel` | `WheelMesh` / `AxisPivot` | `LimitAngleDeg`, 잡는 반지름 최소·최대 | — | `:230-241` | 자동화(P4i) |
-| 룸미러(U-12: 반사 없음) — `BP_RearviewMirror` | `AVBoRTwoAxisPart` | `PartMesh` / `Pivot` | `YawLimitDeg`, `PitchLimitDeg` | 거울면은 CAD 재질 그대로 | `:242-256` | 자동화(P4i) |
-| 콘솔 노브 — `BP_ConsoleKnob` | `AVBoRKnob` | `KnobMesh` / `Pivot`(+Z가 윗면·회전축) | `TwistGain`, `StepDeg` | — | `:258-267` | 자동화(P4i) |
-| 13번 도달 버튼 — `BP_ReachButton` | `AVBoRPokeButton` | `ButtonMesh` | **`HitAreaScale` 1**(13번은 판정 확대 없음, AGENTS.md) | `Car.ReachButton` — 13단계. Actor가 대시보드 위 버튼 자리에 있음(차 원점 아님) — CAD 피벗 처리 확인 안 함 | `:268-273` | 자동화(P4i) |
-| 리프트게이트(011) — `BP_Liftgate` | `AVBoRPoweredPanel` | `PanelMesh` / `HingeLocationCm` | `OpenAngleDeg`, `DelaySeconds`, 열기·닫기 버튼 자리(`OpenButtonFromHinge`·`CloseButtonFromHinge`) | `Car.Liftgate` — 04·06단계. 버튼은 스스로 만듦 | `:350-357` | 자동화(P4i) |
+| 콘솔박스(005) — `BP_ConsoleLid` + `BP_ConsoleHandle` | `AVBoRHingedPanel` + 손잡이 `AVBoRAxisPart` | 같음. 손잡이는 `PartMesh` / `AxisPivot` | `bUseLatch` 켬, `bAllowPalmOpening` 끔, `MaxAngleDeg` 100. 손잡이: `Movement` = Translate, `MaxTravelCm` 0.75, `Release` = Return, 손바닥 잡기만 | 손잡이는 문과 같은 방식(§6.1, 바깥). 잡고 끝까지 눌러야(0.6 cm, `OpenThreshold` 0.8) 풀린다(P5x) | `:165-184` | 자동화(P4i) |
+| 글러브박스(006) — `BP_Glovebox` + `BP_GloveboxHandle` | `AVBoRHingedPanel` + 손잡이 `AVBoRAxisPart` | 같음 | `bUseLatch` 켬, `bAllowPalmOpening` 끔, 손잡이 `Release` = Return | 손잡이는 문과 같은 방식(§6.1, 바깥) | `:186-203` | 자동화(P4i) |
+| 기어 레버(008) — `BP_GearLever` | `AVBoRAxisPart` | `PartMesh` / `AxisPivot`, `Axis` X | `Release` = Detent, `DetentAnglesDeg`, 시작 1, pinch 켬·손바닥 끔·밀기 켬(U-13) | 끝 버튼은 §6.2 | `:205-214` | 자동화(P4i) |
+| 기어 끝 버튼 — `BP_GearButton` | `AVBoRPokeButton` | `ButtonMesh` | `HitAreaScale` 1 | `BP_GearLever` 안 Child Actor로 이미 들어 있음(§6.2). Actor가 버튼 자리에 있음 — CAD 피벗 처리 확인 안 함 | `:216-221` | 자동화(P4i) |
+| 방향지시 레버(009) — `BP_TurnSignalLever` | `AVBoRAxisPart` | 같음, 왼쪽이면 `bReverse` | Detent + `DetentNudgeDeg`(자동 복귀) | — | `:223-233` | 자동화(P4i) |
+| 스티어링 휠 — `BP_SteeringWheel` | `AVBoRSteeringWheel` | `WheelMesh` / `AxisPivot` | `LimitAngleDeg`, 잡는 반지름 최소·최대 | — | `:235-246` | 자동화(P4i) |
+| 룸미러(U-12: 반사 없음) — `BP_RearviewMirror` | `AVBoRTwoAxisPart` | `PartMesh` / `Pivot` | `YawLimitDeg`, `PitchLimitDeg` | 거울면은 CAD 재질 그대로 | `:247-261` | 자동화(P4i) |
+| 콘솔 노브 — `BP_ConsoleKnob` | `AVBoRKnob` | `KnobMesh` / `Pivot`(+Z가 윗면·회전축) | `TwistGain`, `StepDeg` | — | `:263-272` | 자동화(P4i) |
+| 13번 도달 버튼 — `BP_ReachButton` | `AVBoRPokeButton` | `ButtonMesh` | **`HitAreaScale` 1**(13번은 판정 확대 없음, AGENTS.md) | `Car.ReachButton` — 13단계. Actor가 대시보드 위 버튼 자리에 있음(차 원점 아님) — CAD 피벗 처리 확인 안 함 | `:273-278` | 자동화(P4i) |
+| 리프트게이트(011) — `BP_Liftgate` | `AVBoRPoweredPanel` | `PanelMesh` / `HingeLocationCm` | `OpenAngleDeg`, `DelaySeconds`, 열기·닫기 버튼 자리(`OpenButtonFromHinge`·`CloseButtonFromHinge`) | `Car.Liftgate` — 04·06단계. 버튼은 스스로 만듦 | `:356-363` | 자동화(P4i) |
 | 2열 등받이 — `BP_RearSeatBack` | `AVBoRFoldingSeat` | `SeatMesh` / `HingeLocationCm` | `FoldAngleDeg` | `Car.RearSeat`. 진행자 F·U가 모든 접는 시트를 찾음 | `:128-132` | 자동화(P4i) |
 | 선바이저 L·R — `BP_SunVisor_L`·`_R` | `AVBoRAxisPart` | `PartMesh` / `AxisPivot`, `Axis` Y | `Release` = Stay, palm·pinch·밀기 켬, `MaxAngleDeg` 95(근사). **값 +가 내림이다** — 경첩 방향은 아래 주의 | 없음(자유모드 부품, 단계와 안 이음) | 근사 차에 없음. 근사 값: 경첩 (18, ∓37, 142), 판 16×35×1.5 cm | 자동화(P5p) |
 | 시동 버튼 — `BP_StartButton` | `AVBoRPokeButton` | `ButtonMesh` | `HitAreaScale` 1(기본값) | **`Car.StartButton`** — 전원(§6.5). Actor가 대시보드 위 버튼 자리 (27, −15, 91.6)에 있음(차 원점 아님) — CAD 피벗 처리 확인 안 함 | 근사 차에 없음 | 자동화(P5q) |
@@ -288,14 +288,16 @@ L_Main
 ### 6.1 손잡이 → 문·콘솔·글러브박스 (확인됨 — 자동화, P2e·U-14)
 
 - 손잡이 BP의 **`DoorHandleSide`**를 바깥 또는 안쪽으로 정한다. 기어 레버처럼 판과 상관없는 1축 부품은 "없음"이다.
-- 레벨 Outliner에서 손잡이를 **문(판) Actor 밑으로 끌어다 붙인다.** Play 때 판이 자기 밑의 손잡이를 찾아 연결하고, 경첩 축(`HingePivot`)에 붙여 같이 돌게 한다(`Interaction/VBoRHingedPanel.cpp:200-210`, `:328`).
-  - Child Actor 컴포넌트로 넣는 경우에는 그 컴포넌트를 BP 안에서 **`HingePivot` 밑에** 둔다. 아니면 연결하지 않고 경고한다(`:236-238`).
+- 레벨 Outliner에서 손잡이를 **문(판) Actor 밑으로 끌어다 붙인다.** Play 때 판이 자기 밑의 손잡이를 찾아 `DoorHandleSide`대로 바깥·안쪽 칸에 연결하고, 경첩 축(`HingePivot`)에 붙여 같이 돌게 한다(`Interaction/VBoRHingedPanel.cpp:151`, `:270-283`).
+  - 그래서 판 Details의 `Outside Axis Handle`·`Inside Axis Handle` 칸은 **비워 둔다**(에디터에서는 `None`으로 보이는 게 정상이다. 연결은 Play 때 생긴다). 같은 쪽 손잡이를 둘 이상 붙였을 때만 칸에서 직접 고른다("multiple attached candidates" 경고).
+  - Child Actor 컴포넌트로 넣는 경우에는 그 컴포넌트를 BP 안에서 **`HingePivot` 밑에** 둔다. 아니면 연결하지 않고 경고한다(`:187-190`).
+- **판에는 손잡이 상자가 없다(P5x).** 잡을 곳은 손잡이 BP뿐이다. 손잡이가 없는 쪽은 잡을 수 없고 밀기만 된다. 잠금을 켠 판에 손잡이가 하나도 없으면 Play 때 "Latched panel has no opening handle" 경고가 한 번 뜬다.
 - 손잡이 하나를 두 판이 같이 쓰면, 먼저 연결한 판이 갖는다(경고).
 - 판 Details의 **"Check setup"** 버튼(Hinged panel → Setup)이 Play 전에 같은 판정을 보여 준다. 판마다 한 번 누른다.
 
 ### 6.2 기어 끝 버튼 → 레버 (자동화로 확인 — P4i, VR 전)
 
-- 근사 차는 버튼을 레버의 **`AxisPivot`**에 코드로 붙인다(`P3VehicleMock.cpp:216`). 레버가 돌면 버튼이 같이 간다.
+- 근사 차는 버튼을 레버의 **`AxisPivot`**에 코드로 붙인다(`P3VehicleMock.cpp:221`). 레버가 돌면 버튼이 같이 간다.
 - 레벨 Outliner로 붙이면 레버 Actor의 **루트**에 붙어서 레버가 돌아도 버튼이 제자리다. 그래서 다음처럼 한다.
   - `BP_GearLever` 안에 **Child Actor 컴포넌트**(클래스 `BP_GearButton`)가 `AxisPivot` 밑에 이미 있다.
   - 레버를 20° 돌리면 버튼이 근사 차와 같이 따라온다(P4i E2). VR에서 한 번 더 본다.
