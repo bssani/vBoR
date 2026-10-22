@@ -107,5 +107,5 @@ Plugins/OculusInteractionSamples/
 Plugins/UnrealAgent/
 Plugins/McpAutomationBridge/
 .unrealagent/
-# .codex: Codex 앱이 만드는 프로젝트 MCP 설정(unreal-engine 중복). Codex는 전역 설정의 unreal-vbor를 쓴다.
+# .codex: project MCP config the Codex app creates (duplicates unreal-engine). Codex uses unreal-vbor from its global config.
 .codex/
