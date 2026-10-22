@@ -1,5 +1,10 @@
 #include "VBoRDoorMotion.h"
 
+namespace
+{
+	constexpr double DoorEdgeMarginCm = 5; // Count edge brushes only (placeholder, P2 R1-1)
+}
+
 FVBoRDoorMetrics FVBoRDoorMetrics::Since(const FVBoRDoorMetrics& Before) const
 {
 	FVBoRDoorMetrics Result = *this;
@@ -38,7 +43,7 @@ bool FVBoRDoorMotion::BeginGrab(int32 Hand, int32 Handle, const FVBoRDoorHand& I
 	if (GrabHand != INDEX_NONE || bPaused || Input.Points[0].SizeSquared2D() < SMALL_NUMBER) { return false; }
 	GrabHand = Hand; GrabHandle = Handle;
 	PushHand = PushFace = INDEX_NONE;
-	for (int32 H = 0; H < 2; ++H) { bContactNear[H] = false; ContactFace[H] = INDEX_NONE; LastIgnored[H] = EVBoRDoorIgnore::Count; }
+	for (int32 H = 0; H < 2; ++H) { bContactNear[H] = false; ContactFace[H] = PushSide[H] = INDEX_NONE; LastIgnored[H] = EVBoRDoorIgnore::Count; }
 	RebaseGrab(Input.Points[0]);
 	++Metrics.Grabs[Hand][Handle];
 	Unlock(Handle);
@@ -73,12 +78,28 @@ void FVBoRDoorMotion::RecordIgnore(int32 Hand, EVBoRDoorIgnore Reason)
 	LastIgnored[Hand] = Reason;
 }
 
+bool FVBoRDoorMotion::HasLeftPushSide(const FVBoRDoorHand& Input, int32 Face) const
+{
+	const double Sign = Face == 0 ? 1.0 : -1.0;
+	const double BoundsY = Face == 0 ? FaceMaxCm.Y : FaceMinCm.Y;
+	for (const FVector& Point : Input.Points)
+	{
+		const FVector P = ToDoor(Point);
+		if (P.X < FaceMinCm.X - DoorEdgeMarginCm || P.X > FaceMaxCm.X + DoorEdgeMarginCm ||
+			P.Z < FaceMinCm.Z - DoorEdgeMarginCm || P.Z > FaceMaxCm.Z + DoorEdgeMarginCm) { continue; }
+		double PlaneY = BoundsY;
+		if (QueryFace && !QueryFace(P, Face, PlaneY)) { PlaneY = BoundsY; }
+		// All five points must clear remembered face (P5w D3)
+		if (!(Sign * (P.Y - PlaneY) >= 0)) { return false; }
+	}
+	return true;
+}
+
 bool FVBoRDoorMotion::FindPush(int32 Hand, const FVBoRDoorHand& Input, int32 Face, double& OutAngle, EVBoRDoorIgnore& OutReason)
 {
 	const double Sign = Face == 0 ? 1.0 : -1.0;
 	const double BoundsY = Face == 0 ? FaceMaxCm.Y : FaceMinCm.Y;
 	double DeepestPlaneY = BoundsY;
-	constexpr double EdgeMarginCm = 5; // Count edge brushes only (placeholder, P2 R1-1)
 	const bool bRejectedCrossing = bContactNear[Hand] && ContactFace[Hand] == Face &&
 		(LastIgnored[Hand] == EVBoRDoorIgnore::PalmDirection || LastIgnored[Hand] == EVBoRDoorIgnore::NearAxis || LastIgnored[Hand] == EVBoRDoorIgnore::Outside);
 	bool bCrossing = false, bAwayFromAxis = false, bInside = false;
@@ -89,7 +110,7 @@ bool FVBoRDoorMotion::FindPush(int32 Hand, const FVBoRDoorHand& Input, int32 Fac
 	for (int32 I = 0; I < 5; ++I)
 	{
 		const FVector P = ToDoor(Input.Points[I]);
-		if (P.ContainsNaN() || P.X < FaceMinCm.X - EdgeMarginCm || P.X > FaceMaxCm.X + EdgeMarginCm || P.Z < FaceMinCm.Z - EdgeMarginCm || P.Z > FaceMaxCm.Z + EdgeMarginCm) { continue; }
+		if (P.ContainsNaN() || P.X < FaceMinCm.X - DoorEdgeMarginCm || P.X > FaceMaxCm.X + DoorEdgeMarginCm || P.Z < FaceMinCm.Z - DoorEdgeMarginCm || P.Z > FaceMaxCm.Z + DoorEdgeMarginCm) { continue; }
 		double PlaneY = BoundsY;
 		const bool bOnFace = QueryFace ? QueryFace(P, Face, PlaneY) :
 			P.X >= FaceMinCm.X && P.X <= FaceMaxCm.X && P.Z >= FaceMinCm.Z && P.Z <= FaceMaxCm.Z;
@@ -207,9 +228,11 @@ void FVBoRDoorMotion::Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSecon
 				else { RecordIgnore(H, EVBoRDoorIgnore::Count); }
 				continue;
 			}
+			if (PushHand != H && PushSide[H] != INDEX_NONE && HasLeftPushSide(Hands[H], PushSide[H])) { PushSide[H] = INDEX_NONE; }
 			if (bFound) { bContactNear[H] = false; ContactFace[H] = INDEX_NONE; RecordIgnore(H, EVBoRDoorIgnore::Count); continue; }
 			int32 Face = ContactFace[H];
 			if (PushHand == H) { Face = PushFace; }
+			else if (PushSide[H] != INDEX_NONE) { Face = PushSide[H]; }
 			else if (bHavePrevious[H])
 			{
 				const FVector Prev = FQuat(FVector::UpVector, FMath::DegreesToRadians(-PreviousAngleDeg)).RotateVector(Previous[H].Points[0]);
@@ -225,7 +248,7 @@ void FVBoRDoorMotion::Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSecon
 			RecordIgnore(H, Reason);
 			if (!bPush) { continue; }
 			if (PushHand != H || PushFace != Face) { ++Metrics.PushStarts[H][Face]; }
-			PushHand = H; PushFace = Face;
+			PushHand = H; PushFace = Face; PushSide[H] = Face;
 			MoveTo(Target, DeltaSeconds, true);
 			bFound = true;
 		}
@@ -241,6 +264,6 @@ void FVBoRDoorMotion::Reset()
 	AngleDeg = 0; bLocked = bUseLatch; bLatchArmed = bPaused = false;
 	GrabHand = GrabHandle = PushHand = PushFace = INDEX_NONE;
 	bHavePrevious[0] = bHavePrevious[1] = false;
-	for (int32 H = 0; H < 2; ++H) { bContactNear[H] = false; ContactFace[H] = INDEX_NONE; LastIgnored[H] = EVBoRDoorIgnore::Count; }
+	for (int32 H = 0; H < 2; ++H) { bContactNear[H] = false; ContactFace[H] = PushSide[H] = INDEX_NONE; LastIgnored[H] = EVBoRDoorIgnore::Count; }
 	PalmAngleDeg[0] = PalmAngleDeg[1] = -1;
 }
