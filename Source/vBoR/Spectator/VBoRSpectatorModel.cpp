@@ -66,7 +66,7 @@ FString FVBoRSpectatorNames::Line(const FString& Prefix) const
 {
 	FString Result;
 	for (int32 Index = 0; Index < FMath::Min(2, Entries.Num()); ++Index)
-	{ Result += (Index == 0 ? Prefix : TEXT(" ,  ")) + Entries[Index].Name; }
+	{ Result += (Index == 0 ? Prefix : TEXT(" · ")) + Entries[Index].Name; }
 	return Result;
 }
 

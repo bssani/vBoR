@@ -686,7 +686,7 @@ bool FP3cE10::RunTest(const FString&)
 {
 	FP3cEnabled Setting; FP5iWorld W;
 	for (const FKey Key : {EKeys::NumPadEight,EKeys::NumPadEight,EKeys::NumPadFour}) { FP5iTestAccess::Key(W.Runner,Key); }
-	TestTrue(TEXT("Status shows signed metres"),W.Runner->GetOperatorStatus().Seat.Contains(TEXT("Home shift ON ,  +2.0 m front ,  -1.0 m side")));
+	TestTrue(TEXT("Status shows signed metres"),W.Runner->GetOperatorStatus().Seat.Contains(TEXT("Home shift ON · +2.0 m front · -1.0 m side")));
 	Setting.Variable->Set(0, ECVF_SetByConsole);
 	TestEqual(TEXT("Disabled status is unchanged"),W.Runner->GetOperatorStatus().Seat,FString(TEXT("Driver")));
 	TestTrue(TEXT("Turning off does not move Pawn"),W.Alignment->GetHomeShiftCm() == FVector2D(200,-100)); return true;

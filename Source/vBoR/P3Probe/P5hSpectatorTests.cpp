@@ -233,11 +233,11 @@ bool FP5hRecent::RunTest(const FString&)
 {
 	FVBoRSpectatorNames N; N.Sample({TEXT("Steering Wheel")},0,1);
 	N.Sample({TEXT("Steering Wheel"),TEXT("Gear Lever")},1,1);
-	TestEqual(TEXT("Newer hand first"),P5hLine(N),FString(TEXT("Interacting: Gear Lever ,  Steering Wheel")));
+	TestEqual(TEXT("Newer hand first"),P5hLine(N),FString(TEXT("Interacting: Gear Lever · Steering Wheel")));
 	N.Sample({TEXT("Steering Wheel"),TEXT("Gear Lever"),TEXT("Console Knob")},1.1,1);
-	TestEqual(TEXT("Only newest two"),P5hLine(N),FString(TEXT("Interacting: Console Knob ,  Gear Lever")));
+	TestEqual(TEXT("Only newest two"),P5hLine(N),FString(TEXT("Interacting: Console Knob · Gear Lever")));
 	N.Sample({TEXT("Steering Wheel")},1.2,1); N.Sample({TEXT("Steering Wheel"),TEXT("Gear Lever")},1.3,1);
-	TestEqual(TEXT("Regrab becomes most recent"),P5hLine(N),FString(TEXT("Interacting: Gear Lever ,  Console Knob")));
+	TestEqual(TEXT("Regrab becomes most recent"),P5hLine(N),FString(TEXT("Interacting: Gear Lever · Console Knob")));
 	return true;
 }
 

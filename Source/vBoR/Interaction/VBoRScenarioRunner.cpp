@@ -650,7 +650,7 @@ FString AVBoRScenarioRunner::GetPanelText() const
 	if (!bRunning) { return TEXT("Preparing"); }
 	if (const auto* Step = CurrentStep())
 	{
-		FString Text = FString::Printf(TEXT("%s\n%s ,  %d/%d\n"), *Step->Instruction.ToString(), *Step->StepId.ToString(), StepIndex + 1, Scenario->Steps.Num());
+		FString Text = FString::Printf(TEXT("%s\n%s · %d/%d\n"), *Step->Instruction.ToString(), *Step->StepId.ToString(), StepIndex + 1, Scenario->Steps.Num());
 		if (Step->bRequireBaseViewpoint && Alignment && !Alignment->IsBaseViewpoint()) { Text += TEXT("Return to the driver seat"); }
 		else if (bPanelPlacementPending || (Alignment && Alignment->IsSwitching()) || ConfirmLockRemaining > 0) { Text += TEXT("Please wait"); }
 		else if (RuleSatisfied() && NeedsConfirmation()) { Text += Step->ConfirmBy == EVBoRConfirmBy::Operator ? TEXT("Please wait") : TEXT("Press confirm"); }

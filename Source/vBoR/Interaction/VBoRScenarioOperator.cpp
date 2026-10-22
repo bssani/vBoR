@@ -243,22 +243,22 @@ FVBoROperatorStatus AVBoRScenarioRunner::GetOperatorStatus() const
 	const int32 Completed = bFreeMode ? (bFinished ? Total : OperatorCompletedSteps) : bRunning ? FMath::Max(0, StepIndex) : 0;
 	S.Mode = bFreeMode ? TEXT("FREE MODE") : bRunning ? TEXT("GUIDED SCENARIO") : TEXT("GETTING READY");
 	S.Title = bFreeMode ? TEXT("Free mode") : bRunning ? FString::Printf(TEXT("Mission %d of %d"), StepIndex + 1, Total) : FString(TEXT("Getting ready"));
-	S.Mission = bFreeMode ? (bFinished ? TEXT("All missions complete") : TEXT("Entered by operator (End)")) : CurrentStep() && bRunning ? CurrentStep()->StepId.ToString() + TEXT(" ,  ") + VBoRSpectator::MissionText(*CurrentStep(), FText::FromString(TEXT("Mission in progress"))).ToString() : FString(TEXT("Check the setup alignment before starting."));
+	S.Mission = bFreeMode ? (bFinished ? TEXT("All missions complete") : TEXT("Entered by operator (End)")) : CurrentStep() && bRunning ? CurrentStep()->StepId.ToString() + TEXT(" · ") + VBoRSpectator::MissionText(*CurrentStep(), FText::FromString(TEXT("Mission in progress"))).ToString() : FString(TEXT("Check the setup alignment before starting."));
 	S.Progress = FString::Printf(TEXT("%d of %d complete"), Completed, Total);
 	S.Waiting = bFreeMode ? TEXT("Nothing — participant explores") : !bRunning ? TEXT("Alignment check") : !RuleSatisfied() ? TEXT("Waiting for the rule") : (ConfirmLockRemaining > 0 || bPanelPlacementPending) ? TEXT("Confirm locked") : NeedsConfirmation() ? (CurrentStep()->ConfirmBy == EVBoRConfirmBy::Participant ? TEXT("Waiting for participant confirmation") : TEXT("Operator confirmation needed")) : TEXT("Waiting for the rule");
 	S.bApplied = Alignment && Alignment->State == EVBoRAlignmentState::Applied;
 	S.bNeedsCheck = Alignment && Alignment->State == EVBoRAlignmentState::NeedsCheck;
 	S.Alignment = S.bApplied ? TEXT("Applied") : S.bNeedsCheck ? TEXT("Needs check — ") + Alignment->EnglishReason() : FString(TEXT("No saved alignment"));
-	if (bAlignmentIgnored) { S.Alignment += TEXT(" ,  started without alignment"); }
+	if (bAlignmentIgnored) { S.Alignment += TEXT(" · started without alignment"); }
 	S.Seat = Alignment ? Alignment->SeatName() : FString(TEXT("Driver"));
 	if (IsHomeShiftEnabled())
 	{
 		const FVector2D Offset = Alignment ? Alignment->GetHomeShiftCm() : FVector2D::ZeroVector;
 		// Display cm → m only (P3c D6)
-		S.Seat += FString::Printf(TEXT(" ,  Home shift ON ,  %+.1f m front ,  %+.1f m side"), Offset.X / 100, Offset.Y / 100);
+		S.Seat += FString::Printf(TEXT(" · Home shift ON · %+.1f m front · %+.1f m side"), Offset.X / 100, Offset.Y / 100);
 	}
-	S.Counts = FString::Printf(TEXT("Previous %d ,  Retry %d ,  Skipped %d ,  End %d ,  Re-apply %d"), PreviousCount, RetryCount, SkipCount, EndCount, ReapplyCount);
-	S.Discards = FString::Printf(TEXT("Discarded — stale %d ,  permission %d ,  rule %d ,  transition %d ,  lock %d"), StaleDiscards, PermissionDiscards, RuleDiscards, TransitionDiscards, ConfirmLockDiscards);
+	S.Counts = FString::Printf(TEXT("Previous %d · Retry %d · Skipped %d · End %d · Re-apply %d"), PreviousCount, RetryCount, SkipCount, EndCount, ReapplyCount);
+	S.Discards = FString::Printf(TEXT("Discarded — stale %d · permission %d · rule %d · transition %d · lock %d"), StaleDiscards, PermissionDiscards, RuleDiscards, TransitionDiscards, ConfirmLockDiscards);
 	S.LastCommand = LastOperatorCommand.IsEmpty() ? FString(TEXT("None")) : LastOperatorCommand;
 	S.PointAlignment = Alignment ? Alignment->PointStatus() : FString();
 	S.FloorRouteNotice = FloorRouteNotice;
