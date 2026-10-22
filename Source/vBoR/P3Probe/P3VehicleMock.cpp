@@ -138,10 +138,10 @@ void AP3VehicleMock::BeginPlay()
 	DriverDoorRoute->Tags.Add(TEXT("Route.ToDriverDoor"));
 	DriverDoorRoute->Spline->SetSplinePoints(DriverDoorRoutePointsCm, ESplineCoordinateSpace::Local);
 	DriverDoorRoute->FinishSpawning(GetActorTransform()); DriverDoorRoute->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
-	Door = GetWorld()->SpawnActorDeferred<AVBoRHingedDoor>(AVBoRHingedDoor::StaticClass(), FTransform(FRotator(0,180,0).Quaternion(), GetActorTransform().TransformPosition(DoorHingeCm)), this);
 	const FTransform DoorWorld(FRotator(0,GetActorRotation().Yaw+180,0), GetActorTransform().TransformPosition(DoorHingeCm));
+	// Keep deferred/final pose identical (attached handles must not shift, P5x D4)
+	Door = GetWorld()->SpawnActorDeferred<AVBoRHingedDoor>(AVBoRHingedDoor::StaticClass(), DoorWorld, this);
 	Door->Tags.Add(TEXT("Car.DriverDoor")); Door->SpectatorName = FText::FromString(TEXT("Driver Door"));
-	Door->FinishSpawning(DoorWorld); Door->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	// Actor origin = car origin; move mesh/axis only (simulate car-origin pivot, P2b D3)
 	OutsideAxisHandle = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
 	OutsideAxisHandle->AxisPivot->SetRelativeLocation(OutsideHandlePivotCm);
@@ -150,7 +150,7 @@ void AP3VehicleMock::BeginPlay()
 	OutsideAxisHandle->SpectatorName = FText::FromString(TEXT("Driver Door"));
 	OutsideAxisHandle->FinishSpawning(GetActorTransform());
 	OutsideAxisHandle->AttachToComponent(Door->HingePivot, FAttachmentTransformRules::KeepWorldTransform);
-	Door->SetAxisHandle(0, OutsideAxisHandle);
+	Door->OutsideAxisHandle = OutsideAxisHandle;
 	// Car +Y = interior. Pull lever bottom to tilt around +X (placeholder, P2d D5)
 	InsideAxisHandle = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
 	InsideAxisHandle->AxisPivot->SetRelativeLocation(InsideHandlePivotCm);
@@ -159,7 +159,8 @@ void AP3VehicleMock::BeginPlay()
 	InsideAxisHandle->SpectatorName = FText::FromString(TEXT("Driver Door"));
 	InsideAxisHandle->FinishSpawning(GetActorTransform());
 	InsideAxisHandle->AttachToComponent(Door->HingePivot, FAttachmentTransformRules::KeepWorldTransform);
-	Door->SetAxisHandle(1, InsideAxisHandle);
+	Door->InsideAxisHandle = InsideAxisHandle;
+	Door->FinishSpawning(DoorWorld); Door->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	// +Y top/+Z car -Y. Positive opening points up (horizontal hinge, P2c D3)
 	ConsoleLid = GetWorld()->SpawnActorDeferred<AVBoRHingedPanel>(AVBoRHingedPanel::StaticClass(), GetActorTransform(), this);
 	ConsoleLid->HingePivot->SetRelativeTransform(FTransform(FQuat(FVector::XAxisVector, PI / 2), ConsoleLidPivotCm));
