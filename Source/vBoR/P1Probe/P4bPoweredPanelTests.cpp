@@ -321,7 +321,7 @@ bool FP4bGateBlockingTest::RunTest(const FString& Parameters)
 	Gate->RequestOpen(); Gate->Tick(5);
 	Box->MoveHeldPose(Desired, 1.0f / 60);
 	TestTrue(TEXT("E12 open gate allows entry"), Box->GetActorLocation().Equals(Desired.GetLocation(), 0.02));
-	// 손에 든 박스도 닫힘 경로에 있으면 끼임으로 처리함 (P4b D5)
+	// Held box in closing path also counts as pinch obstruction (P4b D5)
 	Box->SetActorLocation(Frame.TransformPosition(FVector(-25, 0, 110)));
 	const FTransform Held = Box->GetActorTransform();
 	Gate->RequestClose(); Gate->Tick(5);

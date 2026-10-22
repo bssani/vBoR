@@ -70,7 +70,7 @@ namespace
 			TArray<UActorComponent*> Components; It->GetComponents(Components);
 			for (UActorComponent* Component : Components) { if (Component->ComponentHasTag(Tag)) { Matches.Add(Component); } }
 		}
-		if (Matches.Num() != 1) { Problems += FString::Printf(TEXT("태그 %s: %d개 발견 (1개 필요)\n"), *Tag.ToString(), Matches.Num()); return nullptr; }
+		if (Matches.Num() != 1) { Problems += FString::Printf(TEXT("Tag %s: found %d (need 1)\n"), *Tag.ToString(), Matches.Num()); return nullptr; }
 		return Matches[0];
 	}
 	template<class T> T* P3Component(UObject* Object)
@@ -98,7 +98,7 @@ namespace
 	{
 		if (!Button) { return; }
 		Button->SetActorHiddenInGame(!bVisible);
-		// 보이지 않는 버튼이 손 입력을 받지 않게 ISDK 도 함께 끔 (P3 §2)
+		// Disable ISDK too (hidden buttons must not receive hand input, P3 §2)
 		if (bVisible) { Button->Poke->Activate(false); } else { Button->Poke->Deactivate(); }
 	}
 	TSharedRef<SBorder> P3TextPlate(const TSharedRef<STextBlock>& Text)
@@ -111,7 +111,7 @@ namespace
 AVBoRScenarioRunner::AVBoRScenarioRunner()
 {
 	ButtonDistanceCm = 45; ButtonBelowCm = 30; ConfirmLockSeconds = 0.6; SeatedPanelSeconds = 1.0;
-	FreeModeInstruction = FText::FromString(TEXT("자유모드 — 차를 자유롭게 살펴보고 조작해 보세요. 좌석은 아래 버튼으로 바꿉니다"));
+	FreeModeInstruction = FText::FromString(TEXT("Free mode — Explore and operate the vehicle. Use the buttons below to change seats."));
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("FlowOrigin")));
 	PrimaryActorTick.bCanEverTick = true; PrimaryActorTick.TickGroup = TG_PostUpdateWork;
 	Panel = CreateDefaultSubobject<UWidgetComponent>(TEXT("KoreanGuidance")); Panel->SetupAttachment(RootComponent);
@@ -129,7 +129,7 @@ AVBoRScenarioRunner::AVBoRScenarioRunner()
 	MarkerArrow = CreateDefaultSubobject<UArrowComponent>(TEXT("TargetArrow")); MarkerArrow->SetupAttachment(RootComponent);
 	MarkerArrow->ArrowColor = FColor::Yellow; MarkerArrow->SetHiddenInGame(true);
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
-	// 네 변으로 바닥 고리 표시함 (별도 렌더링 구조 없이 위치 유도, P3 §5)
+	// Four edges for floor ring (location guidance without custom rendering, P3 §5)
 	for (int32 I = 0; I < 4; ++I)
 	{
 		UStaticMeshComponent* Part = CreateDefaultSubobject<UStaticMeshComponent>(*FString::Printf(TEXT("MarkerRing%d"), I));
@@ -151,7 +151,7 @@ void AVBoRScenarioRunner::BeginPlay()
 	OperatorPanel->SetSlateWidget(P3TextPlate(OperatorText.ToSharedRef())); OperatorPanel->SetWorldScale3D(FVector(1, 0.05, 0.05));
 	for (int32 I = 0; I < 2; ++I)
 	{
-		// 메시·판정 영역 크기를 함께 정하고 실제 poke 경로를 재사용함 (P3 D4)
+		// Set mesh/decision area together, reuse actual poke path (P3 D4)
 		AVBoRPokeButton* Button = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), FTransform::Identity, this);
 		Button->ButtonMesh->SetRelativeScale3D(FVector(0.08, 0.08, 0.015)); Button->HitAreaScale = 1;
 		Button->FinishSpawning(FTransform::Identity); Button->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepWorldTransform);
@@ -224,10 +224,10 @@ bool AVBoRScenarioRunner::InitializeFlow()
 		TArray<UVBoRVehicleAlignmentComponent*> Components; It->GetComponents(Components);
 		for (UVBoRVehicleAlignmentComponent* C : Components) { Alignment = C; ++AlignmentCount; }
 	}
-	if (AlignmentCount != 1) { ValidationProblems += TEXT("정렬 컴포넌트 1개 필요\n"); }
-	// 좌석 시점은 Play 중 생기거나 바뀌지 않음. 여기서 한 번 찾고 진행자 창·자유모드가 이 값을 씀 (P5o)
+	if (AlignmentCount != 1) { ValidationProblems += TEXT("Need 1 alignment component\n"); }
+	// Seat viewpoints never spawn/change during Play. Cache here for operator panel/free mode (P5o)
 	SeatViews[0] = ScanSeatView(TEXT("Car.PassengerView")); SeatViews[1] = ScanSeatView(TEXT("Car.RearView"));
-	if (!Scenario || Scenario->Steps.IsEmpty()) { ValidationProblems += TEXT("시나리오 단계 없음\n"); }
+	if (!Scenario || Scenario->Steps.IsEmpty()) { ValidationProblems += TEXT("No scenario steps\n"); }
 	else for (const FVBoRScenarioStep& Step : Scenario->Steps)
 	{
 		UObject* Raw = FindP3Tag(GetWorld(), Step.TargetTag, ValidationProblems);
@@ -243,23 +243,23 @@ bool AVBoRScenarioRunner::InitializeFlow()
 		case EVBoRStepRule::KeyHeld: case EVBoRStepRule::KeyUnlockAndLock: Target = Cast<AVBoRKeyFob>(P3Actor(Raw)); break;
 		case EVBoRStepRule::PoweredOpen: case EVBoRStepRule::PoweredClosed: Target = Cast<AVBoRPoweredPanel>(P3Actor(Raw)); break;
 		}
-		if (Step.Rule != EVBoRStepRule::Confirm && !Target) { ValidationProblems += FString::Printf(TEXT("%s: 태그 %s 종류 불일치 또는 없음\n"), *Step.StepId.ToString(), *Step.TargetTag.ToString()); }
+		if (Step.Rule != EVBoRStepRule::Confirm && !Target) { ValidationProblems += FString::Printf(TEXT("%s: tag %s type mismatch or missing\n"), *Step.StepId.ToString(), *Step.TargetTag.ToString()); }
 		const FString Id = Step.StepId.ToString(); const int32 Number = FCString::Atoi(*Id);
-		if (Number < 1 || Number > 20 || Number == 17 || Id != FString::Printf(TEXT("%02d"), Number)) { ValidationProblems += TEXT("원본 StepId 필요 (01–16, 18–20)\n"); }
+		if (Number < 1 || Number > 20 || Number == 17 || Id != FString::Printf(TEXT("%02d"), Number)) { ValidationProblems += TEXT("Original StepId required (01–16, 18–20)\n"); }
 		Targets.Add(Target);
 		UObject* Marker = FindP3Tag(GetWorld(), Step.MarkerTag, ValidationProblems);
 		USceneComponent* Scene = P3Scene(Marker); Markers.Add(Scene);
-		if (!Step.MarkerTag.IsNone() && !Scene) { ValidationProblems += FString::Printf(TEXT("%s: 표시 태그 종류 불일치\n"), *Step.StepId.ToString()); }
+		if (!Step.MarkerTag.IsNone() && !Scene) { ValidationProblems += FString::Printf(TEXT("%s: marker tag type mismatch\n"), *Step.StepId.ToString()); }
 		FString RouteProblems;
 		AVBoRFloorRoute* Route = Cast<AVBoRFloorRoute>(FindP3Tag(GetWorld(), Step.RouteTag, RouteProblems)); Routes.Add(Route);
 		if (!Step.RouteTag.IsNone())
 		{
 			if (!Route || Route->Spline->GetNumberOfSplinePoints() < 2)
-			{ ValidationProblems += FString::Printf(TEXT("%s: 바닥 경로 %s — 경로 Actor 하나와 점 둘 이상 필요 | %s\n"), *Step.StepId.ToString(), *Step.RouteTag.ToString(), *RouteProblems); }
+			{ ValidationProblems += FString::Printf(TEXT("%s: floor route %s — need one route Actor and at least two points | %s\n"), *Step.StepId.ToString(), *Step.RouteTag.ToString(), *RouteProblems); }
 			else
 			{
 				UBoxComponent* Footprint = Cast<UBoxComponent>(FindP3Tag(GetWorld(), TEXT("Car.Footprint"), RouteProblems));
-				if (!Footprint) { ValidationProblems += FString::Printf(TEXT("%s: 바닥 경로 %s — Car.Footprint 상자 하나 필요 | %s\n"), *Step.StepId.ToString(), *Step.RouteTag.ToString(), *RouteProblems); }
+				if (!Footprint) { ValidationProblems += FString::Printf(TEXT("%s: floor route %s — need one Car.Footprint box | %s\n"), *Step.StepId.ToString(), *Step.RouteTag.ToString(), *RouteProblems); }
 				else
 				{
 					TArray<FVector> Points = P3RouteSamples(Route);
@@ -268,7 +268,7 @@ bool AVBoRScenarioRunner::InitializeFlow()
 					{
 						const FVector Local = Footprint->GetComponentTransform().InverseTransformPosition(Point), Extent = Footprint->GetUnscaledBoxExtent();
 						if (FMath::Abs(Local.X) <= Extent.X && FMath::Abs(Local.Y) <= Extent.Y)
-						{ ValidationProblems += FString::Printf(TEXT("%s: 바닥 경로 %s가 차체 영역 Car.Footprint를 지남\n"), *Step.StepId.ToString(), *Step.RouteTag.ToString()); break; }
+						{ ValidationProblems += FString::Printf(TEXT("%s: floor route %s crosses Car.Footprint body area\n"), *Step.StepId.ToString(), *Step.RouteTag.ToString()); break; }
 					}
 				}
 			}
@@ -298,9 +298,9 @@ bool AVBoRScenarioRunner::InitializeFlow()
 		TArray<USceneComponent*> Components; It->GetComponents(Components);
 		for (USceneComponent* Component : Components) { if (Component->ComponentHasTag(TEXT("Car.Start"))) { StartMarker = Component; } }
 	}
-	if (!ValidationProblems.IsEmpty()) { Record(TEXT("시작 차단:\n") + ValidationProblems); RefreshPanel(); return false; }
+	if (!ValidationProblems.IsEmpty()) { Record(TEXT("Start blocked:\n") + ValidationProblems); RefreshPanel(); return false; }
 	if (Alignment->State != EVBoRAlignmentState::Applied && !bAlignmentIgnored)
-	{ Record(TEXT("정렬 필요 — 진행자 창 P로 점 정렬 또는 P0-c 레벨에서 C로 저장; O로 무시 가능 | ") + Alignment->Describe()); RefreshPanel(); return false; }
+	{ Record(TEXT("Alignment required — P in operator panel for point alignment or C in P0-c level to save; O to ignore | ") + Alignment->Describe()); RefreshPanel(); return false; }
 	bRunning = true; EnterStep(0, true); RefreshPanel(); return true;
 }
 
@@ -353,7 +353,7 @@ void AVBoRScenarioRunner::EnterStep(int32 Index, bool bNewAttempt)
 	if (StepIndex == 0 && Index != 0) { RecordStartFallback(); }
 	OperatorCompletedSteps = FMath::Max(0, Index);
 	StepIndex = Index; ++Generation; StepElapsed = 0; ConfirmLockRemaining = FMath::Max(0.0f, ConfirmLockSeconds); bSeatHeadRecorded = false;
-	// 이전 단계로 돌아가도 같은 시도의 시작 기록을 유지함 (P4c D3)
+	// Keep attempt start record on previous-step return (P4c D3)
 	if (bNewAttempt) { bStartHeadPending = true; }
 	if (!CurrentStep())
 	{
@@ -363,7 +363,7 @@ void AVBoRScenarioRunner::EnterStep(int32 Index, bool bNewAttempt)
 	{
 		ButtonBaseline = ButtonCounts.FindRef(Cast<AVBoRPokeButton>(Targets[Index]));
 		KeyBaseline = KeyCounts.FindRef(Cast<AVBoRKeyFob>(Targets[Index]));
-		Record(FString::Printf(TEXT("단계 시작 %s %d/%d generation=%llu | 이전 %d 재시도 %d 건너뛰기 %d"), *CurrentStep()->StepId.ToString(), Index + 1, Scenario->Steps.Num(), Generation, PreviousCount, RetryCount, SkipCount));
+		Record(FString::Printf(TEXT("Step start %s %d/%d generation=%llu | previous %d retries %d skips %d"), *CurrentStep()->StepId.ToString(), Index + 1, Scenario->Steps.Num(), Generation, PreviousCount, RetryCount, SkipCount));
 	}
 	BeginRoute(); PlacePanel(); UpdateMarker();
 }
@@ -372,18 +372,18 @@ void AVBoRScenarioRunner::EnterFreeMode(bool bCompleted)
 {
 	if (Alignment) { Alignment->FlowStarted(); }
 	if (StepIndex == 0) { RecordStartFallback(); }
-	const FString Reason = bCompleted ? FString(TEXT("안내 완료"))
-		: FString::Printf(TEXT("진행자 End, 단계 %s 에서"), *CurrentStep()->StepId.ToString());
+	const FString Reason = bCompleted ? FString(TEXT("Guidance complete"))
+		: FString::Printf(TEXT("Operator End, at step %s"), *CurrentStep()->StepId.ToString());
 	bRunning = false; bFreeMode = true; bFinished = bCompleted; StepIndex = INDEX_NONE; ++Generation;
 	if (!bCompleted) { ++EndCount; }
 	BeginRoute(); PlacePanel(); UpdateMarker();
-	Record(FString::Printf(TEXT("자유모드 시작 — %s | 요약 이전 %d 재시도 %d 건너뛰기 %d End %d | 버림 지난단계 %d 권한 %d 규칙 %d 전환 %d 잠금 %d"),
+	Record(FString::Printf(TEXT("Free mode start — %s | summary previous %d retries %d skips %d End %d | discarded stale %d permission %d rule %d transition %d lock %d"),
 		*Reason, PreviousCount, RetryCount, SkipCount, EndCount, StaleDiscards, PermissionDiscards, RuleDiscards, TransitionDiscards, ConfirmLockDiscards));
 }
 
 void AVBoRScenarioRunner::CompleteStep(const TCHAR* Who)
 {
-	LastCompletion = FString::Printf(TEXT("단계 완료 %s | %s | %.3f s 이전 %d 재시도 %d 건너뛰기 %d"), *CurrentStep()->StepId.ToString(), Who, StepElapsed, PreviousCount, RetryCount, SkipCount);
+	LastCompletion = FString::Printf(TEXT("Step complete %s | %s | %.3f s previous %d retries %d skips %d"), *CurrentStep()->StepId.ToString(), Who, StepElapsed, PreviousCount, RetryCount, SkipCount);
 	Record(LastCompletion);
 	EnterStep(StepIndex + 1);
 }
@@ -391,7 +391,7 @@ void AVBoRScenarioRunner::CompleteStep(const TCHAR* Who)
 void AVBoRScenarioRunner::QueueCommand(const FVBoRFlowCommand& Command)
 {
 	FVBoRFlowCommand Queued = Command;
-	// 처리 frame 의 dt 가 길어도 잠금 중 받은 입력은 살리지 않음 (R1-1)
+	// Long processing-frame dt never revives input received during lock (R1-1)
 	const bool bSeat = bFreeMode && Command.Source == EVBoRCommandSource::Participant &&
 		(Command.Action == EVBoRFlowCommand::Passenger || Command.Action == EVBoRFlowCommand::Rear || Command.Action == EVBoRFlowCommand::ReturnBase);
 	Queued.bConfirmLocked = (Command.Action == EVBoRFlowCommand::Confirm || bSeat) && (ConfirmLockRemaining > 0 || bPanelPlacementPending);
@@ -411,27 +411,27 @@ void AVBoRScenarioRunner::QueueLive(EVBoRFlowCommand Action, EVBoRCommandSource 
 void AVBoRScenarioRunner::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds); FreezeLiveToken();
-	// 모든 Actor 의 BeginPlay 뒤 한 번 검사함 (P3 레벨 배치 순서와 무관)
+	// Validate once after all Actor BeginPlay calls (independent of P3 placement order)
 	if (!bInitialized) { InitializeFlow(); }
 	ProcessFlow(DeltaSeconds);
 }
 
 void AVBoRScenarioRunner::ProcessFlow(double DeltaSeconds)
 {
-	// 요청 frame 이전의 dt 를 새 암전에 넣지 않음 (P5g D8, s)
+	// Exclude pre-request-frame dt from new blackout (P5g D8, s)
 	if (bReloadPending && !bReloadRequested)
 	{
 		ReloadRemaining = FMath::Max(0.0, ReloadRemaining - FMath::Max(0.0, DeltaSeconds));
 		if (ReloadRemaining <= 0)
 		{
 			bReloadRequested = true;
-			Record(TEXT("진행자 레벨 다시 열기 요청 — 암전 완료"));
+			Record(TEXT("Operator level reopen requested — blackout complete"));
 			RequestLevelReload(FName(*UGameplayStatics::GetCurrentLevelName(this)));
 		}
 	}
 	const uint64 Before = Generation;
 	StepElapsed += FMath::Max(0.0, DeltaSeconds);
-	// 같은 Tick 앞에서 Pawn 을 옮겼으면 이동 전 dt 로 새 잠금을 줄이지 않음 (R1-7)
+	// Pawn moved earlier this Tick: no pre-move dt for new lock (R1-7)
 	if (!bPawnMovedBeforeFlow) { ConfirmLockRemaining = FMath::Max(0.0, ConfirmLockRemaining - FMath::Max(0.0, DeltaSeconds)); }
 	bPawnMovedBeforeFlow = false;
 	FTransform Head; const bool bTracked = Alignment && Alignment->ReadWorldHead(Head);
@@ -442,8 +442,8 @@ void AVBoRScenarioRunner::ProcessFlow(double DeltaSeconds)
 	if (bReapplyPending && Alignment && !Alignment->IsSwitching()) { FinishReapply(); }
 	if (bRestartPending && Alignment && !Alignment->IsSwitching())
 	{ bRestartPending = false; bRunning = true; bFinished = false; EnterStep(0, true); }
-	// 한 frame 에 규칙으로 여러 단계를 넘기지 않음 (P3 E1·E2)
-	if (bRunning && Generation == Before && RuleSatisfied() && !NeedsConfirmation()) { CompleteStep(TEXT("참가자 규칙")); }
+	// No multiple rule-driven step advances in one frame (P3 E1/E2)
+	if (bRunning && Generation == Before && RuleSatisfied() && !NeedsConfirmation()) { CompleteStep(TEXT("Participant rule")); }
 	RefreshPanel();
 }
 
@@ -455,13 +455,13 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 	const bool bOperator = Command.Source == EVBoRCommandSource::Operator;
 	if (Command.Action == EVBoRFlowCommand::IgnoreAlignment)
 	{
-		Alignment->FlowStarted(); bAlignmentIgnored = true; Record(TEXT("진행자 정렬 무시하고 시작")); bRunning = true; EnterStep(0, true); return;
+		Alignment->FlowStarted(); bAlignmentIgnored = true; Record(TEXT("Operator start ignoring alignment")); bRunning = true; EnterStep(0, true); return;
 	}
 	if (Command.Action == EVBoRFlowCommand::Viewpoint || Command.Action == EVBoRFlowCommand::Passenger || Command.Action == EVBoRFlowCommand::Rear || Command.Action == EVBoRFlowCommand::ReturnBase)
 	{
 		const bool bAccepted = Command.Action == EVBoRFlowCommand::ReturnBase ? Alignment->ReturnToBase() : Alignment->SwitchViewpoint(CommandViewpoint(Command.Action));
 		if (!bAccepted) { ++TransitionDiscards; }
-		LastViewRequest = FString::Printf(TEXT("시점 명령 %s | %s"), bOperator ? TEXT("진행자") : TEXT("참가자"), bAccepted ? TEXT("요청됨") : TEXT("버림"));
+		LastViewRequest = FString::Printf(TEXT("Viewpoint command %s | %s"), bOperator ? TEXT("Operator") : TEXT("Participant"), bAccepted ? TEXT("requested") : TEXT("discarded"));
 		Record(LastViewRequest); return;
 	}
 
@@ -482,10 +482,10 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 	case EVBoRFlowCommand::UnfoldSeat:
 		for (TActorIterator<AVBoRFoldingSeat> It(GetWorld()); It; ++It)
 		{ if (Command.Action == EVBoRFlowCommand::FoldSeat) { It->Fold(); } else { It->Unfold(); } }
-		Record(Command.Action == EVBoRFlowCommand::FoldSeat ? TEXT("진행자 시트 접기") : TEXT("진행자 시트 펴기")); break;
+		Record(Command.Action == EVBoRFlowCommand::FoldSeat ? TEXT("Operator fold seat") : TEXT("Operator unfold seat")); break;
 	case EVBoRFlowCommand::ReapplyAlignment:
 		bReapplyPending = Alignment->RequestReapply(); ++ReapplyCount;
-		Record(TEXT("진행자 정렬 다시 적용 — 암전 시작")); break;
+		Record(TEXT("Operator reapply alignment — blackout start")); break;
 	case EVBoRFlowCommand::Power:
 		if (VehiclePower.IsValid()) { VehiclePower->TogglePower(EVBoRPowerSource::Operator); }
 		break;
@@ -497,21 +497,21 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 		ReloadRemaining = Alignment ? FMath::Max(0.01f, Alignment->FadeSeconds) : 0.3;
 		if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
 		{ if (PC->PlayerCameraManager) { PC->PlayerCameraManager->StartCameraFade(0, 1, ReloadRemaining, FLinearColor::Black, false, true); } }
-		Record(TEXT("진행자 레벨 다시 열기 — 암전 시작")); break;
+		Record(TEXT("Operator reopen level — blackout start")); break;
 	}
 	case EVBoRFlowCommand::Confirm:
 	{
-		CompleteStep(bOperator ? TEXT("진행자 확인") : TEXT("참가자 확인")); break;
+		CompleteStep(bOperator ? TEXT("Operator confirm") : TEXT("Participant confirm")); break;
 	}
 	case EVBoRFlowCommand::Next:
-		++SkipCount; CompleteStep(TEXT("진행자 건너뛰기")); break;
-	case EVBoRFlowCommand::Previous: ++PreviousCount; Record(TEXT("진행자 이전")); EnterStep(FMath::Max(0, StepIndex - 1)); break;
+		++SkipCount; CompleteStep(TEXT("Operator skip")); break;
+	case EVBoRFlowCommand::Previous: ++PreviousCount; Record(TEXT("Operator previous")); EnterStep(FMath::Max(0, StepIndex - 1)); break;
 	case EVBoRFlowCommand::Restart:
 		++RetryCount;
-		// 기준 시점의 R 도 집 시험 이동을 되돌림 (P3c D5)
+		// R at reference viewpoint also resets home shift (P3c D5)
 		Alignment->ResetHomeShift();
 		{
-			// 박스를 먼저 치워 닫힌 게이트 안에 남지 않게 함 (P4d D6)
+			// Clear boxes first (none left inside closed gate, P4d D6)
 			for (TActorIterator<AVBoRBoxStand> It(GetWorld()); It; ++It) { It->ResetStand(); }
 			TSet<AVBoRPoweredPanel*> Gates;
 			for (UObject* Target : Targets) { if (auto* Gate = Cast<AVBoRPoweredPanel>(Target)) { Gates.Add(Gate); } }
@@ -526,7 +526,7 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 			if (auto* Door = Cast<AVBoRHingedDoor>(P3Actor(FindP3Tag(GetWorld(), TEXT("Car.DriverDoor"), Problems)))) { Doors.Add(Door); }
 			for (auto* Door : Doors) { Door->ResetDoor(); }
 		}
-		Record(TEXT("진행자 처음부터 — 문 닫힘·잠김, 리프트게이트 초기화·박스 받침 1개·시트 세움, 기준 복귀"));
+		Record(TEXT("Operator restart — door closed/locked, liftgate reset/one box on stand/seat upright, return to reference"));
 		bFreeMode = false;
 		bStartHeadPending = false;
 		if (!Alignment->IsBaseViewpoint()) { bRestartPending = Alignment->ReturnToBase(); bRunning = false; ++Generation; BeginRoute(); UpdateMarker(); }
@@ -563,18 +563,18 @@ bool AVBoRScenarioRunner::HandleHomeShiftKey(FKey Key, bool bRepeat)
 	if (bRepeat) { return true; }
 	if (bReloadPending || (Alignment && Alignment->IsSwitching()))
 	{
-		Record(bReloadPending ? TEXT("집 시험 옮기기 버림 — 레벨 다시 열기 암전 중") : TEXT("집 시험 옮기기 버림 — 시점 전환·정렬 다시 적용 암전 중"));
+		Record(bReloadPending ? TEXT("Home shift discarded — level reopen blackout") : TEXT("Home shift discarded — viewpoint transition/alignment reapply blackout"));
 		return true;
 	}
-	if (!Alignment) { Record(TEXT("집 시험 옮기기 버림 — 정렬 컴포넌트 없음")); return true; }
+	if (!Alignment) { Record(TEXT("Home shift discarded — no alignment component")); return true; }
 	const FVector2D DeltaCm = Key == EKeys::NumPadFive ? -Alignment->GetHomeShiftCm() : Direction * Alignment->HomeShiftStepCm;
 	const bool bMoved = Key == EKeys::NumPadFive ? Alignment->ResetHomeShift() : Alignment->MoveHomeShift(DeltaCm);
 	if (bMoved)
 	{
 		const TCHAR* Axis = Key == EKeys::NumPadEight ? TEXT("+X") : Key == EKeys::NumPadTwo ? TEXT("-X") :
-			Key == EKeys::NumPadFour ? TEXT("-Y") : Key == EKeys::NumPadSix ? TEXT("+Y") : TEXT("원위치");
+			Key == EKeys::NumPadFour ? TEXT("-Y") : Key == EKeys::NumPadSix ? TEXT("+Y") : TEXT("Origin");
 		const FVector2D Offset = Alignment->GetHomeShiftCm();
-		Record(FString::Printf(TEXT("집 시험 옮기기 %s %.0f cm → (%.0f, %.0f)"), Axis,
+		Record(FString::Printf(TEXT("Home shift %s %.0f cm → (%.0f, %.0f)"), Axis,
 			FMath::Abs(DeltaCm.X) + FMath::Abs(DeltaCm.Y), Offset.X, Offset.Y));
 	}
 	return true;
@@ -606,12 +606,12 @@ void AVBoRScenarioRunner::PlacePanelAtHead(const FTransform& Head, bool bAtRoute
 	{
 		AVBoRPokeButton* Button = I == 0 ? ConfirmButton.Get() : ActionButton.Get(); if (!Button) { continue; }
 		const FVector ButtonPosition = Head.GetLocation() + Facing.RotateVector(FVector(ButtonDistanceCm, I == 0 ? -12 : 12, -ButtonBelowCm));
-		// Actor +Z 의 누름 면을 머리 쪽으로 향하게 함 (P0-b D4)
+		// Face Actor +Z press surface toward head (P0-b D4)
 		Button->SetActorLocationAndRotation(ButtonPosition, FRotator(90, Facing.Yaw, 0));
 		ButtonLabels[I]->SetWorldLocationAndRotation(ButtonPosition + FVector(0, 0, 7), Panel->GetComponentRotation());
 	}
 	bPanelPlacementPending = false; ConfirmLockRemaining = FMath::Max(0.0f, ConfirmLockSeconds);
-	Record(TEXT("패널 다시 놓음 — 확인 잠금"));
+	Record(TEXT("Panel repositioned — confirmation lock"));
 }
 
 bool AVBoRScenarioRunner::RecordHead(const TCHAR* Label, bool bTracked, const FTransform& Head)
@@ -623,21 +623,21 @@ bool AVBoRScenarioRunner::RecordHead(const TCHAR* Label, bool bTracked, const FT
 
 void AVBoRScenarioRunner::SampleHead(bool bTracked, const FTransform& Head, double DeltaSeconds)
 {
-	// 좌석 이탈 뒤에만 다시 허용함 (고개 회전·추적 복구만으로 따라가지 않게, R1-7)
+	// Reenable after seat exit only (no following head turns/tracking recovery, R1-7)
 	if (Seat && Seat->IsHeadTracked() && !Seat->IsHeadInside()) { bSeatedPanelPlaced = false; }
 	if (Seat && Seat->IsHeadTracked() && Seat->IsHeadInside() && Seat->DwellSeconds >= SeatedPanelSeconds && !bSeatedPanelPlaced)
 	{ bSeatedPanelPlaced = true; bPanelPlacementPending = true; }
 	if (!bTracked) { return; }
 	if (bPanelPlacementPending) { PlacePanelAtHead(Head); }
 	const FVector StartOffset = StartMarker ? Head.GetLocation() - StartMarker->GetComponentLocation() : FVector::ZeroVector;
-	if (bStartHeadPending && bRunning && (!StartMarker || (StepIndex == 0 && StartOffset.SizeSquared2D() <= 50 * 50 && StartOffset.Z >= 100)) && RecordHead(TEXT("시작 위치"), true, Head)) { bStartHeadPending = false; }
+	if (bStartHeadPending && bRunning && (!StartMarker || (StepIndex == 0 && StartOffset.SizeSquared2D() <= 50 * 50 && StartOffset.Z >= 100)) && RecordHead(TEXT("Start position"), true, Head)) { bStartHeadPending = false; }
 	const auto* Step = CurrentStep();
 	if (bRunning && Step && Step->Rule == EVBoRStepRule::Seated && RuleSatisfied() && !bSeatHeadRecorded)
-	{ bSeatHeadRecorded = RecordHead(TEXT("착석 위치"), true, Head); }
+	{ bSeatHeadRecorded = RecordHead(TEXT("Seated position"), true, Head); }
 	if (bOperatorInfo)
 	{
 		HeadLogElapsed += FMath::Max(0.0, DeltaSeconds);
-		if (HeadLogElapsed >= 1.0) { HeadLogElapsed = 0; RecordHead(TEXT("머리 위치"), true, Head); }
+		if (HeadLogElapsed >= 1.0) { HeadLogElapsed = 0; RecordHead(TEXT("Head position"), true, Head); }
 	}
 }
 
@@ -645,16 +645,16 @@ FText AVBoRScenarioRunner::GetInstructionText() const { return CurrentStep() ? C
 
 FString AVBoRScenarioRunner::GetPanelText() const
 {
-	if (bFreeMode) { return (bFinished ? FString(TEXT("안내 완료\n")) : FString()) + FreeModeInstruction.ToString(); }
-	if (bFinished) { return TEXT("안내 완료"); }
-	if (!bRunning) { return TEXT("준비 중입니다"); }
+	if (bFreeMode) { return (bFinished ? FString(TEXT("Guidance complete\n")) : FString()) + FreeModeInstruction.ToString(); }
+	if (bFinished) { return TEXT("Guidance complete"); }
+	if (!bRunning) { return TEXT("Preparing"); }
 	if (const auto* Step = CurrentStep())
 	{
-		FString Text = FString::Printf(TEXT("%s\n%s · %d/%d\n"), *Step->Instruction.ToString(), *Step->StepId.ToString(), StepIndex + 1, Scenario->Steps.Num());
-		if (Step->bRequireBaseViewpoint && Alignment && !Alignment->IsBaseViewpoint()) { Text += TEXT("운전석으로 돌아가세요"); }
-		else if (bPanelPlacementPending || (Alignment && Alignment->IsSwitching()) || ConfirmLockRemaining > 0) { Text += TEXT("잠시 기다려 주세요"); }
-		else if (RuleSatisfied() && NeedsConfirmation()) { Text += Step->ConfirmBy == EVBoRConfirmBy::Operator ? TEXT("잠시 기다려 주세요") : TEXT("확인을 눌러 주세요"); }
-		else { Text += TEXT("안내에 따라 행동해 주세요"); }
+		FString Text = FString::Printf(TEXT("%s\n%s ,  %d/%d\n"), *Step->Instruction.ToString(), *Step->StepId.ToString(), StepIndex + 1, Scenario->Steps.Num());
+		if (Step->bRequireBaseViewpoint && Alignment && !Alignment->IsBaseViewpoint()) { Text += TEXT("Return to the driver seat"); }
+		else if (bPanelPlacementPending || (Alignment && Alignment->IsSwitching()) || ConfirmLockRemaining > 0) { Text += TEXT("Please wait"); }
+		else if (RuleSatisfied() && NeedsConfirmation()) { Text += Step->ConfirmBy == EVBoRConfirmBy::Operator ? TEXT("Please wait") : TEXT("Press confirm"); }
+		else { Text += TEXT("Follow the instructions"); }
 		return Text;
 	}
 	return FString();
@@ -663,29 +663,29 @@ FString AVBoRScenarioRunner::GetPanelText() const
 FString AVBoRScenarioRunner::GetOperatorText() const
 {
 	FString Text;
-	if (bFreeMode) { Text = TEXT("자유모드 | 1 동승석 · 2 2열 · Home 운전석 · R 처음부터 · F6 레벨 다시 열기"); }
+	if (bFreeMode) { Text = TEXT("Free mode | 1 Passenger seat / 2 Rear seat / Home Driver seat / R Restart / F6 Reopen level"); }
 	else if (!bRunning && !bFinished)
-	{ Text = ValidationProblems.IsEmpty() ? TEXT("정렬 필요 — 진행자 창 P로 점 정렬 또는 P0-c 레벨에서 C로 저장 (O: 무시)") : ValidationProblems; }
+	{ Text = ValidationProblems.IsEmpty() ? TEXT("Alignment required — P in operator panel for point alignment or C in P0-c level to save (O: ignore)") : ValidationProblems; }
 	else if (bRunning && CurrentStep())
 	{
 		const auto* Step = CurrentStep();
-		if (NeedsConfirmation()) { Text = RuleSatisfied() ? TEXT("진행자 확인 대기 — Space") : TEXT("규칙 대기 — 만족 후 Space"); }
-		else { Text = TEXT("규칙 대기 — → 건너뛰기"); }
-		if (Alignment && !Alignment->IsBaseViewpoint()) { Text += TEXT(" | Home 운전석으로"); }
-		if (Step->ConfirmBy == EVBoRConfirmBy::Participant) { Text = TEXT("참가자 확인 대기 — → 건너뛰기") + (Alignment && !Alignment->IsBaseViewpoint() ? FString(TEXT(" | Home 운전석으로")) : FString()); }
+		if (NeedsConfirmation()) { Text = RuleSatisfied() ? TEXT("Operator confirm pending — Space") : TEXT("Rule pending — Space when satisfied"); }
+		else { Text = TEXT("Rule pending — → Skip"); }
+		if (Alignment && !Alignment->IsBaseViewpoint()) { Text += TEXT(" | Home to driver seat"); }
+		if (Step->ConfirmBy == EVBoRConfirmBy::Participant) { Text = TEXT("Participant confirm pending — → Skip") + (Alignment && !Alignment->IsBaseViewpoint() ? FString(TEXT(" | Home to driver seat")) : FString()); }
 	}
 	if (!FloorRouteNotice.IsEmpty())
 	{
-		Text += FloorRouteNotice.Contains(TEXT("check off")) ? TEXT("\n바닥 경로 표시 — 영역 검사 끔 (집 시험)")
-			: FloorRouteNotice.Contains(TEXT("unknown")) ? TEXT("\n바닥 경로 숨김 — 영역 모름") : TEXT("\n바닥 경로 숨김 — 플레이 영역 밖");
+		Text += FloorRouteNotice.Contains(TEXT("check off")) ? TEXT("\nFloor route visible — play area check off (home test)")
+			: FloorRouteNotice.Contains(TEXT("unknown")) ? TEXT("\nFloor route hidden — unknown play area") : TEXT("\nFloor route hidden — outside play area");
 	}
 	if (!bOperatorInfo) { return Text; }
-	Text += TEXT("\n") + (Alignment ? Alignment->Describe() : FString(TEXT("정렬 컴포넌트 없음")));
-	Text += FString::Printf(TEXT(" | 정렬 무시 %s\n이전 %d 재시도 %d 건너뛰기 %d | 버림 단계 %d 권한 %d 규칙 %d 전환 %d 잠금 %d"), bAlignmentIgnored ? TEXT("예") : TEXT("아니오"), PreviousCount, RetryCount, SkipCount, StaleDiscards, PermissionDiscards, RuleDiscards, TransitionDiscards, ConfirmLockDiscards);
+	Text += TEXT("\n") + (Alignment ? Alignment->Describe() : FString(TEXT("No alignment component")));
+	Text += FString::Printf(TEXT(" | Ignore alignment %s\nPrevious %d retries %d skips %d | discarded step %d permission %d rule %d transition %d lock %d"), bAlignmentIgnored ? TEXT("Yes") : TEXT("No"), PreviousCount, RetryCount, SkipCount, StaleDiscards, PermissionDiscards, RuleDiscards, TransitionDiscards, ConfirmLockDiscards);
 	Text += TEXT("\n") + LastViewRequest + TEXT("\n") + LastCompletion;
-	if (bFreeMode) { Text += FString::Printf(TEXT("\n진행자 End %d"), EndCount); }
-	if (Approach) { Text += FString::Printf(TEXT("\n접근 %d (%.1f s) 이탈 %d (%.1f s) near=%d"), Approach->Approaches, Approach->LastApproachSeconds, Approach->Departures, Approach->LastDepartureSeconds, Approach->IsParticipantNear()); }
-	if (Seat) { Text += FString::Printf(TEXT(" | 좌석 %.2f s 보류 %d"), Seat->DwellSeconds, Seat->TrackingPauses); }
+	if (bFreeMode) { Text += FString::Printf(TEXT("\nOperator End %d"), EndCount); }
+	if (Approach) { Text += FString::Printf(TEXT("\nApproaches %d (%.1f s) departures %d (%.1f s) near=%d"), Approach->Approaches, Approach->LastApproachSeconds, Approach->Departures, Approach->LastDepartureSeconds, Approach->IsParticipantNear()); }
+	if (Seat) { Text += FString::Printf(TEXT(" | seat %.2f s paused %d"), Seat->DwellSeconds, Seat->TrackingPauses); }
 	return Text;
 }
 
@@ -693,8 +693,8 @@ FString AVBoRScenarioRunner::ActionLabel() const
 {
 	const auto* Step = CurrentStep();
 	if (Step && Step->Rule == EVBoRStepRule::Viewpoint && !RuleSatisfied())
-	{ return Step->TargetTag == TEXT("Car.PassengerView") ? TEXT("동승석으로 이동") : Step->TargetTag == TEXT("Car.RearView") ? TEXT("2열로 이동") : Step->TargetTag.ToString() + TEXT(" 시점으로 이동"); }
-	return TEXT("운전석으로 돌아가기");
+	{ return Step->TargetTag == TEXT("Car.PassengerView") ? TEXT("Move to passenger seat") : Step->TargetTag == TEXT("Car.RearView") ? TEXT("Move to rear seat") : Step->TargetTag.ToString() + TEXT(" viewpoint"); }
+	return TEXT("Return to driver seat");
 }
 
 void AVBoRScenarioRunner::RefreshPanel()
@@ -703,8 +703,8 @@ void AVBoRScenarioRunner::RefreshPanel()
 	const FString Operator = GetOperatorText();
 	if (OperatorText) { OperatorText->SetText(FText::FromString(Operator)); }
 	OperatorPanel->SetDrawSize(FVector2D(1000, bOperatorInfo ? 700 : 120));
-	// 진행자 줄도 핸들·등받이 앞에 둠 (문구 아래 시야·버튼 이름 사이, R1-4·R1-7)
-	// 좌석에서는 차 가운데 쪽, 서 있을 때는 오른쪽. 판 사이 2 cm 확보 (P3b D8)
+	// Operator line also in front of wheel/backrest (below text, between view/button names, R1-4/R1-7)
+	// Toward car center when seated, right when standing. Keep 2 cm panel gap (P3b D8)
 	double Side = 1;
 	if (bOperatorInfo && Alignment && ((Seat && Seat->IsHeadInside()) || !Alignment->IsBaseViewpoint()))
 	{
@@ -725,13 +725,13 @@ void AVBoRScenarioRunner::RefreshPanel()
 	if (bFreeMode)
 	{
 		TArray<EVBoRFlowCommand> Seats;
-		if (bAway) { Seats.Add(EVBoRFlowCommand::ReturnBase); SeatLabels.Add(TEXT("운전석")); }
+		if (bAway) { Seats.Add(EVBoRFlowCommand::ReturnBase); SeatLabels.Add(TEXT("Driver seat")); }
 		for (const auto Action : {EVBoRFlowCommand::Passenger, EVBoRFlowCommand::Rear})
 		{
-			// 매 frame 호출이라 시작 때 찾은 시점 씀 (P5o)
+			// Use startup viewpoint cache (called every frame, P5o)
 			auto* View = CommandViewpoint(Action);
 			if (View && (!Alignment || !Alignment->IsAtViewpoint(View)))
-			{ Seats.Add(Action); SeatLabels.Add(Action == EVBoRFlowCommand::Passenger ? TEXT("동승석") : TEXT("2열")); }
+			{ Seats.Add(Action); SeatLabels.Add(Action == EVBoRFlowCommand::Passenger ? TEXT("Passenger seat") : TEXT("Rear seat")); }
 		}
 		const bool bVisible = !bPanelPlacementPending && !bReloadPending && Alignment && !Alignment->IsSwitching() && Seats.Num() == 2;
 		for (int32 I = 0; I < 2; ++I)
@@ -744,7 +744,7 @@ void AVBoRScenarioRunner::RefreshPanel()
 	{
 		AVBoRPokeButton* Button = I == 0 ? ConfirmButton.Get() : ActionButton.Get();
 		ButtonLabels[I]->SetHiddenInGame(!Button || Button->IsHidden());
-		if (ButtonLabelTexts.IsValidIndex(I)) { ButtonLabelTexts[I]->SetText(FText::FromString(bFreeMode && SeatLabels.IsValidIndex(I) ? SeatLabels[I] : I == 0 ? FString(TEXT("확인")) : ActionLabel())); }
+		if (ButtonLabelTexts.IsValidIndex(I)) { ButtonLabelTexts[I]->SetText(FText::FromString(bFreeMode && SeatLabels.IsValidIndex(I) ? SeatLabels[I] : I == 0 ? FString(TEXT("Confirm")) : ActionLabel())); }
 	}
 }
 
@@ -797,9 +797,9 @@ void AVBoRScenarioRunner::CheckRouteArea()
 			if (FMath::Abs(Stage.X) > Bounds.X * 0.5 - 30 || FMath::Abs(Stage.Y) > Bounds.Y * 0.5 - 30) { bInside = false; break; }
 		}
 	}
-	// 집 시험 스위치는 플레이 영역 검사만 끔. 차체 영역 검사(흐름 시작)는 그대로, 끈 사실은 진행자에게 알림 (P3b D6-b 예외, 사용자 2026-10-19)
+	// Home test disables play-area check only. Keep body-area startup check; notify operator (P3b D6-b exception, user 2026-10-19)
 	const bool bIgnoreArea = !bInside && CVarRouteIgnorePlayArea.GetValueOnGameThread() == 1;
-	if (bIgnoreArea) { bRouteAreaUnknown = false; } // 영역 모름이어도 매 frame 재조회하지 않게
+	if (bIgnoreArea) { bRouteAreaUnknown = false; } // No per-frame retry for unknown area
 	bRouteAllowed = bInside || bIgnoreArea;
 	if (bInside) { Route->SetRouteVisible(true); FloorRouteNotice.Reset(); UpdateMarker(); }
 	else if (bIgnoreArea)
@@ -817,7 +817,7 @@ void AVBoRScenarioRunner::CheckRouteArea()
 
 void AVBoRScenarioRunner::SampleRoute(bool bTracked, const FTransform& Head, double DeltaSeconds)
 {
-	// 모를 때만 재조회함. 알려진 영역 밖 판정은 단계 안에서 고정 (P4d D5)
+	// Retry only while unknown. Known outside-area result fixed within step (P4d D5)
 	if (bRouteAreaUnknown) { CheckRouteArea(); }
 	AVBoRFloorRoute* Route = bRunning && bRouteAllowed && !bRouteArrived && Routes.IsValidIndex(StepIndex) ? Routes[StepIndex].Get() : nullptr;
 	if (!Route || !bTracked) { return; }
@@ -832,8 +832,8 @@ void AVBoRScenarioRunner::RecordStartFallback()
 {
 	if (!bStartHeadPending || StepIndex != 0 || !StartMarker) { return; }
 	FTransform Head; const bool bTracked = Alignment && Alignment->ReadWorldHead(Head);
-	if (!RecordHead(TEXT("시작 위치 — 시작 표시를 거치지 않음"), bTracked, Head))
-	{ Record(TEXT("시작 위치 — 시작 표시를 거치지 않음 | 추적 없음 (좌표 보류)")); }
+	if (!RecordHead(TEXT("Start position — start marker not visited"), bTracked, Head))
+	{ Record(TEXT("Start position — start marker not visited | untracked (coordinates pending)")); }
 	bStartHeadPending = false;
 }
 
@@ -880,7 +880,7 @@ void AVBoRScenarioRunner::KeyOperatorInfo()
 	LastOperatorCommand = FString(TEXT("In-VR operator info — ")) + (Decision.bAccepted ? TEXT("accepted") : TEXT("discarded (") + Decision.Reason + TEXT(")"));
 	if (!Decision.bAccepted) { ++TransitionDiscards; Record(Decision.Record); return; }
 	bOperatorInfo = !bOperatorInfo; HeadLogElapsed = 0;
-	Record(bOperatorInfo ? TEXT("진행자 정보 켬 (I)\n") + GetOperatorText() : TEXT("진행자 정보 끔 (I)")); RefreshPanel();
+	Record(bOperatorInfo ? TEXT("Operator info on (I)\n") + GetOperatorText() : TEXT("Operator info off (I)")); RefreshPanel();
 }
 
 void AVBoRScenarioRunner::KeyCapturePoint() { QueueLive(EVBoRFlowCommand::CapturePoint, EVBoRCommandSource::Operator); }

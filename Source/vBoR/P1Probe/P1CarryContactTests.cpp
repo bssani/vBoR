@@ -239,7 +239,7 @@ bool FP1CarryContactRateTest::RunTest(const FString& Parameters)
 		double Elapsed = 0;
 		while (Elapsed < 0.5 - 1e-12)
 		{
-			// 15 fps 는 7 frame + 반 frame 으로 정확히 0.5 s 를 맞춤 (P1 R6-1)
+			// 15 fps: 7 frames + half frame = exactly 0.5 s (P1 R6-1)
 			const double StepSeconds = FMath::Min(1.0 / Fps, 0.5 - Elapsed);
 			const float DeltaSeconds = static_cast<float>(StepSeconds);
 			const FTransform Previous = Bag->GetActorTransform();
@@ -281,7 +281,7 @@ bool FP1CarryContactRateTest::RunTest(const FString& Parameters)
 		Bag->MoveHeldPose(Desired, 1.0f / 60.0f);
 		TestTrue(TEXT("Nonpositive or nonfinite rate cannot add contact push"), Bag->GetActorLocation().Equals(Rest.GetLocation(), 1e-6));
 	}
-	// 양쪽 벽으로 회전 여지를 없앰 (도달하지 못한 같은 요청도 정지해야 함, P1 R6-1)
+	// Both walls block rotation (unreachable same request must stop too, P1 R6-1)
 	Wall->Destroy();
 	Fixture.Wall(FVector(19, 0, 70), FVector(5, 300, 70));
 	Fixture.Wall(FVector(-19, 0, 70), FVector(5, 300, 70));
@@ -369,7 +369,7 @@ bool FP1CarryContactStateTest::RunTest(const FString& Parameters)
 	Controller->Possess(Entrance.World->SpawnActor<AVBoRHandRigPawn>());
 	AP1LoadBench* Bench = Entrance.World->SpawnActor<AP1LoadBench>();
 	Entrance.BeginPlay();
-	// 입구 뒤 벽의 막힘을 재는 시험이라 게이트는 열어 둠 (P4b D8)
+	// Gate open (test measures wall blockage behind opening, P4b D8)
 	Bench->Gate->bStartOpen = true;
 	Bench->PlaceFromHead(FTransform(FVector(0, 0, 165)));
 	const FTransform Frame = Bench->Trunk->GetActorTransform();

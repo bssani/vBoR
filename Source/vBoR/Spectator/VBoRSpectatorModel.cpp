@@ -4,7 +4,7 @@
 FText VBoRSpectator::MissionText(const FVBoRScenarioStep& Step, const FText& Unknown)
 {
 	if (!Step.SpectatorText.IsEmpty()) { return Step.SpectatorText; }
-	// 저장된 에셋의 새 칸은 비어 있으므로 ID 기본표 사용 (P5h D5)
+	// New fields empty in saved assets; use ID defaults (P5h D5)
 	static const TCHAR* Texts[] = {
 		TEXT("Approach the vehicle with the key."), TEXT("Check the exterior lights as you approach."),
 		TEXT("Walk around the vehicle."), TEXT("Open the liftgate."), TEXT("Load the boxes into the trunk."),
@@ -66,7 +66,7 @@ FString FVBoRSpectatorNames::Line(const FString& Prefix) const
 {
 	FString Result;
 	for (int32 Index = 0; Index < FMath::Min(2, Entries.Num()); ++Index)
-	{ Result += (Index == 0 ? Prefix : TEXT(" · ")) + Entries[Index].Name; }
+	{ Result += (Index == 0 ? Prefix : TEXT(" ,  ")) + Entries[Index].Name; }
 	return Result;
 }
 
@@ -86,12 +86,12 @@ bool FVBoRSpectatorLayout::Update(FIntPoint WindowSize, float EyeAspect, float M
 	LastSize = WindowSize; LastAspect = EyeAspect; LastPanelWidth = MinPanelWidth;
 
 	const double Aspect = static_cast<double>(WindowSize.X) / WindowSize.Y;
-	// 극도로 좁은 창에서도 시야·칸 영역이 뒤집히지 않게 제한 (P5k D1)
+	// Clamp even very narrow windows (no inverted view/panel regions, P5k D1)
 	const double Panel = FMath::Min(static_cast<double>(MinPanelWidth), Aspect * 0.99);
 	const double Height = FMath::Min(1.0, (Aspect - Panel) / EyeAspect);
 	const double Width = Height * EyeAspect / Aspect;
-	// 칸 먼저 그림. 시야 먼저면 엔진이 칸 그릴 때도 bClearBlack 으로 창 전체를 지워 시야가 검게 됨
-	// (XRBase DefaultSpectatorScreenController.cpp:284-291, XRCopyTexture.cpp:250-257). 두 영역은 안 겹쳐 순서 무관
+	// Draw panel first. View-first lets panel bClearBlack clear whole window and erase view
+	// (XRBase DefaultSpectatorScreenController.cpp:284-291, XRCopyTexture.cpp:250-257). Nonoverlapping regions, ordering otherwise irrelevant
 	Layout = FSpectatorScreenModeTexturePlusEyeLayout(FVector2D(0,(1-Height)/2), FVector2D(Width,(1+Height)/2),
 		FVector2D(Width,0), FVector2D(1,1), false, true, false);
 	PanelPixels = FIntPoint(FMath::Max(1,FMath::RoundToInt((1-Width)*WindowSize.X)),WindowSize.Y);

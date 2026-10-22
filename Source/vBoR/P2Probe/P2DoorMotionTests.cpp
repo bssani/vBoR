@@ -285,7 +285,7 @@ bool FP2DoorPushLossTest::RunTest(const FString& Parameters)
 		Door.Advance(Hands, 0.1);
 		double Before = Door.AngleDeg;
 		Hands[0] = DoorHand(DoorPoint(Before, FVector(70, -8, 50)), DoorPoint(Before, FVector(0, 1, 0)));
-		// 손실 직전에도 밀기가 진행 중이어야 함 (면 도착 후 종료와 구별, P2 E15b)
+		// Push still active before loss (distinct from ending on face arrival, P2 E15b)
 		Hands[1] = DoorHand(FVector(80, 40, 50), FVector(0, 1, 0));
 		Door.Advance(Hands, 0.01);
 		Before = Door.AngleDeg;

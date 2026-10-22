@@ -26,7 +26,7 @@ struct VBOR_API FVBoRHeldSoundCue : public FVBoRSoundCue
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound", meta = (Units = "s", ClampMin = "0", ToolTip = "Seconds to fade out when the state ends. Zero stops immediately. Reset always stops immediately.")) float FadeOutSeconds = 0;
 };
 
-// 칸 하나의 예약만 보관함 (장치·타이머 없이 Tick 시간과 요청을 함께 검증, P5r D2·D3)
+// Keep one slot request only (validate Tick time/request without device/timer, P5r D2/D3)
 struct VBOR_API FVBoRSoundPlayback
 {
 	int32 Requests = 0;

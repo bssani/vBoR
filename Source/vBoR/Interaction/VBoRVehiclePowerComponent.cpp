@@ -38,7 +38,7 @@ void UVBoRVehiclePowerComponent::BeginPlay()
 	bAvailable = Components.Num() == 1;
 	if (!bAvailable)
 	{
-		// 여러 컴포넌트가 같은 경고를 되풀이하지 않게 첫 것만 기록함 (P5q D1)
+		// Report first component only (avoid duplicate warnings from multiple components, P5q D1)
 		if (!Components.IsEmpty() && Components[0] == this)
 		{ UE_LOG(LogTemp, Warning, TEXT("Vehicle power: expected one component, found %d; power disabled"), Components.Num()); }
 		return;
@@ -74,7 +74,7 @@ void UVBoRVehiclePowerComponent::TogglePower(EVBoRPowerSource Source)
 
 void UVBoRVehiclePowerComponent::SetPowerOn(bool bOn, EVBoRPowerSource Source)
 {
-	// 같은 꺼짐값인 R 도 이전 지연 예약을 지움 (P5s D11)
+	// R with same off value also clears old delayed requests (P5s D11)
 	if (Source == EVBoRPowerSource::Restart)
 	{
 		for (int32 I = 0; I < 2; ++I) { SoundPlayback[I].Reset(SoundAudio[I], true); }
@@ -95,7 +95,7 @@ void UVBoRVehiclePowerComponent::SetPowerOn(bool bOn, EVBoRPowerSource Source)
 
 void UVBoRVehiclePowerComponent::EnsureSoundAudio(int32 Slot)
 {
-	// 첫 요청 때만 만듦. 소리를 넣어도 Play 시작 때는 차체 컴포넌트가 늘지 않음 (P4i E2 Core 비교 유지, P5s R1-1)
+	// Create on first request only. Configured sound adds no body components at Play start (preserve P4i E2 Core comparison, P5s R1-1)
 	if (SoundAudio[Slot] || !(Slot == 0 ? PowerOnCue.Sound : PowerOffCue.Sound)) { return; }
 	SoundAudio[Slot] = NewObject<UAudioComponent>(GetOwner());
 	SoundAudio[Slot]->bAutoActivate = false; SoundAudio[Slot]->SetupAttachment(GetOwner()->GetRootComponent());

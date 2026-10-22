@@ -9,7 +9,7 @@ class UCameraComponent;
 class UMotionControllerComponent;
 struct FVBoRDoorHand;
 
-// protected modifier 목록에 필수 limiter 를 넣기 위한 얇은 리그 자식 (P0-b §3)
+// Thin rig child to add required limiter to protected modifier list (P0-b §3)
 UCLASS()
 class VBOR_API UVBoRHandRigLeft : public UIsdkHandRigComponentLeft
 {

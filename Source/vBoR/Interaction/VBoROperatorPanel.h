@@ -58,7 +58,7 @@ namespace VBoROperator
 	FLinearColor TextColor(EVBoROperatorStyle Style);
 }
 
-// 같은 프로세스 안 travel 에서만 유지함 (P5i D1)
+// Persist only across travel within same process (P5i D1)
 struct FVBoROperatorPlacement
 {
 	bool bRemembered = false;

@@ -66,7 +66,7 @@ void UVBoRAxisTransformer::UpdateConstraints(const FIsdkTargetTransform& Target)
 	}
 	Rotate->Constraint.RotationAxis = Part->Axis;
 	Rotate->Constraint.bUseAngleFromAxisConstraint = false;
-	// SDK twist clamp 는 quaternion 각도의 반대 부호임 (IsdkTransformerUtils.h:295-297, deg)
+	// SDK twist clamp uses opposite quaternion sign (IsdkTransformerUtils.h:295-297, deg)
 	Rotate->Constraint.AxisAngleRange = FIsdkAxisConstraints(true, -Range.Max, -Range.Min);
 	Translate->bIsRelativeConstraint = false;
 	Translate->PositionConstraint.SetAxisConstraint(EAxis::None, FIsdkAxisConstraints(true, 0, 0));
@@ -214,7 +214,7 @@ void AVBoRAxisPart::BeginPlay()
 	Super::BeginPlay();
 	if (Release == EVBoRAxisRelease::Detent)
 	{
-		// RestPivot 확정 뒤 시작 각도를 놓음 (construction 누적 방지, P5b D7)
+		// Set start angle after RestPivot (avoid construction accumulation, P5b D7)
 		DetentIndex = DetentAnglesDeg.IsValidIndex(DetentStartIndex) ? DetentStartIndex : INDEX_NONE;
 		bNudgeArmed = true;
 		Value = DetentIndex != INDEX_NONE && FMath::IsFinite(DetentAnglesDeg[DetentIndex]) ? DetentAnglesDeg[DetentIndex] : 0;
@@ -252,7 +252,7 @@ void AVBoRAxisPart::EvaluateDetent()
 {
 	if (!bDetentValid || (HoldingHand == INDEX_NONE && PushHand == INDEX_NONE) || bPaused || !DetentAnglesDeg.IsValidIndex(DetentIndex)) { return; }
 	const double NudgeOffset = Value - DetentAnglesDeg[DetentStartIndex];
-	// 먼저 차선 변경을 대기시킴 (한 Move 에 끝까지 밀어도 알림 순서 유지, P5c D4·D5)
+	// Queue lane change first (notification order on full-range Move, P5c D4/D5)
 	const double NudgeTolerance = FMath::Min(1.e-4, static_cast<double>(DetentNudgeDeg) / 4);
 	if (DetentNudgeDeg > 0 && DetentIndex == DetentStartIndex)
 	{
@@ -267,19 +267,19 @@ void AVBoRAxisPart::EvaluateDetent()
 	{
 		if (!DetentAnglesDeg.IsValidIndex(DetentIndex + Direction)) { return false; }
 		const double Gap = FMath::Abs(static_cast<double>(DetentAnglesDeg[DetentIndex + Direction]) - DetentAnglesDeg[DetentIndex]);
-		// FVector3f 각도 경계 오차만 받음. 왕복 방지 여유의 1/4 이내로 제한함 (P5b D5·E4, deg)
+		// Accept FVector3f angle rounding only. Cap at 1/4 hysteresis margin (P5b D5/E4, deg)
 		const double Tolerance = FMath::Min(1.e-4, (static_cast<double>(DetentUpThresholdDeg) + DetentDownThresholdDeg - Gap) / 4);
 		const double Threshold = static_cast<double>(DetentAnglesDeg[DetentIndex]) + (Direction > 0 ? DetentUpThresholdDeg : -DetentDownThresholdDeg);
 		return Direction > 0 ? Value >= Threshold - Tolerance : Value <= Threshold + Tolerance;
 	};
-	// 같은 입력에서 인접 위치를 순서대로 확정함 (한 frame 에 두 기준을 넘을 수 있음, P5b D3)
+	// Commit adjacent positions in order (one frame can cross two thresholds, P5b D3)
 	int32 Direction = 0;
 	if (Reached(1)) { Direction = 1; }
 	else if (Reached(-1)) { Direction = -1; }
 	while (Direction && Reached(Direction))
 	{
 		DetentIndex += Direction;
-		// 가운데를 지나친 끄기 동작은 차선 변경으로 보지 않음 (P5c D3·E7)
+		// Crossing center to switch off is no lane change (P5c D3/E7)
 		if (DetentNudgeDeg > 0 && DetentIndex == DetentStartIndex) { bNudgeArmed = FMath::Abs(NudgeOffset) <= DetentNudgeDeg / 2 + NudgeTolerance; }
 		PendingDetents.Add({false, DetentIndex});
 		UE_LOG(LogAxisPart, Log, TEXT("%s detent=%d angle=%.3f deg | not-tested"), *GetName(), DetentIndex, DetentAnglesDeg[DetentIndex]);
@@ -360,7 +360,7 @@ void AVBoRAxisPart::ConfigurePush()
 	{ UE_LOG(LogAxisPart,Warning,TEXT("%s: Push requires Rotate; push disabled"),*GetName()); }
 	if (!bPushEnabled) { ClearPush(); return; }
 	const FBox Bounds = PartMesh->GetStaticMesh()->GetBoundingBox().TransformBy(PartMesh->GetRelativeTransform());
-	// 축에 수직인 두 bounds 축 중 긴 쪽이 레버 길이임 (메시 피벗 대신 쉬는 bounds, P5m D3)
+	// Longer bounds axis perpendicular to rotation = lever length (rest bounds, not mesh pivot, P5m D3)
 	const int32 A = Axis == EAxis::Y ? 1 : Axis == EAxis::Z ? 2 : 0;
 	const int32 B = (A+1)%3, C = (A+2)%3;
 	const int32 R = Bounds.GetExtent()[B] >= Bounds.GetExtent()[C] ? B : C;
@@ -408,7 +408,7 @@ bool AVBoRAxisPart::FindPush(int32 Hand, const FVBoRDoorHand& Input, FVector& Po
 			const double Depth = Face == 0 ? P.Y-PushBounds.Min.Y : PushBounds.Max.Y-P.Y;
 			const double PreviousDepth = Face == 0 ? Prev.Y-PushBounds.Min.Y : PushBounds.Max.Y-Prev.Y;
 			if (Depth < (Continuing ? -Margin : 1.e-6) || Depth > PushBounds.Max.Y-PushBounds.Min.Y+Margin) { continue; }
-			// 면 위·안쪽의 복구 점은 새 crossing 이 아님 (P5m D3·E9·E13)
+			// Recovered point on or inside face is no new crossing (P5m D3/E9/E13)
 			if (!Continuing && (!PreviousPushHands[Hand].bTracked || Prev.ContainsNaN() || !Inside(Prev) || PreviousDepth >= -1.e-6)) { continue; }
 			if (Depth > Deepest) { Deepest=Depth; Point=Input.Points[I]; PointIndex=I; FaceIndex=Face; Found=true; }
 		}
@@ -445,7 +445,7 @@ void AVBoRAxisPart::AdvancePush(const FVBoRDoorHand (&Input)[2])
 			const double Current = Value*(bReverse?-1:1);
 			const double Target = FMath::RadiansToDegrees(FMath::Atan2(N,R)-FMath::Asin(Plane/Radius));
 			const double Delta = FMath::FindDeltaAngleDegrees(Current,Target);
-			// 처음 닿은 면의 법선 방향으로만 밂. 걸림 확정은 잡기와 같은 경로 사용 (P5m D3·D4, deg)
+			// Push along first contact normal only. Commit detents through grab path (P5m D3/D4, deg)
 			const double Angle = Current + (PushFace == 0 ? FMath::Max(0.,Delta) : FMath::Min(0.,Delta));
 			AcceptTransform(FTransform(FQuat(LocalAxis(),FMath::DegreesToRadians(Angle))));
 			AxisPivot->SetRelativeTransform(ValueTransform()*RestPivot);
@@ -487,7 +487,7 @@ void AVBoRAxisPart::ReleasePart(bool bCancelSDK)
 	HoldingHand = INDEX_NONE; HoldingGrabber = nullptr;
 	bPaused = bRebase = bDoorHold = false;
 	bNudgeArmed = true;
-	// SDK 이벤트 중에도 들어옴. 취소는 Tick 에서만 실행함 (grabber 재진입 방지, P2b R1-3)
+	// Also called during SDK events. Cancel only in Tick (avoid grabber reentry, P2b R1-3)
 	bCancelPending |= bCancelSDK;
 	OnPartReleased.Broadcast();
 	UE_LOG(LogAxisPart, Log, TEXT("%s released | %s"), *GetName(), *GetDebugText());
@@ -509,7 +509,7 @@ void AVBoRAxisPart::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	++SoundFrame; AdvanceSounds(DeltaSeconds);
 	if (!FMath::IsFinite(DeltaSeconds) || DeltaSeconds <= 0) { return; }
-	// 확정은 Move 에서 유지하고 알림만 미룸 (SDK 선택 배열 재진입 방지, P5b R1-1)
+	// Commit in Move, defer notifications (avoid SDK selection array reentry, P5b R1-1)
 	const TArray<FDetentNotification> Notifications = MoveTemp(PendingDetents);
 	for (const FDetentNotification& Notification : Notifications)
 	{
@@ -544,7 +544,7 @@ void AVBoRAxisPart::Tick(float DeltaSeconds)
 		if (ReadGrabClosed(HoldingHand,bPinch,bClosed) && !bClosed) { ReleasePart(); }
 		else if (!Transformer->IsTransformerActive() && HoldingGrabber)
 		{
-			// SDK 가 추적 손실 때 선택을 끝내도 실제 손을 펼 때까지 보유함 (P2b D7)
+			// Keep ownership after SDK tracking cancellation until real hand release (P2b D7)
 			FTransform Pose; ReadHoldingPose(Pose);
 			FIsdkGrabPose GrabPose = Transformer->LastPose; GrabPose.Pose.Position = FVector3f(Pose.GetLocation()); GrabPose.Pose.Orientation = Pose.GetRotation();
 			Transformer->BeginTransform({GrabPose}, FIsdkTargetTransform(AxisPivot));
@@ -574,8 +574,8 @@ void AVBoRAxisPart::Tick(float DeltaSeconds)
 	}
 	PreviousPushValue = Value;
 	EvaluateState();
-	// Move delegate 안에서 ForceCancel 을 부르지 않음 (SDK 선택 배열 재진입 방지, P2b D5)
-	// 풀린 문도 손잡이를 먼저 젖힘 (같은 손 넘김은 문턱에서만, P2c D4)
+	// No ForceCancel inside Move delegate (avoid SDK selection array reentry, P2b D5)
+	// Tilt handle first even on unlocked door (same-hand transfer only at threshold, P2c D4)
 	if (LinkedDoor && HoldingHand != INDEX_NONE && !bDoorHold && GetOpenRatio() >= OpenThreshold)
 	{
 		if (LinkedDoor->BeginGrabFromAxisPart(this)) { bDoorHold = true; GrabComponent->CancelSelection(); }

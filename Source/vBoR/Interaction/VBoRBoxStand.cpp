@@ -38,7 +38,7 @@ void AVBoRBoxStand::BeginPlay()
 
 FVector AVBoRBoxStand::GetBoxSizeCm() const
 {
-	// BP 크기와 시작·보충 칸을 같은 기준으로 맞춤 (P5t D3, cm)
+	// Use BP size for initial and refill spaces (P5t D3, cm)
 	const AVBoRCarryObject* Defaults = BoxClass.GetDefaultObject();
 	return Defaults ? Defaults->BoxSizeCm.GetAbs().ComponentMax(FVector(1)) : FVector(1);
 }
@@ -46,7 +46,7 @@ FVector AVBoRBoxStand::GetBoxSizeCm() const
 FTransform AVBoRBoxStand::StartPose() const
 {
 	const FVector BoxSizeCm = GetBoxSizeCm();
-	// 받침 접촉 오차를 피하려고 윗면에서 0.1 mm 띄움 (P1b D5·P4d D1)
+	// Leave 0.1 mm above stand (avoid contact rounding, P1b D5/P4d D1)
 	return FTransform(GetActorQuat(), GetActorTransform().TransformPosition(FVector(0,0,StandTopHeightCm+BoxSizeCm.Z*0.5+0.01)));
 }
 
@@ -73,7 +73,7 @@ void AVBoRBoxStand::Tick(float DeltaSeconds)
 	const FTransform Pose = StartPose();
 	const FVector BoxSizeCm = GetBoxSizeCm();
 	const FBox Slot(-BoxSizeCm*0.5-FVector(1), BoxSizeCm*0.5+FVector(1));
-	// 손에 든 박스·되돌린 박스가 출고 공간에서 1 cm 벗어나야 보충함 (P1b D5·P4d D1)
+	// Refill after held/returned box clears spawn space by 1 cm (P1b D5/P4d D1)
 	for (const AVBoRCarryObject* Box : Boxes)
 	{
 		if (!IsValid(Box)) { continue; }

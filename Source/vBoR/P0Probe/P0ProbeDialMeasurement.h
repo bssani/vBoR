@@ -10,7 +10,7 @@ struct FP0ProbeDialSample
 
 struct FP0ProbeDialMeasurement
 {
-	// 0 근처의 투영은 각도가 정의되지 않음. 수치 안정용이며 합격 기준 아님 (P0-a §3)
+	// Near-zero projection has no defined angle. Numerical stability only, no acceptance threshold (P0-a §3)
 	static constexpr double MinProjectedLengthMm = 0.1;
 	bool bTransitionsInitialized = false;
 	bool bThumbHigh = false;

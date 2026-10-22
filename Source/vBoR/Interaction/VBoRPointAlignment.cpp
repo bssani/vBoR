@@ -113,7 +113,7 @@ void UVBoRVehicleAlignmentComponent::AdvancePointCapture()
 	{ bPointCapturing = false; PointResult(TEXT("Point canceled — hand not tracked or Stage changed")); return; }
 	const double Now = PointTime(), Dt = Now - LastPointTime; LastPointTime = Now;
 	if (!FMath::IsFinite(Dt) || Dt <= 0) { return; }
-	// 원본 손끝 world → Stage. HomeShift 와 현재 정렬이 기록에 섞이지 않게 함 (P4h D2, cm)
+	// Raw fingertip world → Stage (exclude HomeShift/current alignment from capture, P4h D2, cm)
 	PointWindow.Add(AlignmentPawn->GetActorTransform().InverseTransformPosition(WorldTip)); PointElapsed += Dt;
 	if (PointElapsed + UE_DOUBLE_SMALL_NUMBER < PointCaptureSeconds) { return; }
 	bPointCapturing = false;

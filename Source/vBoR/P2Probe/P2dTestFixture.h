@@ -6,7 +6,7 @@
 #include "Components/AudioComponent.h"
 #include "P2dTestFixture.generated.h"
 
-// headless 에서 소리 재생 요청만 셈 (실제 들리는 소리는 Quest 확인, P2d E5)
+// Count sound requests headless (actual listening on Quest, P2d E5)
 UCLASS()
 class UP2dAudioObserver : public UAudioComponent
 {

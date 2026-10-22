@@ -48,7 +48,7 @@ namespace
 		if (!H.bTracked) { for (FVector& Q:H.Points) { Q=FVector(1000); } }
 		H.bTracked=true; H.Points[I]=P;
 	}
-	// 기대 방향은 실제 +Z, 면 접촉은 두께 2 cm 의 아래·윗면으로 정함 (P5m E5·E6)
+	// Expected direction = actual +Z; face contact from lower/upper faces of 2 cm thickness (P5m E5/E6)
 	FVector P5mContact(double Angle, bool Below=true, bool Reverse=false)
 	{
 		return FQuat(FVector::XAxisVector,FMath::DegreesToRadians(Reverse?-Angle:Angle)).RotateVector(FVector(0,Reverse?-15:15,Below?-1:1));

@@ -72,7 +72,7 @@ void AVBoRTwoAxisPart::PreInitializeComponents()
 		bValid = bValid && !Bounds.Min.ContainsNaN() && !Bounds.Max.ContainsNaN() && Bounds.GetSize().GetMin() > 0;
 		GrabBox->SetRelativeLocation(Bounds.GetCenter()); GrabBox->SetBoxExtent(Bounds.GetExtent());
 	}
-	// 저장된 레벨도 실행 때 검사함. construction 은 경고를 내지 않음 (P5e E15)
+	// Validate saved levels at runtime too. No construction warnings (P5e E15)
 	if (!bValid) { UE_LOG(LogTwoAxisPart,Warning,TEXT("%s: Missing mesh or invalid two-axis settings; grabbing and pushing disabled | approximate geometry | no reflection | not-tested"),*GetName()); }
 	GrabBox->SetVisibility(bValid,true);
 	Grabbable->SetGrabCollider(ConfigureVBoRGrabCollider(PartMesh, GrabBox, bGrabWithMesh, bValid, MeshRestFromRoot)); Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm,bValid);
@@ -133,7 +133,7 @@ bool AVBoRTwoAxisPart::BeginHold(int32 Hand, UIsdkGrabberComponent* Grabber)
 	if (Motion.GrabHand != INDEX_NONE) { return Motion.GrabHand == Hand && HoldingGrabber == Grabber; }
 	if (!bValid || Hand < 0 || Hand > 1) { bCancelPending = true; return false; }
 	HoldingGrabber = Grabber; bPinch = Grabber && Grabber->IsInputMethodActive(EIsdkGrabInputMethod::Pinch);
-	// 광학 입력을 읽을 손만 임시 지정함 (무효 선택은 Tick 에서 취소, P5e D6)
+	// Temporarily assign optical input hand only (cancel invalid selection in Tick, P5e D6)
 	Motion.GrabHand = Hand; FTransform Pose; const bool Tracked = ReadGrabPose(Pose); Motion.GrabHand = INDEX_NONE;
 	if (!Tracked || !Motion.BeginGrab(Hand,Pose.GetLocation())) { HoldingGrabber = nullptr; bCancelPending = true; return false; }
 	bRetainUntilOpen = false; return true;
@@ -198,7 +198,7 @@ void AVBoRTwoAxisPart::UpdateVisual()
 
 FString AVBoRTwoAxisPart::GetDebugText() const
 {
-	return FString::Printf(TEXT("Approximate geometry | yaw=%.3f pitch=%.3f deg grab=%d push=%d paused=%d discarded=%.3f cm | no reflection (반사 없음) | not-tested"),Motion.YawDeg,Motion.PitchDeg,Motion.GrabHand,Motion.PushHand,Motion.bPaused,Motion.RecoveryDiscardCm);
+	return FString::Printf(TEXT("Approximate geometry | yaw=%.3f pitch=%.3f deg grab=%d push=%d paused=%d discarded=%.3f cm | no reflection | not-tested"),Motion.YawDeg,Motion.PitchDeg,Motion.GrabHand,Motion.PushHand,Motion.bPaused,Motion.RecoveryDiscardCm);
 }
 
 void AVBoRTwoAxisPart::EndPlay(const EEndPlayReason::Type Reason)

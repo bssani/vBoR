@@ -5,7 +5,7 @@
 #include "../Interaction/VBoRCarryObject.h"
 #include "P4bTestObserver.generated.h"
 
-// 실제 dynamic delegate 의 횟수·순서만 관찰함 (P4b §4)
+// Observe real dynamic delegate counts/order only (P4b §4)
 UCLASS()
 class UP4bTestObserver : public UObject
 {

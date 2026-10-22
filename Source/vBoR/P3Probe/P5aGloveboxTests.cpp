@@ -27,7 +27,7 @@ namespace
 		void Tracked()
 		{
 			Play();
-			// 근사 차의 실제 설정을 복사하고 추적 입력만 바꿈 (P5a E1–E8)
+			// Copy actual mock-car settings, replace tracking input only (P5a E1–E8)
 			const AVBoRHingedPanel* Source = Car->Glovebox;
 			Panel = World->SpawnActorDeferred<AP2cTrackedPanel>(AP2cTrackedPanel::StaticClass(), Car->GetActorTransform());
 			Panel->HingePivot->SetRelativeTransform(Source->HingePivot->GetRelativeTransform());
@@ -253,7 +253,7 @@ bool FP5aActualTransfer::RunTest(const FString&)
 {
 	FP5aWorld W; W.Play(); AVBoRHingedPanel* Panel = W.Car->Glovebox; AVBoRAxisPart* Handle = W.Car->GloveboxHandle;
 	UP2cEventObserver* Events = P5aObserve(Panel); P5aPull(Handle,20);
-	// 실제 손잡이 SDK 변환 뒤 추적된 손만 합성함 (P2b E17 방식, P5a E10)
+	// Synthesize tracked hand only after real handle SDK transform (P2b E17 method, P5a E10)
 	TestTrue(TEXT("Actual threshold reached"), Handle->GetOpenRatio() >= Handle->OpenThreshold);
 	TestTrue(TEXT("Actual lever transfers"), FP2dTestAccess::Transfer(Panel,Handle,P5aFace(0)));
 	TestEqual(TEXT("One actual unlock event"), Events->Unlocks,1);
@@ -269,8 +269,8 @@ bool FP5aActualTransfer::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5aWarnings, "vBoR.P5a.E11MissingOpeningWarnings", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP5aWarnings::RunTest(const FString&)
 {
-	AddExpectedMessagePlain(TEXT("버튼 Unlock 뒤에도 열 수 없음 (손바닥 열기 꺼짐)."), ELogVerbosity::Warning);
-	AddExpectedMessagePlain(TEXT("버튼으로 Unlock을 부르면 무시."), ELogVerbosity::Warning);
+	AddExpectedMessagePlain(TEXT("Cannot open after button Unlock (palm opening disabled)."), ELogVerbosity::Warning);
+	AddExpectedMessagePlain(TEXT("Ignore button Unlock."), ELogVerbosity::Warning);
 	FP5aWorld W;
 	for (bool bPalm : {false,true})
 	{

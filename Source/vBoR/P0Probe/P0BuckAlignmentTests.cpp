@@ -205,7 +205,7 @@ bool FP0BuckStoreTest::RunTest(const FString&)
 	TestTrue(TEXT("Invalid file preserves PlayerStart"), Env.Pawn->GetActorLocation().Equals(FVector(-100, 75, 0)));
 	FFileHelper::SaveStringToFile(TEXT("{broken"), *Env.Path);
 	TestFalse(TEXT("Corrupt JSON rejected"), FVBoRBuckAlignmentStore::Load(Env.Path, Loaded, Reason));
-	// 파일 교체의 간헐적 I/O 실패를 같은 실제 경로로 반복 확인함 (P0-c E8)
+	// Repeat real file-replacement path for intermittent I/O failure (P0-c E8)
 	for (int32 Attempt = 0; Attempt < 40; ++Attempt)
 	{
 		auto Replacement = Fixture(); Replacement.Capture.PositionCm.X = 10 + Attempt;
@@ -346,7 +346,7 @@ bool FP0BuckCommandClockTest::RunTest(const FString&)
 		const double PressAt = BeforePress + 0.85 * Step;
 		FP0BuckTestAccess::SetTime(Env.Bench, PressAt);
 		FP0BuckTestAccess::Save(Env.Bench);
-		// Tick dt 의 85% 는 명령 전에 지났음. 실제 명령 경계부터만 시간 계산 (P0-c I1)
+		// 85% of Tick dt preceded command. Count from actual command boundary only (P0-c I1)
 		for (int32 Index = 1; Index <= Rate * 2; ++Index)
 		{
 			FP0BuckTestAccess::FrameAt(Env.Bench, BeforePress + Index * Step, Step, Head(75));

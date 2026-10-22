@@ -111,7 +111,7 @@ bool FP1BenchWorldTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("Failed fit leaves bag geometry unchanged"), Bench->Bag->GetActorScale3D().Equals(OriginalBagScale, 0.0001));
 		Bench->Trunk->InsideWidthCm = 130;
 		Bench->Trunk->OnConstruction(Bench->Trunk->GetActorTransform());
-		// 시작·초기 tick 은 통과로 세지 않고, 몸체 앞 경계가 +X 로 들어갈 때만 셈 (P1 §2 경로)
+		// No initial/first-Tick passage; count only body front crossing into +X (P1 §2 path)
 		Bench->Tick(0);
 		TestEqual(TEXT("Initial bag pose has no crossing"), Bench->GetEntranceCrossings(), 0);
 		Bench->Bag->SetActorLocation(Bench->GetActorTransform().TransformPosition(FVector(-30, 0, 90)), false, nullptr, ETeleportType::TeleportPhysics);
@@ -249,7 +249,7 @@ bool FP1BenchHullCrossingTest::RunTest(const FString& Parameters)
 	AP1LoadBench* Bench = World->SpawnActor<AP1LoadBench>();
 	World->InitializeActorsForPlay(FURL());
 	World->GetWorldSettings()->NotifyBeginPlay();
-	// 범퍼·원통 hull 만 비교하는 시험. R·B 뒤에도 열린 입구 유지 (P4b D8)
+	// Bumper/cylinder hull comparison only. Keep opening clear after R/B (P4b D8)
 	Bench->Gate->bStartOpen = true;
 	for (double Yaw : {0.0, 37.0})
 	{

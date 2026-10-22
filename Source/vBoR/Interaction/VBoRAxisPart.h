@@ -27,9 +27,9 @@ enum class EVBoRAxisRelease : uint8 { Return, Stay, Detent };
 UENUM(BlueprintType)
 enum class EVBoRDoorHandleSide : uint8
 {
-	None UMETA(DisplayName="없음"),
-	Outside UMETA(DisplayName="바깥"),
-	Inside UMETA(DisplayName="안쪽")
+	None UMETA(DisplayName="None"),
+	Outside UMETA(DisplayName="Outside"),
+	Inside UMETA(DisplayName="Inside")
 };
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FVBoRAxisEvent);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVBoRDetentEvent, int32, Index);
@@ -48,7 +48,7 @@ public:
 #endif
 };
 
-// ISDK 에 쉬는 축 좌표를 넘김 (회전·직선의 기준을 같게, P2b D3·D7)
+// Pass rest-axis coordinates to ISDK (shared rotation/translation reference, P2b D3/D7)
 UCLASS()
 class VBOR_API UVBoRAxisTransformer : public UIsdkTransformer
 {
@@ -83,14 +83,14 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Sound") FVBoRSoundCue ClosedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Sound") FVBoRSoundCue DetentCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Sound") FVBoRSoundCue NudgeCue;
-	// 칸 순서는 위 프로퍼티 순서와 같음 (P5s D12)
+	// Slot order = property order above (P5s D12)
 #if WITH_DEV_AUTOMATION_TESTS
 	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
 	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return SoundAudio[Slot]; }
 	uint64 GetSoundFrameForTest() const { return SoundFrame; }
 #endif
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part", meta=(DisplayName="문의 어느 쪽", ToolTip="문 밑에 붙인 손잡이를 Play 때 연결함. 문과 무관한 부품은 없음.")) EVBoRDoorHandleSide DoorHandleSide = EVBoRDoorHandleSide::None;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part", meta=(DisplayName="Door side", ToolTip="Connect handles attached under door at Play. None for unrelated parts.")) EVBoRDoorHandleSide DoorHandleSide = EVBoRDoorHandleSide::None;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spectator") FText SpectatorName;
 	virtual FText GetSpectatorName() const override { return SpectatorName; }
 	virtual bool IsSpectatorInteracting() const override { return HoldingGrabber != nullptr || PushHand != INDEX_NONE; }
@@ -103,7 +103,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Axis part") TObjectPtr<UBoxComponent> GrabBox;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Axis part") TObjectPtr<UIsdkGrabbableComponent> Grabbable;
 	UPROPERTY(VisibleAnywhere, Category="Axis part") TObjectPtr<UVBoRAxisGrabComponent> GrabComponent;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Input", meta=(DisplayName="메시 충돌로 잡기")) bool bGrabWithMesh = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Input", meta=(DisplayName="Grab with mesh collision")) bool bGrabWithMesh = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part") FTransform MeshRestFromRoot;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Input") bool bAllowPalmGrab = true;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Input") bool bAllowPinchGrab = false;
@@ -113,12 +113,12 @@ public:
 	UPROPERTY(EditAnywhere, Category="Axis part") FLinearColor PushingColor = FLinearColor(1,0.5,0,0.4);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part") EVBoRAxisMovement Movement = EVBoRAxisMovement::Rotate;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part") EVBoRAxisRelease Release = EVBoRAxisRelease::Return;
-	// 쉬는 자세 0 기준, 값이 커지는 쪽이 위임 (P5b D2, deg)
+	// Rest pose = 0, increasing value = up (P5b D2, deg)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Detent", meta=(ToolTip="Angles from rest in deg, strictly increasing")) TArray<float> DetentAnglesDeg = {-20,0,20};
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Detent") int32 DetentStartIndex = 1;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Detent", meta=(Units="deg")) float DetentUpThresholdDeg = 15;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Detent", meta=(Units="deg")) float DetentDownThresholdDeg = 15;
-	// 0 이면 끔. 시작 걸림에서만 차선 변경을 냄 (기어 동작 유지, P5c D2·D3, deg)
+	// 0 disables. Lane change only from start detent (preserve gear behavior, P5c D2/D3, deg)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Detent", meta=(Units="deg")) float DetentNudgeDeg = 0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part") TEnumAsByte<EAxis::Type> Axis = EAxis::X;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part") bool bReverse = false;

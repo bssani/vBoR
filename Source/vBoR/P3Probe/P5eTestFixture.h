@@ -3,7 +3,7 @@
 #include "../Interaction/VBoRTwoAxisPart.h"
 #include "P5eTestFixture.generated.h"
 
-// 광학 자세·원래 손점만 합성함 (부품의 Tick·소유·피드백은 실제 경로, P5e §4)
+// Synthesize optical pose/raw hand points only (real part Tick/ownership/feedback, P5e §4)
 UCLASS()
 class AP5eTrackedPart : public AVBoRTwoAxisPart
 {

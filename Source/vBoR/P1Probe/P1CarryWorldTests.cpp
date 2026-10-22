@@ -187,7 +187,7 @@ bool FP1CarryPlacementTest::RunTest(const FString& Parameters)
 	Bag->OnSeated.AddDynamic(BagObserver, &UP1CarryTestObserver::OnSeated);
 	const FTransform TrunkFrame = Bench->Trunk->GetActorTransform();
 	FTransform DropPose = Bag->GetActorTransform();
-	// 폭 여유는 5 cm 뿐이라 깊이 쪽으로 20 cm 비킴 (보조 범위 밖·트렁크 안, P1 R4-1)
+	// Only 5 cm width clearance; offset 20 cm in depth (outside assistance, inside trunk, P1 R4-1)
 	DropPose.SetLocation(TrunkFrame.TransformPosition(FVector(65, 0, 120)));
 	Bag->ResetToPose(DropPose);
 	Bag->Session.Begin(0, Bag->GetActorTransform(), Bag->GetActorTransform(), 0);
@@ -232,7 +232,7 @@ bool FP1CarryMissingCollisionTest::RunTest(const FString& Parameters)
 {
 	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
 	AVBoRCarryObject* Object = World->SpawnActor<AVBoRCarryObject>();
-	// 공유 asset 의 충돌을 지우지 않게 시험 전용 복제 사용 (P1 R4-2)
+	// Test-only duplicate (preserve shared asset collision, P1 R4-2)
 	UStaticMesh* MeshWithoutCollision = DuplicateObject<UStaticMesh>(Object->Mesh->GetStaticMesh(), World);
 	MeshWithoutCollision->SetBodySetup(NewObject<UBodySetup>(MeshWithoutCollision));
 	Object->Mesh->SetStaticMesh(MeshWithoutCollision);

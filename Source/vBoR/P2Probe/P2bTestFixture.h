@@ -6,7 +6,7 @@
 #include "Interaction/Pointable/IsdkInteractionPointerEvent.h"
 #include "P2bTestFixture.generated.h"
 
-// 추적 입력만 합성하고 잡기·놓음은 실제 SDK 경로 사용함 (P2b R1-3)
+// Synthesize tracking only; grab/release through real SDK (P2b R1-3)
 UCLASS()
 class AP2bTrackedPart : public AVBoRAxisPart
 {

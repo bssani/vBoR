@@ -11,16 +11,16 @@ void FVBoRKnobMotion::AdvanceGrab(bool bTracked, const FQuat& Palm)
 	if (GrabHand == INDEX_NONE) { return; }
 	if (!bTracked || Palm.ContainsNaN() || !Palm.IsNormalized()) { bPaused = true; return; }
 	const FQuat Delta = (Palm * LastPalm.Inverse()).GetNormalized();
-	// 피벗 +Z 양의 회전이 앞에서 오른쪽으로 향함 (P5f D2·R1-1, rad → deg)
+	// Positive pivot +Z rotation goes front to right (P5f D2/R1-1, rad → deg)
 	const double TwistDeg = FMath::RadiansToDegrees(Delta.GetTwistAngle(FVector::ZAxisVector));
 	if (bPaused) { RecoveryDiscardDeg = FMath::Abs(TwistDeg); }
 	else if (FMath::Abs(TwistDeg) <= JumpThresholdDeg + 1.e-6)
 	{
-		// 튐·복구 판정은 실제 손 각, 움직임에만 배율 적용 (P5n D2, deg)
+		// Real hand angle for jump/recovery; multiplier for motion only (P5n D2, deg)
 		AngleDeg += TwistDeg * TwistGain;
 		if (StepDeg > 0)
 		{
-			// H=0 의 정확한 경계에서도 같은 frame 에 왕복 알림이 나지 않게 방향별 처리함 (P5f D4)
+			// Directional handling at exact H=0 boundary (no round-trip notifications in same frame, P5f D4)
 			if (TwistDeg > 0)
 			{
 				while (AngleDeg >= (static_cast<double>(StepIndex)+0.5)*StepDeg+StepHysteresisDeg) { ++StepIndex; PendingSteps.Add(1); }
@@ -31,7 +31,7 @@ void FVBoRKnobMotion::AdvanceGrab(bool bTracked, const FQuat& Palm)
 			}
 		}
 	}
-	// 튐·복구도 기준만 옮김 (다음 frame 에 누적되지 않게, P5f D3·D6)
+	// Rebase on jump/recovery too (no next-frame accumulation, P5f D3/D6)
 	LastPalm = Palm; bPaused = false;
 }
 

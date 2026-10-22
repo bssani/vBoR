@@ -71,7 +71,7 @@ void SVBoROperatorPanel::Tick(const FGeometry& Geometry, double CurrentTime, flo
 
 FReply SVBoROperatorPanel::OnPreviewKeyDown(const FGeometry&, const FKeyEvent& Event)
 {
-	// 자식 버튼의 Space 처리 전에 소비함 (키 한 번을 클릭과 명령으로 두 번 보내지 않게, P5i D5)
+	// Consume before child button Space (one key must not send click and command, P5i D5)
 	return Runner.IsValid() && Runner->HandleOperatorKey(Event.GetKey(), Event.IsRepeat()) ? FReply::Handled() : FReply::Unhandled();
 }
 

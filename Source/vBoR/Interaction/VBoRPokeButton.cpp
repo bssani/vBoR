@@ -25,7 +25,7 @@ AVBoRPokeButton::AVBoRPokeButton()
 	BaseMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Poke = CreateDefaultSubobject<UIsdkPokeInteractable>(TEXT("Poke"));
 	Poke->SetupAttachment(RootComponent);
-	// ISDK +X 를 Actor -Z 로 맞춤 (윗면 +Z 에서 누름, P0-b D4)
+	// Align ISDK +X with Actor -Z (press from top +Z, P0-b D4)
 	Poke->SetRelativeRotation(FRotator(-90, 0, 0));
 	Plane = CreateDefaultSubobject<UIsdkPointablePlane>(TEXT("PressedPlane"));
 	Plane->SetupAttachment(Poke);
@@ -37,7 +37,7 @@ AVBoRPokeButton::AVBoRPokeButton()
 	ButtonMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(IsdkContentAssetPaths::Engine::BasicShapes::Cube);
 	ButtonMesh->SetStaticMesh(Cube.Object);
-	// 15 mm 시험용 자리값. 실제 크기는 자식의 메시·스케일에서 나옴 (P0-b D2)
+	// 15 mm test placeholder. Actual size from child mesh/scale (P0-b D2)
 	ButtonMesh->SetRelativeScale3D(FVector(0.015, 0.015, 0.006));
 	PressAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("PressAudio"));
 	PressAudio->SetupAttachment(RootComponent);
@@ -56,7 +56,7 @@ void AVBoRPokeButton::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
 	if (!ButtonMesh->GetStaticMesh()) { return; }
-	// 메시의 쉬는 위치를 보존하면서 visual pivot 만 윗면으로 옮김 (P0-b D3·D4)
+	// Move visual pivot to top, preserve mesh rest position (P0-b D3/D4)
 	const FTransform MeshToActor = ButtonMesh->GetComponentTransform().GetRelativeTransform(GetActorTransform());
 	const auto Layout = FVBoRPokeButtonLayout::Calculate(ButtonMesh->GetStaticMesh()->GetBoundingBox(), MeshToActor, PressDepthMm, HitAreaScale);
 	RestFront = Layout.FrontCenter;
@@ -79,7 +79,7 @@ void AVBoRPokeButton::OnConstruction(const FTransform& Transform)
 void AVBoRPokeButton::PreInitializeComponents()
 {
 	Super::PreInitializeComponents();
-	// 썸네일·BP 미리보기 world 에는 subsystem 이 없음 (P4i D7·Q2)
+	// No subsystem in thumbnail/BP preview worlds (P4i D7/Q2)
 	if (!UIsdkWorldSubsystem::TryGet(GetWorld())) { return; }
 	ButtonVisual->SetPokeInteractable(Poke);
 	PointerAudio->SetPointable(Poke.Get());
@@ -89,7 +89,7 @@ void AVBoRPokeButton::PreInitializeComponents()
 void AVBoRPokeButton::BeginPlay()
 {
 	Super::BeginPlay();
-	// 원래 라벨·텍스처를 보존하고 활성 상태만 덧입힘 (P0-b R1-1, U-04)
+	// Overlay active state, preserve original label/texture (P0-b R1-1, U-04)
 	UMaterialInterface* ColorMaterial = LoadObject<UMaterialInterface>(nullptr, IsdkContentAssetPaths::Materials::GrabbableDefault);
 	StateOverlay = ColorMaterial ? UMaterialInstanceDynamic::Create(ColorMaterial, this) : nullptr;
 	ButtonMesh->SetOverlayMaterial(nullptr);
@@ -117,7 +117,7 @@ void AVBoRPokeButton::HandleState(const FIsdkInteractableStateEvent& Event)
 	const bool bActive = bSelected || Event.Args.NewState == EIsdkInteractableState::Hover;
 	if (!bActive || !StateOverlay) { ButtonMesh->SetOverlayMaterial(nullptr); return; }
 	FLinearColor Color = bSelected ? SelectColor : HoverColor;
-	// GrabbableLit 의 ColorParam alpha 가 Opacity 에 연결됨 (에셋 검사 시험, P0-b R1-1)
+	// GrabbableLit ColorParam alpha feeds Opacity (asset inspection test, P0-b R1-1)
 	Color.A = FMath::Clamp(bSelected ? SelectOpacity : HoverOpacity, 0.0f, 1.0f);
 	StateOverlay->SetVectorParameterValue(TEXT("ColorParam"), Color);
 	ButtonMesh->SetOverlayMaterial(StateOverlay);
@@ -125,7 +125,7 @@ void AVBoRPokeButton::HandleState(const FIsdkInteractableStateEvent& Event)
 
 void AVBoRPokeButton::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 {
-	// 필터 거부도 Select 피드백은 유지함 (키를 쥔 손 포함, P5s D4)
+	// Keep Select feedback on filter rejection (including key-holding hand, P5s D4)
 	if (Event.Type == EIsdkPointerEventType::Select) { SoundPlayback[0].Queue(PressedCue, SoundAudio[0], SoundFrame); }
 	else if (Event.Type == EIsdkPointerEventType::Unselect) { SoundPlayback[1].Queue(ReleasedCue, SoundAudio[1], SoundFrame); }
 	SetActorTickEnabled(SoundPlayback[0].HasPending() || SoundPlayback[1].HasPending());

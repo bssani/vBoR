@@ -15,7 +15,7 @@ DEFINE_LOG_CATEGORY(LogP0Probe);
 
 namespace
 {
-	// Private FOculusKey 는 include 못 함. 정의된 문자열 그대로 사용 (P0-a §2)
+	// Private FOculusKey unavailable to include. Use exact defined strings (P0-a §2)
 	const TCHAR* PinchKeys[2][5] = {
 		{ TEXT("OculusHand_Left_ThumbPinch"), TEXT("OculusHand_Left_IndexPinch"), TEXT("OculusHand_Left_MiddlePinch"), TEXT("OculusHand_Left_RingPinch"), TEXT("OculusHand_Left_PinkPinch") },
 		{ TEXT("OculusHand_Right_ThumbPinch"), TEXT("OculusHand_Right_IndexPinch"), TEXT("OculusHand_Right_MiddlePinch"), TEXT("OculusHand_Right_RingPinch"), TEXT("OculusHand_Right_PinkPinch") }
@@ -48,7 +48,7 @@ AP0ProbePawn::AP0ProbePawn()
 	Camera->SetupAttachment(VROrigin);
 	Camera->bLockToHmd = true;
 
-	// ── 1) 손 표시 구성 (root 보정 회전은 plugin 에 맡김, P0-a §3) ──
+	// ── 1) Hand visuals (plugin owns root correction rotation, P0-a §3) ──
 	LeftMotion = CreateDefaultSubobject<UMotionControllerComponent>(TEXT("LeftMotion"));
 	RightMotion = CreateDefaultSubobject<UMotionControllerComponent>(TEXT("RightMotion"));
 	LeftHand = CreateDefaultSubobject<UOculusXRHandComponent>(TEXT("LeftHand"));
@@ -59,7 +59,7 @@ AP0ProbePawn::AP0ProbePawn()
 	{
 		Motions[HandIndex]->SetupAttachment(VROrigin);
 		Motions[HandIndex]->SetTrackingMotionSource(FName(HandNames[HandIndex]));
-		// 측정값과 표시 위치를 game thread 에 맞춤 (render thread 의 late update 제외)
+		// Match measurement/visual position on game thread (exclude render-thread late update)
 		Motions[HandIndex]->bDisableLowLatencyUpdate = true;
 		Hands[HandIndex]->SetupAttachment(Motions[HandIndex]);
 		Hands[HandIndex]->SkeletonType = HandIndex == 0 ? EOculusXRHandType::HandLeft : EOculusXRHandType::HandRight;
@@ -73,10 +73,10 @@ AP0ProbePawn::AP0ProbePawn()
 		AddTickPrerequisiteComponent(Hands[HandIndex]);
 	}
 
-	// ── 2) 레벨 고정 패널 구성 (머리에 붙이지 않음, P0-a §2) ──
+	// ── 2) Level-fixed panel (not head-attached, P0-a §2) ──
 	Panel = CreateDefaultSubobject<UTextRenderComponent>(TEXT("Panel"));
 	Panel->SetupAttachment(VROrigin);
-	// Player camera 나 Pawn 이동에 따라가지 않게 world transform 고정 (P0-a §2)
+	// Fix world transform (do not follow player camera/Pawn motion, P0-a §2)
 	Panel->SetAbsolute(true, true, true);
 	Panel->SetWorldSize(3.0f);
 	Panel->SetTextRenderColor(FColor::White);
@@ -139,7 +139,7 @@ void AP0ProbePawn::OnKeyPressed(FKey Key)
 				bPinched[HandIndex][Finger] = true;
 				if (Finger == 1)
 				{
-					// 해당 손의 검지 pinch 가 다이얼 비교의 0 deg 기준 (P0-a §2)
+					// Hand index pinch sets dial comparison 0 deg reference (P0-a §2)
 					DialMeasurements[HandIndex].ResetAngles();
 				}
 				RecordEvent(FString::Printf(TEXT("%s pinch %s pressed"), HandNames[HandIndex], FingerNames[Finger]));
@@ -213,15 +213,15 @@ void AP0ProbePawn::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	const double Time = ProbeTime();
-	// ── 1) 활성 XR 확인 (백엔드별 신호 비교용, P0-a §2) ──
+	// ── 1) Active XR check (compare backend signals, P0-a §2) ──
 	const FString CurrentXR = GEngine && GEngine->XRSystem.IsValid() ? GEngine->XRSystem->GetSystemName().ToString() : TEXT("None");
 	if (CurrentXR != XRSystemName)
 	{
 		XRSystemName = CurrentXR;
 		RecordEvent(FString::Printf(TEXT("XR system: %s"), *XRSystemName));
 	}
-	// ── 2) 손별 날것의 신호 측정 (필터 없이 비교, P0-a §2) ──
-	// WorldToMeters 는 UE units/m. 기본 100 이면 cm -> mm 는 10 배 (P0-a §2)
+	// ── 2) Raw per-hand signals (unfiltered comparison, P0-a §2) ──
+	// WorldToMeters = UE units/m. Default 100 gives cm -> mm x10 (P0-a §2)
 	const double MmPerUnit = 1000.0 / GetWorld()->GetWorldSettings()->WorldToMeters;
 	UOculusXRHandComponent* Hands[2] = { LeftHand, RightHand };
 	APlayerController* PC = GetController<APlayerController>();
@@ -233,7 +233,7 @@ void AP0ProbePawn::Tick(float DeltaSeconds)
 		bBonesAvailable[HandIndex] = Hand->bSkeletalMeshInitialized && Hand->GetBoneIndex(IndexBone) != INDEX_NONE && Hand->GetBoneIndex(ThumbBone) != INDEX_NONE;
 		if (bBonesAvailable[HandIndex])
 		{
-			// UpdateBonePose 가 dirty 만 표시하므로 현재 frame 의 본 위치로 refresh (P0-a §4)
+			// UpdateBonePose only marks dirty. Refresh current-frame bones (P0-a §4)
 			Hand->RefreshBoneTransforms();
 			IndexPositions[HandIndex] = Hand->GetBoneLocation(IndexBone, EBoneSpaces::WorldSpace);
 			ThumbPositions[HandIndex] = Hand->GetBoneLocation(ThumbBone, EBoneSpaces::WorldSpace);
@@ -244,13 +244,13 @@ void AP0ProbePawn::Tick(float DeltaSeconds)
 		}
 		const bool bThumbHigh = UOculusXRInputFunctionLibrary::GetFingerTrackingConfidence(Hand->SkeletonType, EOculusXRFinger::Thumb) == EOculusXRTrackingConfidence::High;
 		const bool bIndexHigh = UOculusXRInputFunctionLibrary::GetFingerTrackingConfidence(Hand->SkeletonType, EOculusXRFinger::Index) == EOculusXRTrackingConfidence::High;
-		// 기존 손끝 측정의 본 준비 조건은 유지. 다이얼만 Wrist_Root 추가 확인 (P0-a §2)
+		// Keep fingertip bone-ready gates. Extra Wrist_Root check for dial only (P0-a §2)
 		const bool bDialBonesReady = bBonesAvailable[HandIndex] && Hand->GetBoneIndex(WristBone) != INDEX_NONE;
 		const FQuat WristRotation = bDialBonesReady ? Hand->GetBoneQuaternion(WristBone, EBoneSpaces::WorldSpace) : FQuat::Identity;
 		for (const FString& Event : DialMeasurements[HandIndex].Update(Time, bValid, bThumbHigh, bIndexHigh, bDialBonesReady,
 			ThumbPositions[HandIndex], IndexPositions[HandIndex], WristRotation, DialWorldAxis, MmPerUnit))
 		{
-			// 짧은 전환은 로그로만 남김 (최근 이벤트 10개를 밀어내지 않게, P0-a §2)
+			// Log short transitions only (do not crowd out last 10 events, P0-a §2)
 			UE_LOG(LogP0Probe, Log, TEXT("[%.3f s] %s %s"), Time, HandNames[HandIndex], *Event);
 		}
 		for (int32 Finger = 0; Finger < 5; ++Finger)
@@ -258,7 +258,7 @@ void AP0ProbePawn::Tick(float DeltaSeconds)
 			PinchStrengths[HandIndex][Finger] = PC ? PC->GetInputAnalogKeyState(FKey(FName(StrengthKeys[HandIndex][Finger]))) : 0.0f;
 		}
 	}
-	// ── 3) 패널·로그 표시 (연속 로그는 초당 한 줄, P0-a §2) ──
+	// ── 3) Panel/log display (continuous log once per second, P0-a §2) ──
 	const FString Status = FString::Printf(TEXT("P0-a | t=%.3f s | XR: %s | Keyboard: %s\nDial world axis: %s | projection minimum: %.2f mm\n%s\n%s"),
 		Time, *XRSystemName, *LastKeyboardKey, *DialWorldAxis.GetSafeNormal().ToString(), FP0ProbeDialMeasurement::MinProjectedLengthMm, *FormatHand(0, Time), *FormatHand(1, Time));
 	FString PanelText = Status + TEXT("\nRecent events (10):");
@@ -285,7 +285,7 @@ void AP0ProbePawn::Tick(float DeltaSeconds)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ProbeInputTest, "vBoR.P0Probe.NativeKeyBindings", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP0ProbeInputTest::RunTest(const FString& Parameters)
 {
-	// InputKey 는 World 가 필요함. 실제 HMD 없는 합성 입력 시험용 (P0-a §4)
+	// InputKey needs World. Synthetic input test without actual HMD (P0-a §4)
 	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
 	APlayerController* Controller = World->SpawnActor<APlayerController>();
 	UEnhancedPlayerInput* Input = NewObject<UEnhancedPlayerInput>(Controller);
@@ -348,7 +348,7 @@ bool FP0ProbeRecoveryTest::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ProbeConfidenceRecoveryTest, "vBoR.P0Probe.ConfidenceRecovery", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP0ProbeConfidenceRecoveryTest::RunTest(const FString& Parameters)
 {
-	// Low 구간 중 무효 frame 이 껴도 기준점·이동값이 오염되지 않는지 확인 (P0-a §4)
+	// Check invalid frames within Low cannot contaminate reference/motion (P0-a §4)
 	FP0ProbeMeasurement State;
 	State.Update(0.0, true, true, FVector(0, 0, 0), true, 10.0);
 	State.Update(0.1, true, true, FVector(1, 0, 0), true, 10.0);
@@ -387,7 +387,7 @@ bool FP0ProbeConfidenceRecoveryTest::RunTest(const FString& Parameters)
 	InitialLow.Update(0.1, true, true, FVector(5, 0, 0), true, 10.0);
 	TestFalse(TEXT("No High reference before initial Low"), InitialLow.bHasConfidenceJump);
 
-	// 직전 High frame 을 못 읽었으면 더 오래된 High 위치로 튐을 만들지 않음 (R2-4, P0-a §4-4)
+	// No jump from older High position if immediately previous High unreadable (R2-4, P0-a §4-4)
 	for (int32 Missing = 0; Missing < 2; ++Missing)
 	{
 		FP0ProbeMeasurement MissingHigh;
@@ -425,13 +425,13 @@ bool FP0ProbeWindowTest::RunTest(const FString& Parameters)
 TArray<FString> FP0ProbeMeasurement::Update(double Time, bool bValid, bool bHigh, const FVector& IndexPosition, bool bBonesAvailable, double MmPerUnit)
 {
 	TArray<FString> Events;
-	// ── 1) 신뢰도·위치 상태 별도 비교 (같은 frame 에 바뀐다는 보장 없음, P0-a §4) ──
+	// ── 1) Compare confidence/position validity separately (may change on different frames, P0-a §4) ──
 	if (bInitialized && bHigh != bHighConfidence)
 	{
 		if (!bHigh)
 		{
 			ConfidenceLostAt = Time;
-			// 새 Low 구간 시작. 이전 구간 이동값은 버림
+			// New Low interval. Discard previous interval motion
 			bHasLowStartPosition = false;
 			LowMaxMoveMm = 0.0;
 			Events.Add(TEXT("confidence High -> Low"));
@@ -440,7 +440,7 @@ TArray<FString> FP0ProbeMeasurement::Update(double Time, bool bValid, bool bHigh
 		{
 			ConfidenceRecoveredAt = Time;
 			ConfidenceLossDuration = ConfidenceLostAt >= 0.0 ? Time - ConfidenceLostAt : 0.0;
-			// 가려짐은 대개 Low + 위치 유효로 옴. 무효 복구만 재면 튐을 놓침 (P0-a §2)
+			// Occlusion often Low + valid position. Invalid-only recovery misses jumps (P0-a §2)
 			bHasConfidenceJump = bHasLastHighPosition && bValid && bBonesAvailable;
 			ConfidenceJumpMm = bHasConfidenceJump ? FVector::Distance(LastHighPosition, IndexPosition) * MmPerUnit : 0.0;
 			Events.Add(FString::Printf(TEXT("confidence Low -> High, duration %s, jump %s, moved in Low %s"),
@@ -467,7 +467,7 @@ TArray<FString> FP0ProbeMeasurement::Update(double Time, bool bValid, bool bHigh
 				bHasRecoveryDistance ? *FString::Printf(TEXT("%.2f mm"), RecoveryDistanceMm) : TEXT("n/a")));
 		}
 	}
-	// 무효 frame 의 위치는 못 믿음. Low 여도 직전 유효 위치 기준 (P0-a §4)
+	// Invalid-frame position untrustworthy. Use last valid position even at Low (P0-a §4)
 	if (bValid)
 	{
 		bHasLastValidPosition = bBonesAvailable;
@@ -476,7 +476,7 @@ TArray<FString> FP0ProbeMeasurement::Update(double Time, bool bValid, bool bHigh
 			LastValidPosition = IndexPosition;
 		}
 	}
-	// Low 동안 위치가 멈춰 있는지 따라오는지 보려는 값. 0 근처면 멈춤 (P0-a §2)
+	// Measure frozen/following position during Low. Near 0 = frozen (P0-a §2)
 	if (!bHigh && bValid && bBonesAvailable)
 	{
 		if (!bHasLowStartPosition)
@@ -486,10 +486,10 @@ TArray<FString> FP0ProbeMeasurement::Update(double Time, bool bValid, bool bHigh
 		}
 		LowMaxMoveMm = FMath::Max(LowMaxMoveMm, FVector::Distance(LowStartPosition, IndexPosition) * MmPerUnit);
 	}
-	// 신뢰도 튐 기준점은 High frame 만. Low frame 위치는 추정값일 수 있음 (P0-a §2)
+	// High-only confidence jump reference. Low position may be estimated (P0-a §2)
 	if (bHigh)
 	{
-		// 직전 High frame 을 못 읽었으면 오래된 위치를 쓰지 않음 (P0-a §4-4, R2-4)
+		// No older position if immediately previous High unreadable (P0-a §4-4, R2-4)
 		bHasLastHighPosition = bValid && bBonesAvailable;
 		if (bHasLastHighPosition)
 		{
@@ -500,7 +500,7 @@ TArray<FString> FP0ProbeMeasurement::Update(double Time, bool bValid, bool bHigh
 	bHighConfidence = bHigh;
 	bInitialized = true;
 
-	// ── 2) 흔들림 창 갱신 (추적 오류를 흔들림으로 재지 않게, P0-a §4) ──
+	// ── 2) Update jitter window (exclude tracking errors from jitter, P0-a §4) ──
 	DiameterMm = 0.0;
 	if (!bValid || !bHigh || !bBonesAvailable)
 	{

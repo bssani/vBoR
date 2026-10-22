@@ -46,7 +46,7 @@ namespace
 	{
 		auto* Panel = World->SpawnActor<AP2cTrackedPanel>();
 		Panel->bPushOnMeshSurface = bMesh;
-		// sphere 가 든 BodyInstance 는 scale 갱신 때 XYZ 를 묶음 (E4 는 등방 scale 사용, P2g §5)
+		// Sphere BodyInstance ties XYZ on scale update (isotropic scale in E4, P2g §5)
 		Panel->MeshRestFromRoot = FTransform(FRotator(0,Tilt,0), FVector(55,0,52.5), bSphere ? FVector(1) : FVector(1.1,0.1,1.05));
 		if (bSphere) { Panel->DoorMesh->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere"))); }
 		Panel->OnConstruction(Panel->GetActorTransform());
@@ -210,7 +210,7 @@ bool FP2gSelect::RunTest(const FString& Parameters)
 	FP2gTestAccess::Angle(Panel,40);
 	double Y; FP2gTestAccess::Face(Panel,FVector(80,0,50),0,Y);
 	const double GapY=(Y+Panel->GetMotion().FaceMaxCm.Y)/2;
-	// 방향으로 고르면 안쪽이 되는 손을 넣음 (이전 점의 실제 면 우선 검증, P2g E7)
+	// Hand direction would choose inside (validate previous point's actual face first, P2g E7)
 	P2gInput(Panel,40,FVector(80,GapY,50),FVector(0,1,0));
 	P2gInput(Panel,40,FVector(80,Y-2,50),FVector(0,1,0));
 	TestEqual(TEXT("Outside selected despite inside-facing palm"),Panel->GetMotion().Metrics.Ignored[static_cast<int32>(EVBoRDoorIgnore::PalmDirection)],1);
@@ -224,7 +224,7 @@ bool FP2gFallback::RunTest(const FString& Parameters)
 	FP2gWorld W; AP2cTrackedPanel* Panel = P2gPanel(W.World); AP2cTrackedPanel* Plain = P2gPanel(W.World,false);
 	UStaticMesh* Empty = DuplicateObject<UStaticMesh>(Panel->DoorMesh->GetStaticMesh(),W.World);
 	UBodySetup* EmptyBody = NewObject<UBodySetup>(Empty);
-	// 빈 BodySetup 도 원본 삼각형으로 다시 cook 됨. 빈 simple 만 쓰게 함 (P2g E8)
+	// Empty BodySetup recooks source triangles too. Force empty simple only (P2g E8)
 	EmptyBody->CollisionTraceFlag = CTF_UseSimpleAsComplex;
 	Empty->SetBodySetup(EmptyBody); Panel->DoorMesh->SetStaticMesh(Empty);
 	Panel->CheckSetup(); TestTrue(TEXT("E8 setup detects missing collision"),Panel->SetupReport.Contains(TEXT("DoorMesh has no traceable collision; push uses bounds")));
@@ -335,7 +335,7 @@ bool FP2gCount::RunTest(const FString& Parameters)
 	FVBoRDoorMotion Door; Door.bUseLatch=false;
 	int32 Calls=0;
 	Door.QueryFace=[&](const FVector& P,int32 Face,double& Y) { ++Calls; Y=Face==0?5:-5; return true; };
-	// 잘못된 방향으로 두 손 모두 끝까지 검사함 (최악 경로, P2g E13)
+	// Both hands wrong direction through full check (worst path, P2g E13)
 	FVBoRDoorHand Hands[2]={P2gHand(FVector(80,-8,50),FVector(1,0,0)),P2gHand(FVector(80,-8,50),FVector(1,0,0))};
 	Door.Advance(Hands,0.016);
 	Hands[0]=Hands[1]=P2gHand(FVector(80,0,50),FVector(1,0,0)); Calls=0; Door.Advance(Hands,0.016);

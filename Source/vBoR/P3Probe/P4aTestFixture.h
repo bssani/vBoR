@@ -4,7 +4,7 @@
 #include "../Interaction/VBoRKeyFob.h"
 #include "P4aTestFixture.generated.h"
 
-// 추적 High 여부만 합성함. 선택·이동·물리 복원은 SDK 경로 사용 (P4a E1·E6·E7)
+// Synthesize tracking High only. SDK selection/motion/physics restore path (P4a E1/E6/E7)
 UCLASS()
 class AP4aTrackedKey : public AVBoRKeyFob
 {

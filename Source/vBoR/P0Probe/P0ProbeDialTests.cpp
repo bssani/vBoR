@@ -5,7 +5,7 @@
 
 namespace
 {
-	// 축 방향 성분 3 cm 는 투영에서 빠져야 함 (P0-a §2)
+	// Exclude 3 cm axial component from projection (P0-a §2)
 	FVector DialVector(double Degrees, double Radius = 2.0)
 	{
 		const double Radians = FMath::DegreesToRadians(Degrees);
@@ -23,7 +23,7 @@ namespace
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ProbeDialHoldTest, "vBoR.P0Probe.Dial.Hold", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP0ProbeDialHoldTest::RunTest(const FString& Parameters)
 {
-	// 각 조건을 하나씩 깨뜨림 (누락된 gate 를 잡기 위함, P0-a §4-6)
+	// Break each condition separately (catch missing gates, P0-a §4-6)
 	for (int32 Gate = 0; Gate < 5; ++Gate)
 	{
 		FP0ProbeDialMeasurement State;
@@ -90,7 +90,7 @@ bool FP0ProbeDialWristTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Projected length in mm"), FMath::IsNearlyEqual(State.ProjectedLengthMm, 20.0, 1.e-6));
 	TestTrue(TEXT("Tip distance includes axial component"), FMath::IsNearlyEqual(State.TipDistanceMm, 36.05551275463989, 1.e-6));
 
-	// 다이얼 축은 월드 Z 에 한정되지 않음. 비정규화 X 축과 swing 을 함께 확인 (P0-a §2)
+	// Dial axis not limited to world Z. Check nonnormalized X with swing (P0-a §2)
 	FP0ProbeDialMeasurement Side;
 	const FVector Axis(4.0, 0.0, 0.0);
 	const FQuat Swing(FVector::RightVector, FMath::DegreesToRadians(40.0));
@@ -125,7 +125,7 @@ bool FP0ProbeDialPinchTest::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ProbeDialSwingTest, "vBoR.P0Probe.Dial.FrameSwing", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP0ProbeDialSwingTest::RunTest(const FString& Parameters)
 {
-	// frame 사이 swing 을 twist 로 세거나 월드 축 대신 local 축을 쓰는 오류 확인 (R2-2, P0-a §4-6)
+	// Check swing counted as twist/local used instead of world axis (R2-2, P0-a §4-6)
 	const FVector Axis = FVector(1.0, 2.0, 3.0).GetSafeNormal();
 	const FVector SwingAxis = FVector(2.0, -1.0, 0.0).GetSafeNormal();
 	const FVector Tip = SwingAxis * 2.0;
@@ -150,7 +150,7 @@ bool FP0ProbeDialSwingTest::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP0ProbeDialProjectionTest, "vBoR.P0Probe.Dial.ProjectionBoundary", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP0ProbeDialProjectionTest::RunTest(const FString& Parameters)
 {
-	// UE cm -> mm 하한 비교 누락·단위 혼동 확인 (R2-3, P0-a §4-6)
+	// Check missing lower bound/unit confusion in UE cm -> mm comparison (R2-3, P0-a §4-6)
 	FP0ProbeDialMeasurement State;
 	DialFrame(State, 0.0, 0.0);
 	DialFrame(State, 0.1, 30.0);

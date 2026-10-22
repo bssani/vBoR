@@ -3,7 +3,7 @@
 #include "Interaction/IsdkPokeInteractable.h"
 #include "P5hTestFixture.generated.h"
 
-// SDK 가 보내는 선택 상태만 합성함 (실제 읽기 함수·수집 경로 확인, P5h E10)
+// Synthesize SDK selection state only (real reader/collection path, P5h E10)
 UCLASS()
 class UP5hPokeState : public UIsdkPokeInteractable
 {

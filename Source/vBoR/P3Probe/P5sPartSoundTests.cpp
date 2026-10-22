@@ -22,7 +22,7 @@
 #include "IsdkContentAssetPaths.h"
 #include "Sound/SoundBase.h"
 
-// 합성 이벤트는 기존 확정/알림 경계로 넣음 (실제 손·청각 시험과 구분, P5s §4)
+// Synthetic events at existing commit/notification boundary (separate real hand/listening tests, P5s §4)
 struct FP5sTestAccess
 {
 	template<class T> static UP5rAudioObserver* Observe(T* Part, int32 Slot)
@@ -147,15 +147,15 @@ bool FP5sDelays::RunTest(const FString&)
 	auto* K = FP5sTestAccess::Observe(W.Knob,0); auto* H = FP5sTestAccess::Observe(W.Wheel,0); auto* X = FP5sTestAccess::Observe(W.Box,0);
 	auto* M = FP5sTestAccess::Observe(W.Mirror,2); auto* V = FP5sTestAccess::Observe(W.Power,0);
 	W.Poke(W.Button); FP5sTestAccess::Open(W.Axis,true); FP5sTestAccess::Latch(W.Panel); FP5sTestAccess::Step(W.Knob); W.Knob->Tick(.01f); FP5sTestAccess::Limit(W.Wheel); W.Wheel->Tick(.01f);
-	// 충돌 world 에서 막힘을 일으킴 (예약 자체를 직접 넣지 않음, P5s E4·E10)
+	// Cause blockage in collision world (no direct queue injection, P5s E4/E10)
 	FP5sTestAccess::Block(W.Box,W.BlockedPose());
-	W.Mirror->Tick(3); // 펼침 도착 뒤 지연 시작
+	W.Mirror->Tick(3); // Delay starts after unfold arrival
 	TestTrue(TEXT("button delay Tick enabled"),W.Button->IsActorTickEnabled()); TestTrue(TEXT("power delay Tick enabled"),W.Power->IsComponentTickEnabled());
 	auto Tick = [&](float Dt) { W.Button->Tick(Dt); W.Axis->Tick(Dt); W.Panel->Tick(Dt); W.Knob->Tick(Dt); W.Wheel->Tick(Dt); W.Box->Tick(Dt); W.Mirror->Tick(Dt); W.Power->TickComponent(Dt,LEVELTICK_All,nullptr); };
 	Tick(.2f); for (auto* Audio : {B,A,P,K,H,X,M,V}) { TestEqual(TEXT("before .3 s"),Audio->Plays,0); }
 	Tick(.1f); for (auto* Audio : {B,A,P,K,H,X,M,V}) { TestEqual(TEXT("at .3 s"),Audio->Plays,1); }
 	TestFalse(TEXT("button idle Tick off"),W.Button->IsActorTickEnabled()); TestFalse(TEXT("power idle Tick off"),W.Power->IsComponentTickEnabled());
-	// NaN frame 시간은 0 으로 봄. 예약이 영영 안 끝나지 않게 함 (P5s 리뷰 참고 1)
+	// NaN frame time = 0 (queue must not hang forever, P5s review note 1)
 	FP5sTestAccess::Open(W.Axis,false); FP5sTestAccess::Open(W.Axis,true);
 	W.Axis->Tick(std::numeric_limits<float>::quiet_NaN()); TestEqual(TEXT("NaN frame keeps delay"),A->Plays,1);
 	W.Axis->Tick(.3f); TestEqual(TEXT("delay after NaN frame"),A->Plays,2);
@@ -219,7 +219,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5sPower, "vBoR.P5s.E9Power", EAutomationTestF
 bool FP5sPower::RunTest(const FString&)
 {
 	FP5sWorld W; auto* S = W.Button->PressedCue.Sound.Get(); W.Power->PowerOnCue.Sound = W.Power->PowerOffCue.Sound = S; W.Play();
-	// 소리를 넣어도 Play 시작 때는 차체에 오디오가 없음. 첫 요청 때 하나 생김 (P4i E2 Core 비교 유지, P5s R1-1)
+	// No body audio at Play start even with sound assigned. Create on first request (preserve P4i E2 Core comparison, P5s R1-1)
 	TArray<UAudioComponent*> CarAudio; W.Car->GetComponents(CarAudio);
 	TestEqual(TEXT("no vehicle audio before first request"), CarAudio.Num(), 0);
 	W.Power->SetPowerOn(true); W.Car->GetComponents(CarAudio);

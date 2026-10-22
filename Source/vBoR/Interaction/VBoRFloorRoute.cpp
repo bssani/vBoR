@@ -25,7 +25,7 @@ void AVBoRFloorRoute::OnConstruction(const FTransform& Transform)
 void AVBoRFloorRoute::BeginPlay()
 {
 	Super::BeginPlay(); BuildVisuals(); SetRouteVisible(false);
-	UE_LOG(LogTemp, Log, TEXT("바닥 경로 %s — 근사 형상·자리값 (P3b D4, cm)"), *GetName());
+	UE_LOG(LogTemp, Log, TEXT("Floor route %s — Approximate geometry, placeholder values (P3b D4, cm)"), *GetName());
 }
 
 void AVBoRFloorRoute::AddStripe(const FVector& A, const FVector& B, float Width, UMaterialInstanceDynamic* Material)
@@ -50,7 +50,7 @@ void AVBoRFloorRoute::BuildVisuals()
 		UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(ColorMaterial, this); ArrowMaterials.Add(Material);
 		const FVector P = Spline->GetLocationAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::Local) + FVector(0, 0, FloorOffsetCm);
 		const FRotator Facing(0, Spline->GetDirectionAtDistanceAlongSpline(Distance, ESplineCoordinateSpace::Local).Rotation().Yaw, 0);
-		// 띠의 끝 단면을 포함해 외곽 폭·길이를 맞춤 (P3b E2, cm)
+		// Include strip end caps in outer width/length (P3b E2, cm)
 		double Angle = FMath::Atan2(ArrowWidthCm * 0.5, ArrowLengthCm), Run = 0, HalfY = 0;
 		for (int32 Iteration = 0; Iteration < 12; ++Iteration)
 		{

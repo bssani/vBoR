@@ -48,7 +48,7 @@ namespace
 		virtual void Serialize(const TCHAR* Message, ELogVerbosity::Type Verbosity, const FName& Category) override
 		{
 			if (Category != TEXT("LogAxisDoor")) { return; }
-			// expected Warning 은 엔진이 Verbose 로 낮춤 (P2e 리뷰 메모)
+			// Engine downgrades expected Warning to Verbose (P2e review note)
 			if (Verbosity == ELogVerbosity::Warning || (Verbosity == ELogVerbosity::Verbose && FString(Message).Contains(TEXT("P2e setup:")))) { Warnings.Add(Message); }
 			if (FString(Message).Contains(TEXT("P2e attached"))) { Attachments.Add(Message); }
 		}
@@ -78,7 +78,7 @@ namespace
 		for (AActor* Child : Children) { Poses.Add(Child->GetActorTransform()); Parents.Add(Child->GetRootComponent()->GetAttachParent()); }
 		Panel->CheckSetup();
 		const TArray<FString> Problems = FP2eTestAccess::Problems(Panel);
-		Test.TestEqual(TEXT("E19 report uses the shared judgement"), Panel->SetupReport, Problems.IsEmpty() ? FString(TEXT("문제 없음")) : FString::Join(Problems, TEXT("\n")));
+		Test.TestEqual(TEXT("E19 report uses the shared judgement"), Panel->SetupReport, Problems.IsEmpty() ? FString(TEXT("No issues")) : FString::Join(Problems, TEXT("\n")));
 		Test.TestTrue(TEXT("E19 button does not change slots"), Panel->OutsideAxisHandle == Outside && Panel->InsideAxisHandle == Inside);
 		Test.TestTrue(TEXT("E19 button does not move panel or hinge"), Panel->GetActorTransform().Equals(PanelPose) && Panel->HingePivot->GetComponentTransform().Equals(HingePose));
 		for (int32 I = 0; I < Children.Num(); ++I)
@@ -343,7 +343,7 @@ bool FP2eThickFace::RunTest(const FString& Parameters)
 		Panel->MeshRestFromRoot.SetScale3D(FVector(1.1,0.25,1.05)); Panel->bUsePushFaceBox = bBox; Panel->OnConstruction(Panel->GetActorTransform());
 		P2eCheckButton(*this, Panel); TestEqual(TEXT("Thick bounds warning only when box disabled"), FP2eTestAccess::Problems(Panel).Num(), bBox ? 0 : 1);
 		W.Play(); Logs.Flush(); TestEqual(TEXT("E20 thickness warning once"), Logs.Warnings.Num(), bBox ? 0 : 1);
-		// 새 연결과 무관한 두께 문제를 setter 가 되풀이하지 않음 (P2e 리뷰 메모·E20)
+		// Setter never repeats thickness issue unrelated to new connection (P2e review note/E20)
 		AVBoRAxisPart* Part = P2eHandle(W.World, EVBoRDoorHandleSide::Outside);
 		Panel->SetAxisHandle(0, Part); Panel->SetAxisHandle(0, Part); Panel->SetAxisHandle(1, nullptr); Logs.Flush();
 		TestEqual(TEXT("Setters do not repeat unrelated setup warnings"), Logs.Warnings.Num(), bBox ? 0 : 1);

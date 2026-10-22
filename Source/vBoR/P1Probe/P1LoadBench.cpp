@@ -56,7 +56,7 @@ AP1LoadBench::AP1LoadBench()
 {
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("OpeningOrigin")));
 	PrimaryActorTick.bCanEverTick = true;
-	PrimaryActorTick.TickGroup = TG_PostUpdateWork; // HMD camera 갱신 뒤 배치 (P1 §2)
+	PrimaryActorTick.TickGroup = TG_PostUpdateWork; // Place after HMD camera update (P1 §2)
 	Stand = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("BagStand"));
 	Stand->SetupAttachment(RootComponent);
 	Stand->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
@@ -151,7 +151,7 @@ void AP1LoadBench::ResetCrossing()
 void AP1LoadBench::ResetBagForNextTrial()
 {
 	if (!bPlaced) { return; }
-	// 직전 시도를 먼저 보존함 (B 는 자리와 누적을 유지, P1 R1-6)
+	// Preserve previous attempt first (B keeps position/totals, P1 R1-6)
 	RecordSnapshot(FString::Printf(TEXT("Trial %d summary"), TrialNumber));
 	ClearBoxes(true);
 	if (Gate) { Gate->ResetPanel(false); }
@@ -165,7 +165,7 @@ void AP1LoadBench::ResetBagForNextTrial()
 
 FTransform AP1LoadBench::BagStartPose() const
 {
-	// 새 박스는 받침 윗면보다 0.1 mm 위에 둠 (접촉 수치 오차로 출고가 막히지 않게, P1b D5)
+	// New box 0.1 mm above stand (contact rounding must not block spawning, P1b D5)
 	return FTransform(GetActorQuat(), GetActorTransform().TransformPosition(
 		FVector(-StandBehindOpeningCm, 0, StandTopHeightCm + BoxSizeCm.Z * 0.5f + 0.01f)));
 }
@@ -173,7 +173,7 @@ FTransform AP1LoadBench::BagStartPose() const
 FTransform AP1LoadBench::GoalPose() const
 {
 	const float FloorZ = Trunk ? Trunk->FloorHeightCm : 75.0f;
-	// 박스 높이가 달라도 아랫면을 바닥에 맞춤 (P1b R1-1, GoalOffsetCm.Z 는 여유 cm)
+	// Align bottom to floor regardless of box height (P1b R1-1, GoalOffsetCm.Z = clearance cm)
 	return FTransform(GetActorQuat(), GetActorTransform().TransformPosition(
 		FVector(GoalOffsetCm.X, GoalOffsetCm.Y, FloorZ + BoxSizeCm.Z * 0.5f + GoalOffsetCm.Z)));
 }
@@ -185,7 +185,7 @@ void AP1LoadBench::PlaceFromHead(const FTransform& Head)
 	if (!HandPawn) { RecordEvent(TEXT("Placement waiting for hand pawn")); return; }
 	BoxSizeCm = BoxSizeCm.GetAbs().ComponentMax(FVector(1));
 	FVector Origin = Head.GetLocation() + Yaw.RotateVector(FVector(OpeningForwardCm, 0, 0));
-	// Stage 의 바닥은 Pawn 원점. 머리 높이로 들기 높이를 바꾸지 않음 (P1 R1-3)
+	// Stage floor = Pawn origin. Head height must not alter lifting height (P1 R1-3)
 	Origin.Z = HandPawn->GetActorLocation().Z;
 	ClearBoxes(false);
 	SetActorTransform(FTransform(Yaw, Origin));
@@ -196,7 +196,7 @@ void AP1LoadBench::PlaceFromHead(const FTransform& Head)
 	if (Target) { Target->SetActorTransform(GoalPose()); }
 	if (Target && Trunk)
 	{
-		// 바닥 윗면부터 천장 아랫면까지, 입구에서 안쪽 벽까지의 공간 (P1 R4-1, cm)
+		// Space from floor top to ceiling bottom, opening to inner wall (P1 R4-1, cm)
 		const FVector Size(FMath::Max(1.0f, Trunk->InsideDepthCm), FMath::Max(1.0f, Trunk->InsideWidthCm), FMath::Max(1.0f, Trunk->InsideHeightCm));
 		const FVector Center(Size.X * 0.5, 0, Trunk->FloorHeightCm + Size.Z * 0.5);
 		const FTransform RegionPose(Trunk->GetActorQuat(), Trunk->GetActorTransform().TransformPosition(Center));
@@ -209,7 +209,7 @@ void AP1LoadBench::PlaceFromHead(const FTransform& Head)
 		Target->OnConstruction(Target->GetActorTransform());
 	}
 	SpawnBox();
-	// 초기 배치와 R 을 입구 통과로 세지 않음 (P1 §2 경로)
+	// Initial placement/R never count as opening passage (P1 §2 path)
 	ResetCrossing();
 	TrialNumber = 1;
 	CompletedTrials = FP1TrialTotals();
@@ -235,7 +235,7 @@ void AP1LoadBench::SpawnParts()
 		Gate = World->SpawnActorDeferred<AVBoRPoweredPanel>(GateClass, GetActorTransform(), this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 		if (Gate)
 		{
-			// 차 원점은 입구 기준 그대로 두고 축·메시만 치수에 맞춤 (P4b D1·D8, cm)
+			// Keep car origin at opening, fit axes/meshes to dimensions (P4b D1/D8, cm)
 			Gate->HingeLocationCm = FVector(0, 0, Trunk->FloorHeightCm + Trunk->InsideHeightCm);
 			Gate->MeshRestFromRoot = FTransform(FQuat::Identity, FVector(-Trunk->PanelThicknessCm * 0.5f, 0,
 				Trunk->FloorHeightCm + Trunk->InsideHeightCm * 0.5f), FVector(Trunk->PanelThicknessCm, Trunk->InsideWidthCm, Trunk->InsideHeightCm) / 100.0);
@@ -304,7 +304,7 @@ void AP1LoadBench::ClearBoxes(bool bPreserveMetrics)
 void AP1LoadBench::ReplenishStand()
 {
 	if (!bSourceLifted || (IsValid(Bag) && Bag->GetCarrySession().bPaused)) { return; }
-	// 출고 공간에 1 cm 여유가 생겨야 보충함 (손에 든 박스·되돌려 둔 박스와 겹치지 않게, P1b D5)
+	// Refill at 1 cm spawn clearance (avoid overlap with held/returned boxes, P1b D5)
 	const FTransform Start = BagStartPose();
 	const FBox Slot(-BoxSizeCm * 0.5 - FVector(1), BoxSizeCm * 0.5 + FVector(1));
 	for (const AVBoRCarryObject* Box : Boxes)
@@ -336,11 +336,11 @@ void AP1LoadBench::UpdateCrossing()
 	{
 		if (!IsValid(Box)) { continue; }
 		FP1BoxCrossing& Crossing = Crossings.FindOrAdd(Box);
-		// 충돌·안착과 같은 형상으로 입구를 잼 (원통 축 회전 때 외접 상자가 먼저 통과하지 않게, P1 R3 F1)
+		// Same shape for passage/collision/placement (no bounding-box-first passage on cylinder axial rotation, P1 R3 F1)
 		const FBox Bounds = Box->GetCollisionBoundsInPose(Box->GetActorTransform(), Trunk->GetActorTransform());
 		if (!Bounds.IsValid)
 		{
-			// 형상이 없던 구간을 통과로 연결하지 않음. 누적 수는 유지 (P1 R3 F1)
+			// No passage across missing-shape interval. Keep totals (P1 R3 F1)
 			Crossing.bPreviousBodyBeforeOpening = false;
 			continue;
 		}

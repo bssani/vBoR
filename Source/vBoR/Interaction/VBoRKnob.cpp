@@ -73,7 +73,7 @@ void AVBoRKnob::PreInitializeComponents()
 	for (float Value : {StepDeg,StepHysteresisDeg,JumpThresholdDeg,GrabMarginCm}) { bValid = bValid && FMath::IsFinite(Value) && Value >= 0; }
 	bValid = bValid && (StepDeg == 0 || StepHysteresisDeg < StepDeg/2);
 	bValid = bValid && FMath::IsFinite(TwistGain) && TwistGain >= 0.1f;
-	// 저장된 레벨도 실행 때 검사함. construction 은 배치만 맡음 (P5f §2·E12)
+	// Validate saved levels at runtime too. Construction places only (P5f §2/E12)
 	if (!bValid) { UE_LOG(LogKnob,Warning,TEXT("%s: Missing mesh or invalid knob settings; grabbing disabled | approximate geometry | not-tested"),*GetName()); }
 	if (bValid) { Layout(); }
 	Grabbable->SetGrabCollider(ConfigureVBoRGrabCollider(KnobMesh, GrabBox, bGrabWithMesh, bValid, MeshRestFromRoot)); Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm,bValid); Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch,false);
@@ -143,7 +143,7 @@ void AVBoRKnob::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 
 void AVBoRKnob::ApplyPose()
 {
-	// 표시 각도만 한 바퀴로 줄임 (누적값은 유지하고 회전 계산 오차를 줄임, P5f D2, deg)
+	// Wrap visual angle only (keep total, reduce rotation rounding, P5f D2, deg)
 	RotationAxis->SetRelativeRotation(FQuat(FVector::ZAxisVector,FMath::DegreesToRadians(FMath::Fmod(Motion.AngleDeg,360.0))));
 }
 
@@ -165,7 +165,7 @@ void AVBoRKnob::Tick(float DeltaSeconds)
 	}
 	if (bCancelPending) { bCancelPending = false; bCancelling = true; GrabComponent->CancelSelection(); bCancelling = false; }
 	UpdateVisual();
-	// 포인터 처리에서는 단계만 확정함 (SDK 선택 배열 재진입 방지, P5f D4)
+	// Commit step only in pointer handler (avoid SDK selection array reentry, P5f D4)
 	if (!Motion.bPaused)
 	{
 		const TArray<int32> Steps = MoveTemp(Motion.PendingSteps);
@@ -182,7 +182,7 @@ void AVBoRKnob::UpdateVisual()
 
 FString AVBoRKnob::GetDebugText() const
 {
-	return FString::Printf(TEXT("Approximate geometry | angle=%.3f deg step=%lld grab=%d paused=%d discarded=%.3f deg | 손바닥 감싸 쥐기만(엄지·검지 굴림 없음) | not-tested"),Motion.AngleDeg,Motion.StepIndex,Motion.GrabHand,Motion.bPaused,Motion.RecoveryDiscardDeg);
+	return FString::Printf(TEXT("Approximate geometry | angle=%.3f deg step=%lld grab=%d paused=%d discarded=%.3f deg | Palm wrap only (no thumb/index rolling) | not-tested"),Motion.AngleDeg,Motion.StepIndex,Motion.GrabHand,Motion.bPaused,Motion.RecoveryDiscardDeg);
 }
 
 void AVBoRKnob::EndPlay(const EEndPlayReason::Type Reason)

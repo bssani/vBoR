@@ -10,7 +10,7 @@ class VBOR_API UVBoRSpectatorPart : public UInterface
 	GENERATED_BODY()
 };
 
-// 입력·이벤트를 건드리지 않고 관전 화면에서 상태만 읽음 (P5h D6)
+// Read spectator state only, leave input/events unchanged (P5h D6)
 class VBOR_API IVBoRSpectatorPart
 {
 	GENERATED_BODY()

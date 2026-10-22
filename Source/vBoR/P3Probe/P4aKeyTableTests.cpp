@@ -92,7 +92,7 @@ namespace
 		{
 			Key->bHigh[Key->GetHoldingHand()] = I != LowFrame;
 			P4aMove(Grab, Start + FVector(I * 2, I, I * 0.5), FQuat(FVector::UpVector, I * 0.04));
-			// frame 시간만 합성하고 SDK 표본·Actor 추적 창을 같은 순서로 갱신함 (P4a E6·E7)
+			// Synthesize frame time only; update SDK samples/Actor tracking window in same order (P4a E6/E7)
 			W.World->TimeSeconds += 0.016;
 			Key->Tick(0.016f);
 			static_cast<UActorComponent*>(Key->FindComponentByClass<UIsdkThrowable>())->TickComponent(0.016f, LEVELTICK_All, nullptr);
@@ -244,7 +244,7 @@ bool FP4aLostRelease::RunTest(const FString&)
 	P4aThrowSamples(W,Key,Left); Key->bHigh[0] = false; FP4aLogs Logs;
 	TestTrue(TEXT("Held unlock poke active before tracking loss"),Key->UnlockButton->Poke->IsActive());
 	TestTrue(TEXT("Held lock poke active before tracking loss"),Key->LockButton->Poke->IsActive());
-	// 추적 손실로 끝난 선택도 같은 Unselect 경로. 마지막 Low frame 은 Tick 전에도 검사함 (P4a E7b)
+	// Tracking-ended selection uses same Unselect path. Check last Low frame even before Tick (P4a E7b)
 	Left->PalmRelease();
 	TestTrue(TEXT("Tracking-loss release simulates physics"),Key->KeyMesh->IsSimulatingPhysics());
 	TestTrue(TEXT("Tracking-loss release has zero velocity"),Key->KeyMesh->GetPhysicsLinearVelocity().IsNearlyZero());
@@ -276,7 +276,7 @@ bool FP4aReturn::RunTest(const FString&)
 		TestTrue(TEXT("Return clears angular velocity"),Key->KeyMesh->GetPhysicsAngularVelocityInDegrees().IsNearlyZero());
 		TestFalse(TEXT("Returned unlock poke inactive"),Key->UnlockButton->Poke->IsActive());
 		TestFalse(TEXT("Returned lock poke inactive"),Key->LockButton->Poke->IsActive());
-		// 끝으로 세운 키는 원점이 3 cm 높아도 아랫면이 바닥에 닿음 (P4a R1-3)
+		// Key standing on end touches floor with origin 3 cm high (P4a R1-3)
 		Key->SetActorRotation(FRotator(90,0,0),ETeleportType::TeleportPhysics);
 		Key->SetActorLocation(FVector(0,0,Tables[I]->GetActorLocation().Z+3),false,nullptr,ETeleportType::TeleportPhysics);
 		TestTrue(TEXT("Upright pivot above floor margin"),Key->GetActorLocation().Z > Tables[I]->GetActorLocation().Z+Key->FloorMarginCm);

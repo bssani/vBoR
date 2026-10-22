@@ -28,7 +28,7 @@ UPrimitiveComponent* ConfigureVBoRGrabCollider(UStaticMeshComponent* Mesh, UBoxC
 	Mesh->SetGenerateOverlapEvents(bUseMesh && bGrabValid);
 	if (bUseMesh)
 	{
-		// 짐 착지 질의가 막힘으로 세지 않게 overlap 만 받음 (P2f D2, UE cm)
+		// Overlap only (carry landing queries must not count as blockage, P2f D2, UE cm)
 		Mesh->SetCollisionObjectType(ECC_WorldDynamic);
 		Mesh->SetCollisionResponseToAllChannels(ECR_Ignore);
 		Mesh->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Overlap);

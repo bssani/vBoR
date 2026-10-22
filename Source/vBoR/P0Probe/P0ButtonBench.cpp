@@ -20,7 +20,7 @@ AP0ButtonBench::AP0ButtonBench()
 {
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("BenchOrigin")));
 	PrimaryActorTick.bCanEverTick = true;
-	// Camera 의 HMD 갱신 뒤 첫 배치를 판정함 (P0-b R1-3)
+	// First placement after Camera HMD update (P0-b R1-3)
 	PrimaryActorTick.TickGroup = TG_PostUpdateWork;
 	Panel = CreateDefaultSubobject<UTextRenderComponent>(TEXT("Panel"));
 	Panel->SetupAttachment(RootComponent);
@@ -46,7 +46,7 @@ void AP0ButtonBench::BeginPlay()
 	RigStatus = HandPawn ? HandPawn->DescribeRig() : TEXT("Hand rig pawn unavailable");
 	RecordEvent(RigStatus);
 	UIsdkWorldSubsystem::Get(GetWorld()).GetFrameFinishedEventDelegate().AddDynamic(this, &AP0ButtonBench::HandleFrameFinished);
-	// XR 없음은 기기 없는 PIE 경로임. XR 있음은 첫 추적 frame 까지 기다림 (P0-b R1-3)
+	// No XR = device-free PIE. With XR wait for first tracked frame (P0-b R1-3)
 	if (!GEngine || !GEngine->XRSystem.IsValid()) { TryPlaceFromHead(); }
 	HandleFrameFinished();
 }
@@ -73,7 +73,7 @@ void AP0ButtonBench::Reposition()
 
 void AP0ButtonBench::PlaceFromHead(const FTransform& Head)
 {
-	// 이동으로 끝난 누름은 추적 취소·놓친 시도에 넣지 않음 (P0-b R1-3·R1-5)
+	// Motion-ended presses are neither tracking cancellations nor missed attempts (P0-b R1-3/R1-5)
 	for (int32 Hand = 0; Hand < 2; ++Hand)
 	{
 		FP0ButtonBenchPlacement::CancelMeasurements(Presses[Hand]);
@@ -101,7 +101,7 @@ void AP0ButtonBench::CreateButtons()
 	{
 		for (int32 Column = 0; Column < Columns; ++Column)
 		{
-			// 표시 mm → UE cm. 보이는 크기는 판정 배율과 별개임 (P0-b D2, U-04)
+			// Display mm → UE cm. Visual size independent of decision multiplier (P0-b D2, U-04)
 			SpawnButton(FString::Printf(TEXT("Cluster %d,%d"), Row + 1, Column + 1), ClusterOffsetCm +
 				FVector(0, (Column - (Columns - 1) / 2.0) * ClusterSpacingMm / 10.0,
 					((Rows - 1) / 2.0 - Row) * ClusterSpacingMm / 10.0), ClusterSizeMm);
@@ -116,7 +116,7 @@ void AP0ButtonBench::CreateButtons()
 
 void AP0ButtonBench::SpawnButton(const FString& Name, const FVector& Offset, float SizeMm)
 {
-	// Actor +Z 윗면이 참가자(-X)를 보게 함 (P0-b D4)
+	// Actor +Z top faces participant (-X, P0-b D4)
 	const FTransform Transform(FRotator(90, GetActorRotation().Yaw, 0), GetActorTransform().TransformPosition(Offset));
 	AVBoRPokeButton* Button = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(ButtonClass, Transform, this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (!Button) { return; }
@@ -168,7 +168,7 @@ void AP0ButtonBench::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 			if (HandPawn->GetHandRig(Index)->GetPokeInteractor() == Event.Interactor) { Hand = Index; }
 		}
 	}
-	// Cancel 은 interactor 가 지워진 뒤 올 수도 있음. 완료로 세지 않음 (P0-b §2)
+	// Cancel may follow interactor deletion. Never count as completion (P0-b §2)
 	if (Hand == INDEX_NONE)
 	{
 		if (Event.Type == EIsdkPointerEventType::Cancel)
@@ -232,7 +232,7 @@ void AP0ButtonBench::HandleFrameFinished()
 	{
 		States.Add(Buttons[Index]->Poke->GetCurrentState());
 	}
-	// 이벤트 전달이 끝난 frame 에 hover·select 를 함께 셈 (P0-b R1-2)
+	// Count hover/select together after frame event delivery (P0-b R1-2)
 	Active.Update(FP0ButtonActiveMeasurement::CountActive(States));
 	FP0ButtonAttemptTotals Attempts[2];
 	FString LivePress;

@@ -66,7 +66,7 @@ AVBoRHingedPanel::AVBoRHingedPanel()
 		Handle->SetBoxExtent(FVector(9, 4, 4));
 		Handle->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 		Handle->SetCollisionResponseToAllChannels(ECR_Ignore);
-		// Palm detector 의 overlap 만 허용함 (손잡이 감지, P2 E20)
+		// Palm detector overlap only (handle detection, P2 E20)
 		Handle->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Overlap);
 		Handle->SetGenerateOverlapEvents(true);
 	}
@@ -149,7 +149,7 @@ void AVBoRHingedPanel::OnConstruction(const FTransform& Transform)
 void AVBoRHingedPanel::SetAxisHandle(int32 Handle, AVBoRAxisPart* Part)
 {
 	if (Handle < 0 || Handle > 1) { return; }
-	// 이번 연결의 문제만 알림 (전체 설정 경고는 BeginPlay 한 번, P2e E20)
+	// Report this connection only (full setup warning once in BeginPlay, P2e E20)
 	TArray<FString> Problems;
 	const bool bConnect = !Part || CanConnectAxisHandle(Part, Problems);
 	for (const FString& Problem : Problems) { UE_LOG(LogAxisDoor, Warning, TEXT("%s P2e setup: %s"), *GetName(), *Problem); }
@@ -163,7 +163,7 @@ FBox AVBoRHingedPanel::MeshFaceBounds() const
 
 void AVBoRHingedPanel::ConfigurePushCollision()
 {
-	// 컴포넌트 trace 만 허용함 (손 감지·짐·월드 질의와 분리, P2g D6)
+	// Component trace only (separate hand detection/carry/world queries, P2g D6)
 	DoorMesh->SetCollisionResponseToAllChannels(ECR_Ignore);
 	DoorMesh->SetGenerateOverlapEvents(false);
 	DoorMesh->SetCollisionEnabled(bPushOnMeshSurface ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
@@ -173,7 +173,7 @@ bool AVBoRHingedPanel::QueryMeshFace(const FVector& Point, int32 Face, double& O
 {
 	const FBox Bounds = MeshFaceBounds();
 	OutY = Face == 0 ? Bounds.Max.Y : Bounds.Min.Y;
-	constexpr double TraceMarginCm = 1; // bounds 밖에서 시작함 (면 위 시작의 모호함 방지, P2g §5)
+	constexpr double TraceMarginCm = 1; // Start outside bounds (avoid on-surface start ambiguity, P2g §5)
 	FVector Start(Point.X, Bounds.Max.Y + TraceMarginCm, Point.Z);
 	FVector End(Point.X, Bounds.Min.Y - TraceMarginCm, Point.Z);
 	if (Face == 1) { Swap(Start, End); }
@@ -189,7 +189,7 @@ bool AVBoRHingedPanel::QueryMeshFace(const FVector& Point, int32 Face, double& O
 bool AVBoRHingedPanel::HasTraceableMesh() const
 {
 	const FBox Bounds = MeshFaceBounds();
-	// 모서리는 피하고 내부 3×3만 검사함 (시작·설정 검사 공통, P2g D7)
+	// Interior 3×3 only, avoid edges (startup/setup check, P2g D7)
 	for (int32 X = 1; X <= 3; ++X)
 	{
 		for (int32 Z = 1; Z <= 3; ++Z)
@@ -243,7 +243,7 @@ bool AVBoRHingedPanel::CanConnectAxisHandle(AVBoRAxisPart* Part, TArray<FString>
 		Problems.AddUnique(FString::Printf(TEXT("Child Actor %s: move its Child Actor component under HingePivot."), *Part->GetName()));
 		bConnect = false;
 	}
-	// 먼저 연결한 판은 건드리지 않음 (최초 후보 기록 없이 현재 연결만 확인, P2e D5⑤·Q3)
+	// Keep previously connected panel (check current connection without first candidate record, P2e D5⑤/Q3)
 	if (Part->LinkedDoor && Part->LinkedDoor != this)
 	{
 		Problems.AddUnique(FString::Printf(TEXT("shared handle %s; first connected panel keeps it."), *Part->GetName()));
@@ -282,7 +282,7 @@ AVBoRHingedPanel::FSetupAssessment AVBoRHingedPanel::EvaluateSetup() const
 		}
 		else
 		{
-			// 반대쪽 칸에 지정한 손잡이는 다시 고르지 않음 (칸이 쪽 값보다 우선, P2e E9)
+			// Do not reselect handle assigned to opposite slot (slot overrides side, P2e E9)
 			TArray<AVBoRAxisPart*> Available = Candidates[I];
 			Available.Remove(OutsideAxisHandle); Available.Remove(InsideAxisHandle);
 			if (Available.Num() == 1) { Part = Available[0]; }
@@ -316,7 +316,7 @@ AVBoRHingedPanel::FSetupAssessment AVBoRHingedPanel::EvaluateSetup() const
 void AVBoRHingedPanel::CheckSetup()
 {
 	const FSetupAssessment Setup = EvaluateSetup();
-	SetupReport = Setup.Problems.IsEmpty() ? TEXT("문제 없음") : FString::Join(Setup.Problems, TEXT("\n"));
+	SetupReport = Setup.Problems.IsEmpty() ? TEXT("No issues") : FString::Join(Setup.Problems, TEXT("\n"));
 	for (const FString& Notice : Setup.Notices) { SetupReport += TEXT("\n") + Notice; }
 	UE_LOG(LogAxisDoor, Log, TEXT("%s setup check:\n%s"), *GetName(), *SetupReport);
 }
@@ -365,7 +365,7 @@ bool AVBoRHingedPanel::Unlock()
 	SyncSettings();
 	const int32 Unlocks = Motion.Metrics.Unlocks;
 	if (!Motion.Unlock()) { return false; }
-	// SDK 상태는 건드리지 않음 (버튼 포인터 이벤트에서도 안전하게 호출, P2d D3)
+	// Leave SDK state unchanged (safe in button pointer events, P2d D3)
 	ApplyState(Motion.AngleDeg, Unlocks, Motion.Metrics.Latches);
 	return true;
 }
@@ -433,7 +433,7 @@ void AVBoRHingedPanel::BeginPlay()
 	if (bUseLatch && !bUseOutsideGrabArea && !bUseInsideGrabArea && !OutsideAxisHandle && !InsideAxisHandle)
 	{
 		UE_LOG(LogAxisDoor, Warning, TEXT("%s: Latched panel has no opening handle or grab area. %s"), *GetName(),
-			bAllowPalmOpening ? TEXT("버튼으로 Unlock을 부르면 무시.") : TEXT("버튼 Unlock 뒤에도 열 수 없음 (손바닥 열기 꺼짐)."));
+			bAllowPalmOpening ? TEXT("Ignore button Unlock.") : TEXT("Cannot open after button Unlock (palm opening disabled)."));
 	}
 	ApplyState(Motion.AngleDeg, Motion.Metrics.Unlocks, Motion.Metrics.Latches);
 }
@@ -486,7 +486,7 @@ void AVBoRHingedPanel::HandlePointer(int32 Handle, const FIsdkInteractionPointer
 		const int32 Unlocks = Motion.Metrics.Unlocks;
 		FVBoRDoorHand Input;
 		ReadHand(Hand, Input);
-		// 선택 취소·걸쇠 뒤 닫힌 손이 재선택되지 않게 함 (P2 D4)
+		// Prevent closed-hand reselection after cancellation/latch (P2 D4)
 		bNeedsPalmOpen[Hand] = true;
 		if (Motion.BeginGrab(Hand, Handle, Input)) { HoldingGrabber = Grabber; }
 		ApplyState(Motion.AngleDeg, Unlocks, Motion.Metrics.Latches);
@@ -517,7 +517,7 @@ void AVBoRHingedPanel::CancelSelections(const TCHAR* Reason)
 		if (Part) { Part->EndDoorHold(true); }
 	}
 	HoldingGrabber = nullptr;
-	// Reset 도 이벤트에서 올 수 있어 SDK 취소는 Tick 에 예약함 (P2b R1-3)
+	// Reset may come from event; queue SDK cancellation in Tick (P2b R1-3)
 	bCancelPending = true;
 	Hovering[0].Reset(); Hovering[1].Reset();
 	UpdateHandleVisuals();
@@ -529,7 +529,7 @@ void AVBoRHingedPanel::UpdateHandleVisuals()
 	{
 		UStaticMeshComponent* Visual = I == 0 ? OutsideHandleMesh.Get() : InsideHandleMesh.Get();
 		const bool bPressed = Motion.GrabHand != INDEX_NONE && Motion.GrabHandle == I && !HoldingAxisPart && IsGrabAreaEnabled(I);
-		// 표시만 쉬는 자리 기준으로 옮김 (상자 이동·누적 오프셋으로 SDK 선택 흔들림 방지, P2d R1 D8)
+		// Move visual relative to rest only (no SDK selection jitter from box motion/offset accumulation, P2d R1 D8)
 		Visual->SetRelativeLocation(HandleVisualRestCm[I] + (bPressed ? HandleVisualPressOffsetCm : FVector::ZeroVector));
 	}
 }
@@ -552,7 +552,7 @@ void AVBoRHingedPanel::Tick(float DeltaSeconds)
 	Motion.Advance(Hands, DeltaSeconds);
 	if (HoldingAxisPart && bRecovering != Motion.bPaused)
 	{
-		// 추적 손실은 끝이 아닌 보류임 (잡기 로그와 구분, P2b D7·R1-4)
+		// Tracking loss pauses, never ends (separate from grab log, P2b D7/R1-4)
 		UE_LOG(LogAxisDoor, Log, TEXT("%s axis hold %s part=%s handle=%s hand=%s reason=tracking loss pause angle=%.2f deg held=%.3f s"),
 			*GetName(), Motion.bPaused ? TEXT("pause") : TEXT("resume"), *HoldingAxisPart->GetName(),
 			AxisHoldHandle == 0 ? TEXT("outside") : TEXT("inside"), AxisHoldHand == 0 ? TEXT("L") : TEXT("R"),

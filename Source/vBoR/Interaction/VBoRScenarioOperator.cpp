@@ -58,7 +58,7 @@ UVBoRViewpointComponent* AVBoRScenarioRunner::CommandViewpoint(EVBoRFlowCommand 
 	if (!SeatAction(Action) || Action == EVBoRFlowCommand::ReturnBase) { return nullptr; }
 	if (Action == EVBoRFlowCommand::Viewpoint)
 	{ return CurrentStep() && CurrentStep()->Rule == EVBoRStepRule::Viewpoint && Targets.IsValidIndex(StepIndex) ? Cast<UVBoRViewpointComponent>(Targets[StepIndex]) : nullptr; }
-	// 시작 검사 때 찾은 값 씀. 없거나 여럿이었으면 null, 지운 시점도 null (P5o)
+	// Use startup validation cache. Null if missing/ambiguous/deleted (P5o)
 	return SeatViews[Action == EVBoRFlowCommand::Passenger ? 0 : 1].Get();
 }
 
@@ -89,14 +89,14 @@ FVBoRCommandDecision AVBoRScenarioRunner::EvaluateCommand(const FVBoRFlowCommand
 {
 	auto Reject = [](EVBoRDiscard Kind, const TCHAR* English, const TCHAR* Korean)
 	{ return FVBoRCommandDecision{false, Kind, English, Korean}; };
-	if (bReloadPending) { return Reject(EVBoRDiscard::Transition, TEXT("Level reload in progress"), TEXT("명령 버림 — 레벨 다시 열기 암전 중")); }
+	if (bReloadPending) { return Reject(EVBoRDiscard::Transition, TEXT("Level reload in progress"), TEXT("Command discarded — level reopen blackout")); }
 	if (Command.Token.StepIndex != StepIndex || Command.Token.Generation != Generation)
-	{ return Reject(EVBoRDiscard::Stale, TEXT("Stale step or generation"), TEXT("명령 버림 — 지난 단계 또는 안내 완료")); }
+	{ return Reject(EVBoRDiscard::Stale, TEXT("Stale step or generation"), TEXT("Command discarded — stale step or guidance complete")); }
 	const bool bOperator = Command.Source == EVBoRCommandSource::Operator;
 	const auto Action = Command.Action;
 	if (!bOperator && Action != EVBoRFlowCommand::Confirm && Action != EVBoRFlowCommand::Viewpoint && Action != EVBoRFlowCommand::ReturnBase &&
 		!(bFreeMode && (Action == EVBoRFlowCommand::Passenger || Action == EVBoRFlowCommand::Rear)))
-	{ return Reject(EVBoRDiscard::Permission, TEXT("Operator only"), TEXT("명령 버림 — 확인 권한 없음")); }
+	{ return Reject(EVBoRDiscard::Permission, TEXT("Operator only"), TEXT("Command discarded — confirmation not permitted")); }
 	if (Action == EVBoRFlowCommand::CapturePoint || Action == EVBoRFlowCommand::SavePoints || Action == EVBoRFlowCommand::CancelPoints)
 	{
 		FString Reason;
@@ -110,38 +110,38 @@ FVBoRCommandDecision AVBoRScenarioRunner::EvaluateCommand(const FVBoRFlowCommand
 	if (Action == EVBoRFlowCommand::ReapplyAlignment)
 	{
 		const FString Reason = Alignment ? Alignment->ReapplyRejection() : FString(TEXT("Alignment component missing"));
-		if (!Reason.IsEmpty()) { return {false, EVBoRDiscard::Transition, Reason, TEXT("명령 버림 — ") + Reason}; }
+		if (!Reason.IsEmpty()) { return {false, EVBoRDiscard::Transition, Reason, TEXT("Command discarded — ") + Reason}; }
 		return {};
 	}
 	if (Action == EVBoRFlowCommand::IgnoreAlignment)
 	{
-		if (bFreeMode) { return Reject(EVBoRDiscard::Rule, TEXT("No steps in free mode"), TEXT("명령 버림 — 자유모드에는 단계 없음")); }
-		if (!bRunning && !ValidationProblems.IsEmpty()) { return Reject(EVBoRDiscard::None, TEXT("Scenario tag validation failed"), TEXT("명령 버림 — 태그 검사 실패는 무시할 수 없음")); }
-		// 이미 시작했으면 원래처럼 상태·센 값 유지함 (P5i D3, no-op 버튼 흐림)
+		if (bFreeMode) { return Reject(EVBoRDiscard::Rule, TEXT("No steps in free mode"), TEXT("Command discarded — no steps in free mode")); }
+		if (!bRunning && !ValidationProblems.IsEmpty()) { return Reject(EVBoRDiscard::None, TEXT("Scenario tag validation failed"), TEXT("Command discarded — cannot ignore tag validation failure")); }
+		// Keep state/counts if already started (P5i D3, dim no-op button)
 		if (bRunning) { return Reject(EVBoRDiscard::None, TEXT("Scenario already started"), TEXT("")); }
-		if (Alignment && Alignment->IsSwitching()) { return Reject(EVBoRDiscard::Transition, TEXT("View transition in progress"), TEXT("명령 버림 — 전환 중")); }
+		if (Alignment && Alignment->IsSwitching()) { return Reject(EVBoRDiscard::Transition, TEXT("View transition in progress"), TEXT("Command discarded — transitioning")); }
 		return {};
 	}
 	if (!bRunning && !bFreeMode && Action != EVBoRFlowCommand::Restart)
-	{ return Reject(EVBoRDiscard::Rule, TEXT("Scenario has not started"), TEXT("명령 버림 — 시작 전")); }
+	{ return Reject(EVBoRDiscard::Rule, TEXT("Scenario has not started"), TEXT("Command discarded — not started")); }
 	if (bFreeMode && (Action == EVBoRFlowCommand::Confirm || Action == EVBoRFlowCommand::Next || Action == EVBoRFlowCommand::Previous || Action == EVBoRFlowCommand::EnterFreeMode || Action == EVBoRFlowCommand::Viewpoint))
-	{ return Reject(EVBoRDiscard::Rule, TEXT("No steps in free mode"), TEXT("명령 버림 — 자유모드에는 단계 없음")); }
+	{ return Reject(EVBoRDiscard::Rule, TEXT("No steps in free mode"), TEXT("Command discarded — no steps in free mode")); }
 	if (Action == EVBoRFlowCommand::ReloadLevel && !bFreeMode)
-	{ return Reject(EVBoRDiscard::Rule, TEXT("Reload is available in free mode only"), TEXT("명령 버림 — 레벨 다시 열기는 자유모드에서만")); }
+	{ return Reject(EVBoRDiscard::Rule, TEXT("Reload is available in free mode only"), TEXT("Command discarded — level reopen only in free mode")); }
 	if (SeatAction(Action))
 	{
 		if (bFreeMode && !bOperator && (!Alignment || !Alignment->IsSwitching()) && (Command.bConfirmLocked || ConfirmLockRemaining > 0 || bPanelPlacementPending))
-		{ return Reject(EVBoRDiscard::Lock, TEXT("Panel placement locked"), TEXT("좌석 명령 버림 — 패널 다시 놓기 잠금")); }
+		{ return Reject(EVBoRDiscard::Lock, TEXT("Panel placement locked"), TEXT("Seat command discarded — panel placement lock")); }
 		const FString Reason = Alignment ? Alignment->SwitchRejection(Viewpoint, Action == EVBoRFlowCommand::ReturnBase) : FString(TEXT("Alignment component missing"));
 		if (!Reason.IsEmpty())
-		{ return {false, EVBoRDiscard::Transition, Reason, FString::Printf(TEXT("시점 명령 %s | 버림"), bOperator ? TEXT("진행자") : TEXT("참가자"))}; }
+		{ return {false, EVBoRDiscard::Transition, Reason, FString::Printf(TEXT("Viewpoint command %s | discarded"), bOperator ? TEXT("Operator") : TEXT("Participant"))}; }
 		return {};
 	}
-	if (Alignment && Alignment->IsSwitching()) { return Reject(EVBoRDiscard::Transition, TEXT("View transition in progress"), TEXT("명령 버림 — 전환 중")); }
+	if (Alignment && Alignment->IsSwitching()) { return Reject(EVBoRDiscard::Transition, TEXT("View transition in progress"), TEXT("Command discarded — transitioning")); }
 	if (Action == EVBoRFlowCommand::Power)
 	{
 		return VehiclePower.IsValid() && VehiclePower->IsAvailable() ? FVBoRCommandDecision{} :
-			Reject(EVBoRDiscard::Rule, TEXT("No vehicle power"), TEXT("명령 버림 — 전원 컴포넌트 없음 또는 중복"));
+			Reject(EVBoRDiscard::Rule, TEXT("No vehicle power"), TEXT("Command discarded — missing or duplicate power component"));
 	}
 	if (Action == EVBoRFlowCommand::FoldSeat || Action == EVBoRFlowCommand::UnfoldSeat)
 	{
@@ -153,23 +153,23 @@ FVBoRCommandDecision AVBoRScenarioRunner::EvaluateCommand(const FVBoRFlowCommand
 			if (It->GetState() == Required) { return {}; }
 		}
 		return bFound ? Reject(EVBoRDiscard::None, TEXT("No seat ready for this action"), TEXT("")) :
-			Reject(EVBoRDiscard::Rule, TEXT("No folding seat"), TEXT("명령 버림 — 접히는 시트 없음"));
+			Reject(EVBoRDiscard::Rule, TEXT("No folding seat"), TEXT("Command discarded — no folding seat"));
 	}
 	if (Action == EVBoRFlowCommand::Confirm)
 	{
 		const auto* Step = CurrentStep();
 		if (!Step || !NeedsConfirmation() || (Step->ConfirmBy == EVBoRConfirmBy::Operator && !bOperator) || (Step->ConfirmBy == EVBoRConfirmBy::Participant && bOperator))
-		{ return Reject(EVBoRDiscard::Permission, TEXT("Confirmation permission required"), TEXT("명령 버림 — 확인 권한 없음")); }
-		if (!RuleSatisfied()) { return Reject(EVBoRDiscard::Rule, TEXT("Rule not satisfied"), TEXT("명령 버림 — 규칙 미충족")); }
+		{ return Reject(EVBoRDiscard::Permission, TEXT("Confirmation permission required"), TEXT("Command discarded — confirmation not permitted")); }
+		if (!RuleSatisfied()) { return Reject(EVBoRDiscard::Rule, TEXT("Rule not satisfied"), TEXT("Command discarded — rule unsatisfied")); }
 		if (Command.bConfirmLocked || ConfirmLockRemaining > 0 || bPanelPlacementPending)
-		{ return Reject(EVBoRDiscard::Lock, TEXT("Confirm locked"), TEXT("명령 버림 — 단계 시작 직후 (확인 잠금·패널 다시 놓기)")); }
+		{ return Reject(EVBoRDiscard::Lock, TEXT("Confirm locked"), TEXT("Command discarded — immediately after step start (confirmation lock/panel placement)")); }
 	}
 	if (Action == EVBoRFlowCommand::Next && CurrentStep() && CurrentStep()->bRequireBaseViewpoint && (!Alignment || !Alignment->IsBaseViewpoint()))
-	{ return Reject(EVBoRDiscard::Rule, TEXT("Return to the driver seat first"), TEXT("명령 버림 — 하차 전 기준 복귀 필요")); }
+	{ return Reject(EVBoRDiscard::Rule, TEXT("Return to the driver seat first"), TEXT("Command discarded — return to reference before exit")); }
 	if (Action == EVBoRFlowCommand::Restart)
 	{
-		if (!ValidationProblems.IsEmpty()) { return Reject(EVBoRDiscard::None, TEXT("Scenario tag validation failed"), TEXT("재시도 버림 — 태그 검사 실패")); }
-		if (!Alignment || Alignment->State != EVBoRAlignmentState::Applied) { return Reject(EVBoRDiscard::Rule, TEXT("Saved alignment required"), TEXT("재시도 버림 — 기준 복귀에 저장 정렬 필요")); }
+		if (!ValidationProblems.IsEmpty()) { return Reject(EVBoRDiscard::None, TEXT("Scenario tag validation failed"), TEXT("Retry discarded — tag validation failed")); }
+		if (!Alignment || Alignment->State != EVBoRAlignmentState::Applied) { return Reject(EVBoRDiscard::Rule, TEXT("Saved alignment required"), TEXT("Retry discarded — saved alignment required for reference return")); }
 	}
 	return {};
 }
@@ -187,9 +187,9 @@ void AVBoRScenarioRunner::RecordDecision(const FVBoRFlowCommand& Command, const 
 	case EVBoRDiscard::Lock: ++ConfirmLockDiscards; break;
 	default: break;
 	}
-	if (Decision.Record.StartsWith(TEXT("시점 명령")))
+	if (Decision.Record.StartsWith(TEXT("Viewpoint command")))
 	{
-		// 컴포넌트의 요청·버림 계수도 기존과 같이 남김 (P5i D3)
+		// Keep component request/discard counts too (P5i D3)
 		if (Alignment)
 		{ if (Command.Action == EVBoRFlowCommand::ReturnBase) { Alignment->ReturnToBase(); } else { Alignment->SwitchViewpoint(CommandViewpoint(Command.Action)); } }
 		LastViewRequest = Decision.Record;
@@ -200,7 +200,7 @@ void AVBoRScenarioRunner::RecordDecision(const FVBoRFlowCommand& Command, const 
 FVBoRCommandDecision AVBoRScenarioRunner::EvaluateOperatorButton(EVBoROperatorButton Button) const
 {
 	if (Button == EVBoROperatorButton::Info)
-	{ return bReloadPending ? FVBoRCommandDecision{false, EVBoRDiscard::Transition, TEXT("Level reload in progress"), TEXT("명령 버림 — 레벨 다시 열기 암전 중")} : FVBoRCommandDecision{}; }
+	{ return bReloadPending ? FVBoRCommandDecision{false, EVBoRDiscard::Transition, TEXT("Level reload in progress"), TEXT("Command discarded — level reopen blackout")} : FVBoRCommandDecision{}; }
 	return EvaluateCommand({FlowAction(Button), EVBoRCommandSource::Operator, GetToken()});
 }
 
@@ -231,7 +231,7 @@ void AVBoRScenarioRunner::FinishReapply()
 	}
 	const FString Result = Alignment->State == EVBoRAlignmentState::Applied ? FString(TEXT("Applied")) : Alignment->State == EVBoRAlignmentState::NoSavedValue ? FString(TEXT("no saved alignment")) : TEXT("still needs check: ") + Alignment->EnglishReason();
 	LastOperatorCommand = TEXT("Re-apply saved alignment — accepted (") + Result + TEXT(")");
-	Record(TEXT("진행자 정렬 다시 적용 — ") + Alignment->Describe());
+	Record(TEXT("Operator reapply alignment — ") + Alignment->Describe());
 	if (!bRunning && !bFreeMode && ValidationProblems.IsEmpty() && Alignment->State == EVBoRAlignmentState::Applied)
 	{ Alignment->FlowStarted(); bRunning = true; EnterStep(0, true); }
 }
@@ -243,22 +243,22 @@ FVBoROperatorStatus AVBoRScenarioRunner::GetOperatorStatus() const
 	const int32 Completed = bFreeMode ? (bFinished ? Total : OperatorCompletedSteps) : bRunning ? FMath::Max(0, StepIndex) : 0;
 	S.Mode = bFreeMode ? TEXT("FREE MODE") : bRunning ? TEXT("GUIDED SCENARIO") : TEXT("GETTING READY");
 	S.Title = bFreeMode ? TEXT("Free mode") : bRunning ? FString::Printf(TEXT("Mission %d of %d"), StepIndex + 1, Total) : FString(TEXT("Getting ready"));
-	S.Mission = bFreeMode ? (bFinished ? TEXT("All missions complete") : TEXT("Entered by operator (End)")) : CurrentStep() && bRunning ? CurrentStep()->StepId.ToString() + TEXT(" · ") + VBoRSpectator::MissionText(*CurrentStep(), FText::FromString(TEXT("Mission in progress"))).ToString() : FString(TEXT("Check the setup alignment before starting."));
+	S.Mission = bFreeMode ? (bFinished ? TEXT("All missions complete") : TEXT("Entered by operator (End)")) : CurrentStep() && bRunning ? CurrentStep()->StepId.ToString() + TEXT(" ,  ") + VBoRSpectator::MissionText(*CurrentStep(), FText::FromString(TEXT("Mission in progress"))).ToString() : FString(TEXT("Check the setup alignment before starting."));
 	S.Progress = FString::Printf(TEXT("%d of %d complete"), Completed, Total);
 	S.Waiting = bFreeMode ? TEXT("Nothing — participant explores") : !bRunning ? TEXT("Alignment check") : !RuleSatisfied() ? TEXT("Waiting for the rule") : (ConfirmLockRemaining > 0 || bPanelPlacementPending) ? TEXT("Confirm locked") : NeedsConfirmation() ? (CurrentStep()->ConfirmBy == EVBoRConfirmBy::Participant ? TEXT("Waiting for participant confirmation") : TEXT("Operator confirmation needed")) : TEXT("Waiting for the rule");
 	S.bApplied = Alignment && Alignment->State == EVBoRAlignmentState::Applied;
 	S.bNeedsCheck = Alignment && Alignment->State == EVBoRAlignmentState::NeedsCheck;
 	S.Alignment = S.bApplied ? TEXT("Applied") : S.bNeedsCheck ? TEXT("Needs check — ") + Alignment->EnglishReason() : FString(TEXT("No saved alignment"));
-	if (bAlignmentIgnored) { S.Alignment += TEXT(" · started without alignment"); }
+	if (bAlignmentIgnored) { S.Alignment += TEXT(" ,  started without alignment"); }
 	S.Seat = Alignment ? Alignment->SeatName() : FString(TEXT("Driver"));
 	if (IsHomeShiftEnabled())
 	{
 		const FVector2D Offset = Alignment ? Alignment->GetHomeShiftCm() : FVector2D::ZeroVector;
-		// cm → m 표시만 바꿈 (P3c D6)
-		S.Seat += FString::Printf(TEXT(" · Home shift ON · %+.1f m front · %+.1f m side"), Offset.X / 100, Offset.Y / 100);
+		// Display cm → m only (P3c D6)
+		S.Seat += FString::Printf(TEXT(" ,  Home shift ON ,  %+.1f m front ,  %+.1f m side"), Offset.X / 100, Offset.Y / 100);
 	}
-	S.Counts = FString::Printf(TEXT("Previous %d · Retry %d · Skipped %d · End %d · Re-apply %d"), PreviousCount, RetryCount, SkipCount, EndCount, ReapplyCount);
-	S.Discards = FString::Printf(TEXT("Discarded — stale %d · permission %d · rule %d · transition %d · lock %d"), StaleDiscards, PermissionDiscards, RuleDiscards, TransitionDiscards, ConfirmLockDiscards);
+	S.Counts = FString::Printf(TEXT("Previous %d ,  Retry %d ,  Skipped %d ,  End %d ,  Re-apply %d"), PreviousCount, RetryCount, SkipCount, EndCount, ReapplyCount);
+	S.Discards = FString::Printf(TEXT("Discarded — stale %d ,  permission %d ,  rule %d ,  transition %d ,  lock %d"), StaleDiscards, PermissionDiscards, RuleDiscards, TransitionDiscards, ConfirmLockDiscards);
 	S.LastCommand = LastOperatorCommand.IsEmpty() ? FString(TEXT("None")) : LastOperatorCommand;
 	S.PointAlignment = Alignment ? Alignment->PointStatus() : FString();
 	S.FloorRouteNotice = FloorRouteNotice;
@@ -290,7 +290,7 @@ FVBoROperatorSnapshot AVBoRScenarioRunner::GetOperatorSnapshot() const
 	FVBoROperatorSnapshot Snapshot;
 	Snapshot.Status = GetOperatorStatus();
 	Snapshot.ReapplyHelp = ReapplyHelp();
-	// 좌석별 시점을 판정·꼬리표에 같이 씀 (P5i R1-3). 시점은 시작 검사 때 찾은 값이라 월드 순회 없음 (P5o)
+	// Same seat viewpoint for decision/label (P5i R1-3). Use startup cache, no world scan (P5o)
 	for (const auto& Shortcut : VBoROperator::Shortcuts())
 	{
 		const auto Button = Shortcut.Button;
@@ -344,7 +344,7 @@ void AVBoRScenarioRunner::CloseOperatorWindow()
 
 void AVBoRScenarioRunner::HandleOperatorWindowClosed(const TSharedRef<SWindow>& Window)
 {
-	// EndPlay 뒤 늦게 온 닫힘은 새 창·기억한 자리를 건드리지 않음 (P5i R1-1)
+	// Late close after EndPlay must not alter new window/saved position (P5i R1-1)
 	if (OperatorWindow != Window) { return; }
 	FVBoROperatorPlacement::Session().Remember(Window->GetPositionInScreen(), Window->GetClientSizeInScreen());
 	OperatorWindow.Reset();

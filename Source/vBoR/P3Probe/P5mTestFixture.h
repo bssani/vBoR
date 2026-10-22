@@ -4,7 +4,7 @@
 #include "Interaction/IsdkGrabberComponent.h"
 #include "P5mTestFixture.generated.h"
 
-// 광학 손 입력만 합성함. SDK 선택·변환·걸림은 제품 경로 사용 (P5m E2–E13)
+// Synthesize optical hand input only. Product SDK selection/transform/detent path (P5m E2–E13)
 UCLASS()
 class AP5mTrackedPart : public AP2bTrackedPart
 {

@@ -4,7 +4,7 @@
 #include "P5bTestFixture.h"
 #include "P5dTestFixture.generated.h"
 
-// 광학 입력만 합성함 (회전·소유·알림은 실제 경로, P5d §4)
+// Synthesize optical input only (real rotation/ownership/notification path, P5d §4)
 UCLASS()
 class AP5dTrackedWheel : public AVBoRSteeringWheel
 {

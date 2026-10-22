@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "VBoRDoorMotion.h"
 
-// 피벗 로컬 -X 가 앞면, +Z 좌우·-Y 위아래 회전임 (P5e D1·D8, cm·deg)
+// Pivot local -X front, +Z Yaw/-Y Pitch (P5e D1/D8, cm/deg)
 struct FVBoRTwoAxisMotion
 {
 	FVector FaceMinCm = FVector(-4,-12.5,-3.5), FaceMaxCm = FVector(-2,12.5,3.5);

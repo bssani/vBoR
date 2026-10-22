@@ -49,13 +49,13 @@ AP5mTrackedPart* P5pPart(FP5pWorld& W, UClass* Class, bool bFlipHinge = false)
 	const AVBoRAxisPart* Defaults = Class->GetDefaultObject<AVBoRAxisPart>();
 	auto* Part = W.World->SpawnActorDeferred<AP5mTrackedPart>(AP5mTrackedPart::StaticClass(), FTransform::Identity);
 	if (!Part) { return nullptr; }
-	// 입력 virtual 만 시험 자식으로 바꿈. 조작 값은 BP 에서 전부 옮김 (P5p D5)
+	// Test child replaces input virtuals only. Copy all interaction values from BP (P5p D5)
 	for (FProperty* Property : P5pProperties()) { Property->CopyCompleteValue_InContainer(Part, Defaults); }
 	Part->AxisPivot->SetRelativeTransform(Defaults->AxisPivot->GetRelativeTransform());
 	Part->PartMesh->SetStaticMesh(Defaults->PartMesh->GetStaticMesh());
 	if (bFlipHinge)
 	{
-		// 회사 CAD 경첩을 반대 방향(local Z 180 deg)으로 넣고 bReverse 로 맞춘 경우. 메시 자리는 그대로 (P5p R1-1)
+		// Opposite CAD hinge (local Z 180 deg), corrected by bReverse. Preserve mesh position (P5p R1-1)
 		FTransform Pivot = Part->AxisPivot->GetRelativeTransform();
 		Pivot.SetRotation(Pivot.GetRotation() * FQuat(FVector::ZAxisVector, FMath::DegreesToRadians(180.)));
 		Part->AxisPivot->SetRelativeTransform(Pivot); Part->bReverse = !Part->bReverse;
@@ -104,8 +104,8 @@ void P5pRelease(AVBoRAxisPart* Part, UIsdkGrabberComponent* Grabber, bool Pinch)
 	Part->Tick(1.f);
 }
 
-// 쉬는 메시의 실제 bounds 에 손 점을 놓음. fixture 입력은 경첩의 쉬는 좌표계임 (P5p E4–E8, cm)
-// 반지름·면 방향은 제품 ConfigurePush 와 같은 규칙으로 bounds 에서 구함 (경첩 방향을 CAD 로 바꿔도 따라감, P5p R1-1)
+// Hand point on actual rest-mesh bounds. Fixture input in rest-hinge coordinates (P5p E4–E8, cm)
+// Radius/face from bounds using product ConfigurePush rules (follow CAD hinge direction, P5p R1-1)
 struct FP5pSurface
 {
 	FBox Bounds;
@@ -115,7 +115,7 @@ struct FP5pSurface
 	explicit FP5pSurface(AVBoRAxisPart* Part)
 		: Bounds(Part->PartMesh->GetStaticMesh()->GetBoundingBox().TransformBy(Part->PartMesh->GetRelativeTransform()))
 	{
-		// 축 Y 에 수직인 Z·X 중 긴 쪽이 반지름, 메시 중심 쪽 부호. 법선 = 축 × 반지름 (VBoRAxisPart.cpp ConfigurePush)
+		// Longer Z/X perpendicular to Y = radius, sign toward mesh center. Normal = axis × radius (VBoRAxisPart.cpp ConfigurePush)
 		const int32 R = Bounds.GetExtent().Z >= Bounds.GetExtent().X ? 2 : 0;
 		Radial[R] = Bounds.GetCenter()[R] < 0 ? -1 : 1;
 		Normal = FVector::CrossProduct(FVector::YAxisVector, Radial);
@@ -127,11 +127,11 @@ struct FP5pSurface
 			NormalMin = FMath::Min(NormalMin, B); NormalMax = FMath::Max(NormalMax, B);
 		}
 	}
-	// 면 0 은 원래 각을 키움. 값 + (내림) 은 bReverse 아니면 면 0, bReverse 면 면 1 (AdvancePush·ValueTransform)
+	// Face 0 increases raw angle. Positive value (lowering): face 0 normally, face 1 with bReverse (AdvancePush/ValueTransform)
 	static int32 LowerFace(const AVBoRAxisPart* Part) { return Part->bReverse ? 1 : 0; }
 	FVector Point(const AVBoRAxisPart* Part, double AngleDeg, int32 Face, double OutsideCm = 0, double RadialCm = -1) const
 	{
-		// 면 0 은 법선 최소 쪽, 면 1 은 최대 쪽. 바깥은 각 면에서 법선 반대·같은 쪽임
+		// Face 0 = normal minimum, face 1 = maximum. Outside = opposite/along normal respectively
 		const double N = Face == 0 ? NormalMin - OutsideCm : NormalMax + OutsideCm;
 		const double R = RadialCm < 0 ? FMath::Lerp(RadialMin, RadialMax, .8) : RadialCm;
 		return FQuat(FVector::YAxisVector, FMath::DegreesToRadians(AngleDeg * (Part->bReverse ? -1 : 1)))
@@ -154,7 +154,7 @@ void P5pPushStart(AP5mTrackedPart* Part, const FP5pSurface& Surface, int32 Face,
 void P5pPushTo(AP5mTrackedPart* Part, const FP5pSurface& Surface, int32 Face, double Target)
 {
 	const double From = P5pAngle(Part), Direction = Target >= From ? 1 : -1;
-	// 얇은 판을 한 frame 에 관통하지 않게 1 deg 간격으로 손 점을 이동함 (P5p E4·E5)
+	// Move hand in 1 deg steps (avoid crossing thin panel in one frame, P5p E4/E5)
 	for (double Angle = From + Direction; Direction * (Target - Angle) > 0; Angle += Direction)
 	{
 		P5pPoint(Part, Surface.Point(Part, Angle, Face));
@@ -389,7 +389,7 @@ bool FP5pCopy::RunTest(const FString&)
 	}
 	for (const TCHAR* Name : P5pNames)
 	{
-		// 실제 BP 와 시험 자식은 Play 없는 별도 world 에서만 겹쳐 놓음 (P5p E11)
+		// Overlap actual BP/test child in separate non-Play world only (P5p E11)
 		FP5pWorld W; UClass* Class = P5pClass(*this, Name); if (!Class) { continue; }
 		auto* Actual = W.World->SpawnActor<AVBoRAxisPart>(Class);
 		auto* Copy = P5pPart(W, Class);

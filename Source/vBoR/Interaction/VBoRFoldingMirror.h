@@ -23,7 +23,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding|Sound") FVBoRHeldSoundCue FoldMotorCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding|Sound") FVBoRSoundCue UnfoldedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding|Sound") FVBoRSoundCue FoldedCue;
-	// 칸 순서는 위 프로퍼티 순서와 같음 (P5s D12)
+	// Slot order = property order above (P5s D12)
 #if WITH_DEV_AUTOMATION_TESTS
 	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
 	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return SoundAudio[Slot]; }
@@ -37,10 +37,10 @@ public:
 	virtual bool IsSpectatorInteracting() const override { return false; }
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Mirror folding") TObjectPtr<USceneComponent> HingePivot;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Mirror folding") TObjectPtr<UStaticMeshComponent> MirrorMesh;
-	// 쉬는 경첩의 local +Z 둘레로 회전함 (기울어진 CAD 경첩도 편집 가능, P5q D5)
+	// Rotate around rest hinge local +Z (editable tilted CAD hinge, P5q D5)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding", meta=(Units="cm")) FVector HingeLocationCm = FVector(40,-90,100);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding") FRotator HingeRotation = FRotator::ZeroRotator;
-	// 펼친 CAD 의 차 원점 자리를 보존함 (P5q D5, U-09)
+	// Preserve unfolded CAD position relative to car origin (P5q D5, U-09)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding") FTransform MeshRestFromRoot = FTransform(FQuat::Identity, FVector(40,-100,100), FVector(.16,.24,.1));
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding", meta=(Units="deg", ClampMin="-170", ClampMax="170")) float FoldAngleDeg = -65;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding", meta=(Units="deg/s", ClampMin="0.1")) float SpeedDegPerSecond = 30;

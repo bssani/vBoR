@@ -17,7 +17,7 @@
 
 namespace
 {
-	// 자동화의 expected message 는 일반 Log 를 수집하지 않아 직접 셈 (P1c E5)
+	// Count directly (automation expected messages skip normal Log, P1c E5)
 	struct FLevelBlockedLog : FOutputDevice
 	{
 		int32 Count = 0;
@@ -66,7 +66,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP1cLevelTest, "vBoR.P1c.LevelAndYaw", EAutomat
 bool FP1cLevelTest::RunTest(const FString& Parameters)
 {
 	FSettleWorld F;
-	F.Box->bSnapYawInLoadRegion = false; // 기존 Yaw 보존만 확인함 (P5n §3 예외 3)
+	F.Box->bSnapYawInLoadRegion = false; // Check existing Yaw preservation only (P5n §3 exception 3)
 	F.Block(FVector(0, 0, 45), FVector(500, 500, 5));
 	F.Begin();
 	for (const FRotator Tilt : {FRotator(30, 0, 0), FRotator(0, 40, 20)})
@@ -89,7 +89,7 @@ bool FP1cLevelTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("E2 yaw preserved and pitch/roll removed"), F.Box->GetActorRotation().Equals(FRotator(0, Tilt.Yaw, 0), 0.01));
 		TestTrue(TEXT("E1 upright box up vector is vertical"), F.Box->GetActorUpVector().Equals(FVector::UpVector, 0.0001));
 	}
-	// 자식 메시의 바른 자세가 월드 Identity 가 아닌 경우도 확인함 (P1c D1)
+	// Also check child mesh upright pose != world Identity (P1c D1)
 	const FQuat Rest = FRotator(0, 0, 90).Quaternion();
 	F.Box->ResetToPose(FTransform(Rest, FVector(0, 0, 120)));
 	F.Box->BeginCarry(0, nullptr, F.Box->GetActorTransform());
@@ -256,7 +256,7 @@ bool FP1cPreviewTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("E7 predicted angle within 0.01 deg"), FVBoRCarryMotion::AngleDeg(Preview, F.Box->GetActorTransform()) < 0.01);
 	F.Box->ResetToPose(FTransform(FVector(0, 0, 100)));
 	F.Box->BeginCarry(0, nullptr, F.Box->GetActorTransform());
-	// AdvanceHeldPose 와 같은 순서로 손 입력·접촉·시각 갱신을 한 frame 에 실행함 (P1c E11)
+	// Hand/contact/visual update in one frame, same order as AdvanceHeldPose (P1c E11)
 	FTransform Desired;
 	F.Box->Session.Update(true, FTransform(FVector(300, 0, 100)), F.Box->GetActorTransform(), 1, F.Box->TiltLimitDeg, Desired);
 	F.Box->MoveHeldPose(Desired, 1.0f / 60);
@@ -330,7 +330,7 @@ bool FP1cPreviewRenderStateTest::RunTest(const FString& Parameters)
 	F.Box->UpdateLandingPreview();
 	UStaticMeshComponent* Preview = F.Box->LandingPreview;
 	TestTrue(TEXT("R1-1 first update shows preview"), Preview->IsVisible());
-	// nullrhi 에서도 dirty 단언이 실제 render state 를 검사하게 함 (P1c R1-1)
+	// Dirty assertion checks real render state even in nullrhi (P1c R1-1)
 	Preview->RecreateRenderState_Concurrent();
 	TestTrue(TEXT("R1-1 preview has render state"), Preview->IsRenderStateCreated());
 	Preview->SetVisibility(false);
@@ -382,7 +382,7 @@ bool FP5nBoxSnapTest::RunTest(const FString&)
 			F.Block(FVector(0,0,45),FVector(500,500,5)); F.Begin();
 			F.Box->ResetToPose(FTransform(FRotator(0,RestYaw,0),FVector(0,0,100)));
 			F.Box->BeginCarry(0,nullptr,F.Box->GetActorTransform());
-			// RestYaw 와 tilt 를 함께 주면 기존 세우기가 월드 Yaw 도 조금 바꿈. 반 칸은 수평 자세로 잼 (P5n E10)
+			// RestYaw + tilt slightly changes world Yaw on upright correction. Measure half step horizontally (P5n E10)
 			const bool Half=FMath::Abs(Yaw)==45;
 			F.Box->SetActorRotation(FRotator(Half?0:15,30+Yaw,Half?0:10));
 			const double Expected=Yaw==52 || Yaw==45?120:30;
@@ -410,7 +410,7 @@ bool FP5nBoxSnapTest::RunTest(const FString&)
 		F.Box->SetActorRotation(FRotator(0,37,0));
 		if (Mode==4)
 		{
-			// 높이를 무시하고 영역의 XY 만 봄 (P5n D4)
+			// Region XY only, ignore height (P5n D4)
 			F.Target->SetActorLocation(FVector(0,0,-1000));
 		}
 		F.Box->ReleaseCarry();
@@ -427,7 +427,7 @@ bool FP5nBoxSnapTest::RunTest(const FString&)
 	}
 	for (bool BothBlocked : {false,true})
 	{
-		// 높은 벽이라 +Z 탐색으로도 못 빠져나옴 (P5n E11, cm)
+		// Tall wall blocks +Z escape too (P5n E11, cm)
 		FSettleWorld F; F.Box->BoxSizeCm=FVector(20,60,20); F.Box->ApplyBoxSize();
 		F.Block(FVector(0,0,45),FVector(500,500,5));
 		F.Block(FVector(0,BothBlocked?28.8:29.8,100),FVector(100,0.1,200)); F.Begin();

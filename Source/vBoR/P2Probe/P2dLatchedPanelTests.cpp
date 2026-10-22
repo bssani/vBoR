@@ -75,7 +75,7 @@ namespace
 	void P2dCopyPart(AVBoRAxisPart* To, const AVBoRAxisPart* From)
 	{
 		To->Axis = From->Axis; To->bReverse = From->bReverse; To->MeshRestFromRoot = From->MeshRestFromRoot;
-		// mock 의 Actor 가 경첩 자식이어도 쉬는 car-origin 좌표는 보존함 (P2d D5)
+		// Preserve rest car-origin coordinates even when mock Actor is hinge child (P2d D5)
 		To->AxisPivot->SetRelativeTransform(From->AxisPivot->GetRelativeTransform()); To->OnConstruction(To->GetActorTransform());
 	}
 }
@@ -228,7 +228,7 @@ bool FP2dInsideClose::RunTest(const FString&)
 	FP2dWorld W; AP2bTrackedDoor* Door = W.World->SpawnActor<AP2bTrackedDoor>(); AP2bTrackedPart* Lever = W.World->SpawnActor<AP2bTrackedPart>(); W.Play(); Door->SetAxisHandle(1,Lever);
 	Door->Unlock(); FVBoRDoorMotion& Motion = FP2dTestAccess::Motion(Door); Motion.AngleDeg = 40; Motion.bLatchArmed = true;
 	Door->Hands[0] = P2dHandAt(FQuat(FVector::ZAxisVector,FMath::DegreesToRadians(40.0)).RotateVector(FVector(85,-9,50)));
-	// 레버 밑 2 cm 점을 실제 SDK 로 젖힘 (P2d E9)
+	// Tilt point 2 cm below lever through real SDK (P2d E9)
 	Lever->MeshRestFromRoot = FTransform(FQuat::Identity,FVector(0,0,-2),FVector(0.18,0.04,0.04)); Lever->OnConstruction(Lever->GetActorTransform());
 	P2dPull(Lever,25); Lever->Tick(0.01f); TestEqual(TEXT("Open door regrabs through inside lever"), Motion.GrabHandle, 1);
 	Door->Hands[0] = P2dHandAt(FVector(85,-9,50)); Door->Tick(1);
@@ -243,7 +243,7 @@ bool FP2dInsideBox::RunTest(const FString&)
 {
 	FP2dWorld W; AP3VehicleMock* Car = W.World->SpawnActor<AP3VehicleMock>();
 	AP2bTrackedDoor* TrackedDoor = W.World->SpawnActor<AP2bTrackedDoor>(); UIsdkGrabberComponent* Grab = P2dGrabber(W); W.Play();
-	// 근사 차와 소유를 공유하지 않음 (연결된 잡는 자리 시험만 유지, P2e §3·Q1)
+	// No shared ownership with mock car (keep connected grab-area test only, P2e §3/Q1)
 	AVBoRAxisPart* TrackedHandle = W.World->SpawnActor<AVBoRAxisPart>();
 	TrackedDoor->SetAxisHandle(1,TrackedHandle); TrackedDoor->Hands[0] = P2dHandAt(FVector(85,-9,50));
 	P2dSelect(TrackedDoor->InsideGrab,Grab);

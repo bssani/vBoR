@@ -50,7 +50,7 @@ void AVBoRFoldingSeat::ResetSeat()
 
 void AVBoRFoldingSeat::ApplyAngle()
 {
-	// +Y 축 양의 회전으로 등받이 위쪽이 차 앞 +X 로 숙여짐 (P4e D1, deg)
+	// Positive +Y rotation tilts backrest top toward car front +X (P4e D1, deg)
 	HingePivot->SetRelativeRotation(FQuat(FVector::YAxisVector, FMath::DegreesToRadians(AngleDeg)));
 }
 

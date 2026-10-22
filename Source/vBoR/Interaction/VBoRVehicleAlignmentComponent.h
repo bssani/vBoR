@@ -22,9 +22,9 @@ class VBOR_API UVBoRVehicleAlignmentComponent : public UActorComponent
 public:
 	UVBoRVehicleAlignmentComponent();
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-	UFUNCTION(BlueprintCallable, Category="정렬") bool SwitchViewpoint(UVBoRViewpointComponent* Viewpoint);
-	UFUNCTION(BlueprintCallable, Category="정렬") bool ReturnToBase();
-	UFUNCTION(BlueprintPure, Category="정렬") bool IsBaseViewpoint() const { return CurrentViewpoint == nullptr && !bSwitching; }
+	UFUNCTION(BlueprintCallable, Category="Alignment") bool SwitchViewpoint(UVBoRViewpointComponent* Viewpoint);
+	UFUNCTION(BlueprintCallable, Category="Alignment") bool ReturnToBase();
+	UFUNCTION(BlueprintPure, Category="Alignment") bool IsBaseViewpoint() const { return CurrentViewpoint == nullptr && !bSwitching; }
 	bool IsSwitching() const { return bSwitching; }
 	bool IsAtViewpoint(const UVBoRViewpointComponent* Viewpoint) const { return !bSwitching && CurrentViewpoint == Viewpoint; }
 	FString SwitchRejection(const UVBoRViewpointComponent* Viewpoint, bool bReturnBase = false) const;
@@ -54,20 +54,20 @@ public:
 	const TArray<FVBoRAlignPointSample>& GetCapturedPoints() const { return CapturedPoints; }
 	FString PointStatus() const;
 	void AdvancePointCapture();
-	UPROPERTY(EditAnywhere, Category="점 정렬", meta=(Units="s", ClampMin="0.01")) double PointCaptureSeconds = 1;
-	UPROPERTY(EditAnywhere, Category="점 정렬", meta=(ClampMin="0", ClampMax="1", ToolTip="Index fingertip used for point capture: 0 = left, 1 = right")) int32 PointHand = 0;
-	UPROPERTY(EditAnywhere, Category="점 정렬", meta=(Units="mm", ClampMin="0")) double PointSpreadLimitMm = 10;
-	UPROPERTY(EditAnywhere, Category="점 정렬", meta=(Units="cm", ClampMin="0")) double PointMinSpanCm = 20;
-	UPROPERTY(EditAnywhere, Category="점 정렬", meta=(Units="cm", ClampMin="0")) double PointFitLimitCm = 2;
-	UPROPERTY(EditAnywhere, Category="점 정렬", meta=(Units="cm", ClampMin="0")) double PointHeightWarnCm = 3;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="정렬") TObjectPtr<UVBoREyePointComponent> BaseEye;
-	UPROPERTY(EditAnywhere, Category="정렬", meta=(Units="s", ClampMin="0.01")) float FadeSeconds = 0.3;
-	UPROPERTY(EditAnywhere, Category="집 시험", meta=(Units="cm", ClampMin="0")) float HomeShiftStepCm = 100;
-	UPROPERTY(EditAnywhere, Category="정렬", meta=(Units="cm", ClampMin="0")) float PlayAreaToleranceCm = 1;
-	UPROPERTY(EditAnywhere, Category="정렬", meta=(ToolTip="Pawn height from the virtual floor, not from the saved head height (physical seat at real car height, U-17)")) bool bHeightFromFloor = true;
-	UPROPERTY(EditAnywhere, Category="정렬", meta=(Units="cm", EditCondition="bHeightFromFloor")) float FloorWorldZCm = 0;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="정렬") EVBoRAlignmentState State = EVBoRAlignmentState::NoSavedValue;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="정렬") FString Reason;
+	UPROPERTY(EditAnywhere, Category="Point alignment", meta=(Units="s", ClampMin="0.01")) double PointCaptureSeconds = 1;
+	UPROPERTY(EditAnywhere, Category="Point alignment", meta=(ClampMin="0", ClampMax="1", ToolTip="Index fingertip used for point capture: 0 = left, 1 = right")) int32 PointHand = 0;
+	UPROPERTY(EditAnywhere, Category="Point alignment", meta=(Units="mm", ClampMin="0")) double PointSpreadLimitMm = 10;
+	UPROPERTY(EditAnywhere, Category="Point alignment", meta=(Units="cm", ClampMin="0")) double PointMinSpanCm = 20;
+	UPROPERTY(EditAnywhere, Category="Point alignment", meta=(Units="cm", ClampMin="0")) double PointFitLimitCm = 2;
+	UPROPERTY(EditAnywhere, Category="Point alignment", meta=(Units="cm", ClampMin="0")) double PointHeightWarnCm = 3;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Alignment") TObjectPtr<UVBoREyePointComponent> BaseEye;
+	UPROPERTY(EditAnywhere, Category="Alignment", meta=(Units="s", ClampMin="0.01")) float FadeSeconds = 0.3;
+	UPROPERTY(EditAnywhere, Category="Home test", meta=(Units="cm", ClampMin="0")) float HomeShiftStepCm = 100;
+	UPROPERTY(EditAnywhere, Category="Alignment", meta=(Units="cm", ClampMin="0")) float PlayAreaToleranceCm = 1;
+	UPROPERTY(EditAnywhere, Category="Alignment", meta=(ToolTip="Pawn height from the virtual floor, not from the saved head height (physical seat at real car height, U-17)")) bool bHeightFromFloor = true;
+	UPROPERTY(EditAnywhere, Category="Alignment", meta=(Units="cm", EditCondition="bHeightFromFloor")) float FloorWorldZCm = 0;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Alignment") EVBoRAlignmentState State = EVBoRAlignmentState::NoSavedValue;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Alignment") FString Reason;
 	int32 SwitchRequests = 0, SwitchCompletions = 0, SwitchDiscards = 0;
 	void InitializeAlignment(APawn* Pawn, const FVBoRBuckSavedAlignment* Value, int32 Origin, const FVector2D& PlayArea);
 	void AdvanceSwitch(double DeltaSeconds);

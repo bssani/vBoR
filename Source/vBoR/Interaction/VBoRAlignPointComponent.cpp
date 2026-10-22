@@ -15,8 +15,8 @@ UVBoRAlignPointComponent::UVBoRAlignPointComponent()
 	Number->SetRelativeLocation(FVector(0,0,3)); Number->SetWorldSize(3); Number->SetHorizontalAlignment(EHTA_Center);
 	Number->SetCollisionEnabled(ECollisionEnabled::NoCollision); Number->SetGenerateOverlapEvents(false);
 	Number->SetTextRenderColor(FColor::Yellow);
-	// 에디터에서는 보임 (CAD 메시 자리에 붙이게). 게임에서만 숨김 (P4h D1·D8, 리뷰 R1-2)
-	// 생성자에서는 AttachChildren 이 비어 전파가 안 됨. 자식도 직접 숨김 (참가자 흐름에 표시가 보이지 않게, 리뷰 R1-3)
+	// Visible in editor (place on CAD mesh). Hidden only in game (P4h D1/D8, review R1-2)
+	// AttachChildren empty in constructor. Hide children directly (keep markers out of participant flow, review R1-3)
 	SetHiddenInGame(true); Sphere->SetHiddenInGame(true); Number->SetHiddenInGame(true);
 }
 

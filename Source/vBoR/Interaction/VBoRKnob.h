@@ -30,7 +30,7 @@ public:
 	bool IsThrowingEnabled() const { return bIsThrowable; }
 };
 
-// SDK 는 잡기만 맡고 축 회전은 Tick 에서 정함 (축 위 잡기 점 허용, P5f D1·D3)
+// SDK handles grab only; Tick sets axis rotation (allow on-axis grab point, P5f D1/D3)
 UCLASS()
 class VBOR_API UVBoRKnobTransformer : public UIsdkTransformer
 {
@@ -53,7 +53,7 @@ class VBOR_API AVBoRKnob : public AActor, public IVBoRSpectatorPart
 public:
 	AVBoRKnob();
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob|Sound") FVBoRSoundCue StepCue;
-	// 칸 순서는 위 프로퍼티 순서와 같음 (P5s D12)
+	// Slot order = property order above (P5s D12)
 #if WITH_DEV_AUTOMATION_TESTS
 	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
 	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return SoundAudio[Slot]; }
@@ -75,7 +75,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Knob") TObjectPtr<UIsdkGrabbableComponent> Grabbable;
 	UPROPERTY(VisibleAnywhere, Category="Knob") TObjectPtr<UVBoRKnobGrabComponent> GrabComponent;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Knob") TObjectPtr<UAudioComponent> StateAudio;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob|Input", meta=(DisplayName="메시 충돌로 잡기")) bool bGrabWithMesh = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob|Input", meta=(DisplayName="Grab with mesh collision")) bool bGrabWithMesh = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob") FTransform MeshRestFromRoot = FTransform(FQuat::Identity,FVector(0,0,1.25),FVector(0.06,0.06,0.025));
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob") FTransform MarkerRestFromPivot = FTransform(FQuat::Identity,FVector(2.2,0,2.65),FVector(0.012,0.006,0.003));
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob", meta=(Units="deg", ClampMin="0")) float StepDeg = 15;

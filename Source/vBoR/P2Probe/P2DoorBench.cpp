@@ -137,7 +137,7 @@ void AP2DoorBench::Tick(float DeltaSeconds)
 	if (!bPlaced) { TryPlace(); }
 	UpdatePanel();
 	if (!Door) { return; }
-	// 상태 전이는 즉시, 연속 측정은 1 s 간격으로 남김 (P2 §2 측정)
+	// Log transitions immediately, continuous measurements every 1 s (P2 §2 measurement)
 	const FString State = Door->GetStateText();
 	if (State != LastState || GetWorld()->GetTimeSeconds() - LastLogAt >= 1)
 	{

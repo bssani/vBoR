@@ -33,7 +33,7 @@ public:
 	bool IsThrowingEnabled() const { return bIsThrowable; }
 };
 
-// ISDK 는 선택만 맡고 문 Tick 의 검증된 자세를 반환함 (P2 §5)
+// ISDK selects only; return door Tick validated pose (P2 §5)
 UCLASS()
 class VBOR_API UVBoRDoorTransformer : public UIsdkTransformer
 {
@@ -57,7 +57,7 @@ public:
 	AVBoRHingedPanel();
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Sound") FVBoRSoundCue UnlockedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Sound") FVBoRSoundCue LatchedCue;
-	// 칸 순서는 위 프로퍼티 순서와 같음 (P5s D12)
+	// Slot order = property order above (P5s D12)
 #if WITH_DEV_AUTOMATION_TESTS
 	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
 	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return SoundAudio[Slot]; }
@@ -77,19 +77,19 @@ public:
 	FString GetStateText() const;
 	FString GetMeasurementText(const FVBoRDoorMetrics* Baseline = nullptr) const;
 	void SetAxisHandle(int32 Handle, AVBoRAxisPart* Part);
-	UFUNCTION(CallInEditor, Category="Hinged panel|Setup", meta=(DisplayName="설정 검사")) void CheckSetup();
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category="Hinged panel|Setup", meta=(DisplayName="설정 검사 결과", MultiLine="true")) FString SetupReport;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Push face", meta=(DisplayName="미는 면 상자 사용")) bool bUsePushFaceBox = false;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Push face", meta=(DisplayName="메시 표면으로 밀기")) bool bPushOnMeshSurface = false;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Push face", meta=(Units="cm", ClampMin="0", DisplayName="메시 두께 경고 기준")) float PushFaceWarnThicknessCm = 20;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Hinged panel|Push face", meta=(DisplayName="미는 면 상자", ToolTip="HingePivot 좌표의 상자. 사용을 켠 뒤 위치·크기·scale을 조절함. 회전은 0이어야 함 (cm).")) TObjectPtr<UBoxComponent> PushFaceBox;
+	UFUNCTION(CallInEditor, Category="Hinged panel|Setup", meta=(DisplayName="Check setup")) void CheckSetup();
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category="Hinged panel|Setup", meta=(DisplayName="Setup check result", MultiLine="true")) FString SetupReport;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Push face", meta=(DisplayName="Use push face box")) bool bUsePushFaceBox = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Push face", meta=(DisplayName="Push on mesh surface")) bool bPushOnMeshSurface = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Push face", meta=(Units="cm", ClampMin="0", DisplayName="Mesh thickness warning threshold")) float PushFaceWarnThicknessCm = 20;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Hinged panel|Push face", meta=(DisplayName="Push face box", ToolTip="Box in HingePivot coordinates. Enable, then adjust position/size/scale. Rotation must be 0 (cm).")) TObjectPtr<UBoxComponent> PushFaceBox;
 	bool BeginGrabFromAxisPart(AVBoRAxisPart* Part);
-	// +Z 경첩 축·+X 판 끝·+Y 닫는 면. 문의 저장 이름 유지함 (P2c D1·D3)
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel|Latch", meta = (DisplayName = "닫히면 잠김 — 손잡이·버튼으로만 열기", ToolTip = "닫힌 판은 밀어도 움직이지 않음. 잡는 자리·연결한 손잡이 또는 버튼의 Unlock으로 풀고, 열었다 닫으면 다시 잠김.")) bool bUseLatch = false;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel|Grab areas", meta = (DisplayName = "바깥쪽 잡는 자리 사용")) bool bUseOutsideGrabArea = true;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel|Grab areas", meta = (DisplayName = "안쪽 잡는 자리 사용")) bool bUseInsideGrabArea = true;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel", meta = (DisplayName = "손바닥으로 열기 허용", ToolTip = "끄면 풀린 판도 닫는 방향의 손바닥 밀기만 받음. 잡아서 여닫기는 그대로.")) bool bAllowPalmOpening = true;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel|Grab areas", meta = (DisplayName = "잡는 동안 손잡이 표시 들어감", Units = "cm", ToolTip = "잡는 자리 로컬 좌표의 이동 거리·방향 (cm). 표시 메시만 움직이고 잡는 상자는 그대로. 0이면 표시 이동 없음.")) FVector HandleVisualPressOffsetCm = FVector::ZeroVector;
+	// +Z hinge axis/+X panel edge/+Y closing face. Keep door saved names (P2c D1/D3)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel|Latch", meta = (DisplayName = "Lock when closed — open by handle/button only", ToolTip = "Closed panel ignores pushing. Unlock by grab area/connected handle or button Unlock; relock after opening then closing.")) bool bUseLatch = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel|Grab areas", meta = (DisplayName = "Use outside grab area")) bool bUseOutsideGrabArea = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel|Grab areas", meta = (DisplayName = "Use inside grab area")) bool bUseInsideGrabArea = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel", meta = (DisplayName = "Allow palm opening", ToolTip = "When off, unlocked panel accepts closing palm push only. Grab opening/closing unchanged.")) bool bAllowPalmOpening = true;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel|Grab areas", meta = (DisplayName = "Recess handle visual while grabbed", Units = "cm", ToolTip = "Offset/direction in grab-area local coordinates (cm). Move visual mesh only, keep grab box fixed. 0 disables visual movement.")) FVector HandleVisualPressOffsetCm = FVector::ZeroVector;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel") FTransform MeshRestFromRoot = FTransform(FQuat::Identity, FVector(55,0,52.5), FVector(1.1,0.1,1.05));
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Hinged panel") TObjectPtr<AVBoRAxisPart> OutsideAxisHandle;
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Hinged panel") TObjectPtr<AVBoRAxisPart> InsideAxisHandle;

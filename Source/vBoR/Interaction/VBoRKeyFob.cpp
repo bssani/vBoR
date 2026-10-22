@@ -54,7 +54,7 @@ void AVBoRKeyFob::OnConstruction(const FTransform& Transform)
 	Super::OnConstruction(Transform);
 	if (KeyMesh->GetStaticMesh())
 	{
-		// 자식 메시 bounds 로 cm 크기를 맞춤 (근사 형상, P4a §2)
+		// Size from child mesh bounds in cm (approximate geometry, P4a §2)
 		const FVector BoundsSize = KeyMesh->GetStaticMesh()->GetBoundingBox().GetSize().ComponentMax(FVector(0.01));
 		KeyMesh->SetWorldScale3D(KeySizeCm.ComponentMax(FVector(0.1)) / BoundsSize);
 	}
@@ -66,7 +66,7 @@ void AVBoRKeyFob::PreInitializeComponents()
 	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch, true);
 	Grabbable->SetGrabCollider(KeyMesh);
 	GrabComponent->Configure();
-	// SDK scale clamp 는 X 값을 세 축에 씀. single grab 만 써서 비균일 scale 그대로 유지함 (P4a D4)
+	// SDK scale clamp applies X to all axes. Single grab preserves nonuniform scale (P4a D4)
 	FreeTransformer->Config.ScaleConstraint.bUseConstraint = false;
 	GrabComponent->SetSingleGrabTransformerObject(FreeTransformer);
 	GrabComponent->SetTransformTarget(KeyMesh);
@@ -77,7 +77,7 @@ void AVBoRKeyFob::PreInitializeComponents()
 
 AVBoRPokeButton* AVBoRKeyFob::CreateButton(FVector OffsetCm, FLinearColor Color)
 {
-	// root 메시 scale 이 버튼 cm 크기·간격을 바꾸지 않게 world 크기로 붙임 (P4a D3)
+	// Attach at world size (root mesh scale must not alter button cm size/spacing, P4a D3)
 	const FTransform Frame(GetActorQuat(), GetActorLocation());
 	const FTransform ButtonWorld(GetActorQuat(), Frame.TransformPosition(OffsetCm));
 	AVBoRPokeButton* Button = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), ButtonWorld, this);
@@ -104,7 +104,7 @@ void AVBoRKeyFob::BeginPlay()
 	LockButton = CreateButton(LockButtonCm, FLinearColor(0.8,0.15,0.1,1));
 	UnlockButton->OnButtonPressed.AddDynamic(this, &AVBoRKeyFob::UnlockPressed);
 	LockButton->OnButtonPressed.AddDynamic(this, &AVBoRKeyFob::LockPressed);
-	UE_LOG(LogKeyFob, Log, TEXT("%s 근사 키 size=%s cm"), *GetName(), *KeySizeCm.ToCompactString());
+	UE_LOG(LogKeyFob, Log, TEXT("%s approximate key size=%s cm"), *GetName(), *KeySizeCm.ToCompactString());
 }
 
 bool AVBoRKeyFob::IsHandTracked() const
@@ -188,7 +188,7 @@ void AVBoRKeyFob::SetHome(AVBoRKeyTable* Table)
 void AVBoRKeyFob::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	// 포인터 callback 밖에서 전환함. 안 쥔 키의 눌림 표시·소리도 막음 (P4a R1-1)
+	// Switch outside pointer callback. Block unheld key press visual/sound too (P4a R1-1)
 	const bool bHeld = HoldingHand != INDEX_NONE;
 	for (AVBoRPokeButton* Button : {UnlockButton.Get(), LockButton.Get()})
 	{

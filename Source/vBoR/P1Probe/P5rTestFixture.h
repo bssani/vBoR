@@ -5,7 +5,7 @@
 #include "../Interaction/VBoRPoweredPanel.h"
 #include "P5rTestFixture.generated.h"
 
-// 실제 오디오 장치 없이 Play·Stop·FadeOut 전달을 확인함 (P5r D3·E6)
+// Observe Play/Stop/FadeOut without actual audio device (P5r D3/E6)
 UCLASS()
 class UP5rAudioObserver : public UAudioComponent
 {
@@ -14,7 +14,7 @@ public:
 #if WITH_DEV_AUTOMATION_TESTS
 	int32 Plays = 0, Stops = 0, Fades = 0;
 	float FadeSeconds = 0;
-	// SetSound 내부 Stop 을 제외함. 관찰자는 IsPlaying 을 켜지 않아 Play 당 정확히 한 번임 (UE AudioComponent.cpp:326-350)
+	// Exclude SetSound internal Stop. Observer keeps IsPlaying off: exactly once per Play (UE AudioComponent.cpp:326-350)
 	int32 LifecycleStops() const { return Stops - Plays; }
 	virtual void Play(float StartTime = 0) override { ++Plays; }
 	virtual void Stop() override { ++Stops; }

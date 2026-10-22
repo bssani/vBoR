@@ -77,7 +77,7 @@ struct FP3bTestAccess
 
 struct FP4cTestAccess
 {
-	// 쥔 상태·키 이벤트만 합성함. 실제 잡기·버튼 필터는 P4a 시험 범위 (P4c §5)
+	// Synthesize held state/key events only. Real grab/button filtering covered by P4a (P4c §5)
 	static void Hold(AVBoRKeyFob* Key, int32 Hand = 0) { Key->HoldingHand = Hand; }
 	static FIntPoint Counts(AVBoRScenarioRunner* R, AVBoRKeyFob* Key) { return R->KeyCounts.FindRef(Key); }
 	static bool Pending(AVBoRScenarioRunner* R) { return R->bStartHeadPending; }
@@ -89,16 +89,16 @@ namespace
 {
 	FVBoRScenarioStep P3Step(const TCHAR* Id, EVBoRStepRule Rule = EVBoRStepRule::Confirm, const TCHAR* Tag = TEXT(""), EVBoRConfirmBy By = EVBoRConfirmBy::Either)
 	{
-		FVBoRScenarioStep Step; Step.StepId = Id; Step.Instruction = FText::FromString(TEXT("차량을 확인하세요."));
+		FVBoRScenarioStep Step; Step.StepId = Id; Step.Instruction = FText::FromString(TEXT("Check the vehicle."));
 		Step.Rule = Rule; Step.TargetTag = Tag; Step.ConfirmBy = By; return Step;
 	}
 	void P3Poke(AVBoRPokeButton* Button)
 	{
 		FIsdkInteractionPointerEvent Event; Event.Type = EIsdkPointerEventType::Select; Event.Interactable = Button->Poke.Get();
-		// ISDK pointable → 기존 버튼 → 진행기 delegate 경로로 보냄 (P3 E4·E19)
+		// ISDK pointable → existing button → runner delegate (P3 E4/E19)
 		Button->Poke->GetInteractionPointerEventDelegate().Broadcast(Event);
 	}
-	// 실제 XR 대신 합성 Stage 자세를 공급함. world cache 는 일부러 갱신하지 않음 (R1-5·R1-7)
+	// Synthetic Stage pose instead of real XR. Deliberately leave world cache stale (R1-5/R1-7)
 	class FP3TrackedHead : public FXRTrackingSystemBase
 	{
 	public:
@@ -230,7 +230,7 @@ bool FP3DuplicateTest::RunTest(const FString&)
 	P3Poke(FP3FlowTestAccess::Confirm(E.Runner)); FP3FlowTestAccess::Key(E.Runner); E.Runner->ProcessFlow(0);
 	TestEqual(TEXT("E1 actual poke plus key advances exactly once"), E.Runner->GetStepIndex(), 1);
 	TestEqual(TEXT("E1 second command stale"), E.Runner->StaleDiscards, 1);
-	TestTrue(TEXT("E1 participant result distinct from operator"), E.Runner->LastCompletion.Contains(TEXT("참가자 확인")));
+	TestTrue(TEXT("E1 participant result distinct from operator"), E.Runner->LastCompletion.Contains(TEXT("Participant confirm")));
 	E.Runner->QueueCommand({EVBoRFlowCommand::Confirm, EVBoRCommandSource::Operator, Token}); E.Runner->ProcessFlow(0);
 	TestEqual(TEXT("E2 delayed command never completes new step"), E.Runner->GetStepIndex(), 1);
 	E.Steps({P3Step(TEXT("08"),EVBoRStepRule::DoorOpened,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None),P3Step(TEXT("12"))});
@@ -263,7 +263,7 @@ bool FP3PermissionTest::RunTest(const FString&)
 	TestEqual(TEXT("E5 participant cannot confirm operator step"),E.Runner->GetStepIndex(),0);
 	TestEqual(TEXT("E5 authority refusal recorded"),E.Runner->PermissionDiscards,1);
 	E.Command(EVBoRFlowCommand::Confirm); TestEqual(TEXT("E5 operator succeeds"),E.Runner->GetStepIndex(),1);
-	TestTrue(TEXT("E5 operator label"),E.Runner->LastCompletion.Contains(TEXT("진행자 확인")));
+	TestTrue(TEXT("E5 operator label"),E.Runner->LastCompletion.Contains(TEXT("Operator confirm")));
 	E.Command(EVBoRFlowCommand::Confirm); TestEqual(TEXT("E6 unsatisfied seat never completes"),E.Runner->GetStepIndex(),1);
 	TestEqual(TEXT("E6 rule refusal recorded"),E.Runner->RuleDiscards,1);
 	return true;
@@ -307,7 +307,7 @@ bool FP3ViewTest::RunTest(const FString&)
 	const FTransform Before=E.Pawn->GetActorTransform();
 	E.Command(EVBoRFlowCommand::Passenger); E.Command(EVBoRFlowCommand::Rear); E.Command(EVBoRFlowCommand::ReturnBase);
 	FP3FlowTestAccess::Toggle(E.Runner);
-	TestTrue(TEXT("View request actor remains visible in operator block"),E.Runner->GetOperatorText().Contains(TEXT("시점 명령 진행자")));
+	TestTrue(TEXT("View request actor remains visible in operator block"),E.Runner->GetOperatorText().Contains(TEXT("Viewpoint command Operator")));
 	TestTrue(TEXT("E10 fade first, pawn unchanged"),E.Pawn->GetActorTransform().Equals(Before));
 	TestEqual(TEXT("E10 concurrent switches discarded"),E.Car->Alignment->SwitchDiscards,2);
 	E.FinishSwitch(); TestTrue(TEXT("E10 first target retained"),E.Car->Alignment->IsAtViewpoint(E.Car->PassengerView));
@@ -336,7 +336,7 @@ bool FP3FloorHeightTest::RunTest(const FString&)
 		TestTrue(TEXT("Base pawn on the virtual floor whatever the saved head height"),FMath::IsNearlyZero(E.Pawn->GetActorLocation().Z,0.001));
 		TestTrue(TEXT("Floor height keeps eye-based XY"),FVector::Dist2D(E.Pawn->GetActorLocation(),EyeBased.GetLocation())<0.001);
 		TestTrue(TEXT("Floor height keeps eye-based yaw"),FMath::Abs(FMath::FindDeltaAngleDegrees(double(E.Pawn->GetActorRotation().Yaw),double(EyeBased.Rotator().Yaw)))<0.01);
-		// 저장한 머리는 실제 높이 그대로 보임 (참가자 체격 차이 유지, U-17)
+		// Saved head shown at actual height (preserve participant body-size differences, U-17)
 		TestTrue(TEXT("Saved head at its real height above floor"),FMath::IsNearlyEqual(E.Pawn->GetActorTransform().TransformPosition(E.Saved.Capture.PositionCm).Z,HeadZ,0.001));
 	}
 	E.Saved.Capture.PositionCm.Z = 130; E.Apply(); E.Steps({P3Step(TEXT("12"))});
@@ -358,7 +358,7 @@ bool FP3ExitTest::RunTest(const FString&)
 	auto Step=P3Step(TEXT("18"),EVBoRStepRule::DoorOpened,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None); Step.bRequireBaseViewpoint=true;
 	E.Steps({Step,P3Step(TEXT("19"))}); E.Runner->ProcessFlow(0);
 	TestEqual(TEXT("E12 open door alone insufficient while away"),E.Runner->GetStepIndex(),0);
-	TestTrue(TEXT("E12 return instruction visible"),E.Runner->GetPanelText().Contains(TEXT("운전석으로 돌아가세요")));
+	TestTrue(TEXT("E12 return instruction visible"),E.Runner->GetPanelText().Contains(TEXT("Return to the driver seat")));
 	TestFalse(TEXT("E12 action button visible"),FP3FlowTestAccess::Action(E.Runner)->IsHidden());
 	E.Command(EVBoRFlowCommand::Next); TestEqual(TEXT("E12 skip also requires base viewpoint"),E.Runner->GetStepIndex(),0);
 	P3Poke(FP3FlowTestAccess::Action(E.Runner)); E.Runner->ProcessFlow(0); E.FinishSwitch(); E.Runner->ProcessFlow(0);
@@ -373,7 +373,7 @@ bool FP3AlignmentGateTest::RunTest(const FString&)
 	TestTrue(TEXT("E13 capture instructions visible in operator block"),E.Runner->GetOperatorText().Contains(TEXT("P0-c")));
 	E.Command(EVBoRFlowCommand::IgnoreAlignment); TestTrue(TEXT("E13 O starts with explicit ignored status"),E.Runner->IsRunning() && E.Runner->bAlignmentIgnored);
 	FP3FlowTestAccess::Toggle(E.Runner);
-	TestTrue(TEXT("E13 ignore in operator block"),E.Runner->GetOperatorText().Contains(TEXT("정렬 무시 예")));
+	TestTrue(TEXT("E13 ignore in operator block"),E.Runner->GetOperatorText().Contains(TEXT("Ignore alignment Yes")));
 	E.Apply(); E.Runner->bAlignmentIgnored=false; const FTransform Before=E.Pawn->GetActorTransform();
 	E.Car->Alignment->InitializeAlignment(E.Pawn,&E.Saved,0,E.Saved.PlayAreaCm); E.Runner->InitializeFlow();
 	TestFalse(TEXT("E13 different origin blocks start"),E.Runner->IsRunning()); TestTrue(TEXT("Different origin retains Pawn"),E.Pawn->GetActorTransform().Equals(Before));
@@ -394,23 +394,23 @@ bool FP3TagsTest::RunTest(const FString&)
 	E.Command(EVBoRFlowCommand::IgnoreAlignment); TestFalse(TEXT("O cannot bypass invalid tags"),E.Runner->IsRunning());
 	AActor* Duplicate=E.World->SpawnActor<AActor>(); Duplicate->Tags.Add(TEXT("Car.DriverDoor"));
 	E.Steps({P3Step(TEXT("08"),EVBoRStepRule::DoorOpened,TEXT("Car.DriverDoor"))});
-	TestTrue(TEXT("Ambiguous tags reported"),E.Runner->ValidationProblems.Contains(TEXT("2개 발견")));
+	TestTrue(TEXT("Ambiguous tags reported"),E.Runner->ValidationProblems.Contains(TEXT("found 2")));
 	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3DataTest, "vBoR.P3Flow.E16E18E19DataOrderCompletionAndSlate", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP3DataTest::RunTest(const FString&)
 {
-	FP3World E; auto First=P3Step(TEXT("19")); First.Instruction=FText::FromString(TEXT("문구 수정 확인 — 실내를 둘러보세요."));
+	FP3World E; auto First=P3Step(TEXT("19")); First.Instruction=FText::FromString(TEXT("Text edit check — Look around the interior."));
 	E.Steps({First,P3Step(TEXT("02")),P3Step(TEXT("12"))});
-	TestTrue(TEXT("E19 actual Slate Korean text follows asset"),FP3FlowTestAccess::Slate(E.Runner).ToString().Contains(First.Instruction.ToString()));
+	TestTrue(TEXT("E19 actual Slate Participant text follows asset"),FP3FlowTestAccess::Slate(E.Runner).ToString().Contains(First.Instruction.ToString()));
 	TestTrue(TEXT("E19 instruction exact"),E.Runner->GetInstructionText().EqualTo(First.Instruction));
 	const FVector FixedPanel=E.Runner->Panel->GetComponentLocation(); E.Pawn->SetActorLocation(FVector(400,0,0)); E.Runner->ProcessFlow(0);
 	TestTrue(TEXT("Panel remains fixed during step"),E.Runner->Panel->GetComponentLocation().Equals(FixedPanel));
-	E.Command(EVBoRFlowCommand::Confirm); TestTrue(TEXT("E16 edited order followed"),E.Runner->GetPanelText().Contains(TEXT("02 · 2/3")));
+	E.Command(EVBoRFlowCommand::Confirm); TestTrue(TEXT("E16 edited order followed"),E.Runner->GetPanelText().Contains(TEXT("02 ,  2/3")));
 	E.Command(EVBoRFlowCommand::Confirm); E.Command(EVBoRFlowCommand::Confirm); TestTrue(TEXT("E18 final finished"),E.Runner->IsFinished());
 	const auto Token=E.Runner->GetToken(); E.Command(EVBoRFlowCommand::Confirm); TestEqual(TEXT("E18 no post-end advancement"),E.Runner->GetToken().Generation,Token.Generation);
-	TestTrue(TEXT("E18 final Korean text"),FP3FlowTestAccess::Slate(E.Runner).ToString().Contains(TEXT("안내 완료")));
+	TestTrue(TEXT("E18 final participant text"),FP3FlowTestAccess::Slate(E.Runner).ToString().Contains(TEXT("Guidance complete")));
 	return true;
 }
 
@@ -418,7 +418,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3OperatorTest, "vBoR.P3Flow.E17OperatorPrevio
 bool FP3OperatorTest::RunTest(const FString&)
 {
 	FP3World E; E.Steps({P3Step(TEXT("02")),P3Step(TEXT("12")),P3Step(TEXT("19"))});
-	E.Command(EVBoRFlowCommand::Next); TestTrue(TEXT("E17 skip actor recorded"),E.Runner->LastCompletion.Contains(TEXT("진행자 건너뛰기")));
+	E.Command(EVBoRFlowCommand::Next); TestTrue(TEXT("E17 skip actor recorded"),E.Runner->LastCompletion.Contains(TEXT("Operator skip")));
 	const auto Old=E.Runner->GetToken(); E.Command(EVBoRFlowCommand::Previous); TestEqual(TEXT("E17 previous revisits prior step"),E.Runner->GetStepIndex(),0);
 	E.Command(EVBoRFlowCommand::Next); E.Runner->QueueCommand({EVBoRFlowCommand::Confirm,EVBoRCommandSource::Operator,Old}); E.Runner->ProcessFlow(0);
 	TestEqual(TEXT("Revisited index does not revive old generation"),E.Runner->GetStepIndex(),1);
@@ -463,7 +463,7 @@ bool FP3ConfirmLockTest::RunTest(const FString&)
 	E.Runner->ProcessFlow(0.3); FP3FlowTestAccess::NewInputFrame(E.Runner);
 	P3Poke(FP3FlowTestAccess::Confirm(E.Runner)); E.Runner->ProcessFlow(0);
 	TestEqual(TEXT("B not completed by next-frame double poke"), E.Runner->GetStepIndex(), 1);
-	TestTrue(TEXT("Lock reason logged"), E.Runner->LastRecord.Contains(TEXT("단계 시작 직후")));
+	TestTrue(TEXT("Lock reason logged"), E.Runner->LastRecord.Contains(TEXT("immediately after step start")));
 	TestTrue(TEXT("Confirmation stays hidden and inactive"), FP3FlowTestAccess::Confirm(E.Runner)->IsHidden() && !FP3FlowTestAccess::Confirm(E.Runner)->Poke->IsActive());
 	E.Runner->ProcessFlow(0.4); FP3FlowTestAccess::NewInputFrame(E.Runner); FP3FlowTestAccess::Key(E.Runner); E.Runner->ProcessFlow(0);
 	TestEqual(TEXT("B completed at 0.7 s"), E.Runner->GetStepIndex(), 2);
@@ -483,26 +483,26 @@ bool FP3PanelTextTest::RunTest(const FString&)
 {
 	FP3World E; E.Steps({P3Step(TEXT("12"))}); E.Ready();
 	const FString Text = E.Runner->GetPanelText();
-	TestTrue(TEXT("Participant instruction present"), Text.Contains(TEXT("차량을 확인하세요.")));
-	for (const TCHAR* Word : {TEXT("버림"), TEXT("건너뛰기"), TEXT("정렬"), TEXT("generation"), TEXT("근사 형상")})
+	TestTrue(TEXT("Participant instruction present"), Text.Contains(TEXT("Check the vehicle.")));
+	for (const TCHAR* Word : {TEXT("discarded"), TEXT("Skip"), TEXT("Alignment"), TEXT("generation"), TEXT("Approximate geometry")})
 	{ TestFalse(TEXT("No operator diagnostics on participant panel"), Text.Contains(Word)); }
 	TestTrue(TEXT("Step key always visible"), E.Runner->GetOperatorText().Contains(TEXT("Space")));
-	TestFalse(TEXT("Full operator diagnostics default off"), E.Runner->GetOperatorText().Contains(TEXT("버림")));
+	TestFalse(TEXT("Full operator diagnostics default off"), E.Runner->GetOperatorText().Contains(TEXT("discarded")));
 	bool bF1Bound = false;
 	for (const auto& Binding : E.Runner->InputComponent->KeyBindings) { bF1Bound |= Binding.Chord.Key == EKeys::I; }
 	TestTrue(TEXT("F1 is bound"), bF1Bound);
-	FP3FlowTestAccess::Toggle(E.Runner); TestTrue(TEXT("F1 reveals diagnostics"), E.Runner->GetOperatorText().Contains(TEXT("버림")));
-	FP3FlowTestAccess::Toggle(E.Runner); TestFalse(TEXT("Second F1 hides diagnostics"), E.Runner->GetOperatorText().Contains(TEXT("버림")));
+	FP3FlowTestAccess::Toggle(E.Runner); TestTrue(TEXT("F1 reveals diagnostics"), E.Runner->GetOperatorText().Contains(TEXT("discarded")));
+	FP3FlowTestAccess::Toggle(E.Runner); TestFalse(TEXT("Second F1 hides diagnostics"), E.Runner->GetOperatorText().Contains(TEXT("discarded")));
 	E.Steps({P3Step(TEXT("09"), EVBoRStepRule::Confirm, TEXT(""), EVBoRConfirmBy::Operator)}); E.Ready();
-	TestTrue(TEXT("Participant waits without operator wording"), E.Runner->GetPanelText().Contains(TEXT("잠시 기다려 주세요")) && !E.Runner->GetPanelText().Contains(TEXT("진행자")));
-	TestTrue(TEXT("Operator wait line shown with F1 off"), E.Runner->GetOperatorText().Contains(TEXT("진행자 확인 대기 — Space")));
+	TestTrue(TEXT("Participant waits without operator wording"), E.Runner->GetPanelText().Contains(TEXT("Please wait")) && !E.Runner->GetPanelText().Contains(TEXT("Operator")));
+	TestTrue(TEXT("Operator wait line shown with F1 off"), E.Runner->GetOperatorText().Contains(TEXT("Operator confirm pending — Space")));
 	TestFalse(TEXT("Operator wait component visible with F1 off"), FP3FlowTestAccess::OperatorPanel(E.Runner)->bHiddenInGame);
 	E.Steps({P3Step(TEXT("13"), EVBoRStepRule::ButtonPressed, TEXT("Car.ReachButton"), EVBoRConfirmBy::None)});
-	TestTrue(TEXT("No-confirm rule wait shows skip key"), E.Runner->GetOperatorText().Contains(TEXT("→ 건너뛰기")));
+	TestTrue(TEXT("No-confirm rule wait shows skip key"), E.Runner->GetOperatorText().Contains(TEXT("→ Skip")));
 	E.Command(EVBoRFlowCommand::Passenger); E.FinishSwitch(); E.Runner->ProcessFlow(0);
-	TestTrue(TEXT("Away viewpoint shows Home"), E.Runner->GetOperatorText().Contains(TEXT("Home 운전석으로")));
+	TestTrue(TEXT("Away viewpoint shows Home"), E.Runner->GetOperatorText().Contains(TEXT("Home to driver seat")));
 	E.Car->Alignment->InitializeAlignment(E.Pawn, nullptr, 3, E.Saved.PlayAreaCm); E.Steps({P3Step(TEXT("12"))});
-	TestTrue(TEXT("Preparation text separated from always-visible start failure"), E.Runner->GetPanelText() == TEXT("준비 중입니다") && E.Runner->GetOperatorText().Contains(TEXT("정렬 필요")));
+	TestTrue(TEXT("Preparation text separated from always-visible start failure"), E.Runner->GetPanelText() == TEXT("Preparing") && E.Runner->GetOperatorText().Contains(TEXT("Alignment required")));
 	return true;
 }
 
@@ -522,12 +522,12 @@ bool FP3PanelLayoutTest::RunTest(const FString&)
 		}
 	}
 	E.Ready(); TestFalse(TEXT("Confirm name appears with button"), FP3FlowTestAccess::Label(E.Runner, 0)->bHiddenInGame);
-	TestEqual(TEXT("Confirm name text"), FP3FlowTestAccess::LabelText(E.Runner, 0)->GetText().ToString(), FString(TEXT("확인")));
+	TestEqual(TEXT("Confirm name text"), FP3FlowTestAccess::LabelText(E.Runner, 0)->GetText().ToString(), FString(TEXT("Confirm")));
 	E.Steps({P3Step(TEXT("09"), EVBoRStepRule::Confirm, TEXT(""), EVBoRConfirmBy::Operator)});
 	TestTrue(TEXT("Confirm name hides with button"), FP3FlowTestAccess::Label(E.Runner, 0)->bHiddenInGame);
 	E.Steps({P3Step(TEXT("14"), EVBoRStepRule::Viewpoint, TEXT("Car.PassengerView"))});
 	TestFalse(TEXT("Action name appears with button"), FP3FlowTestAccess::Label(E.Runner, 1)->bHiddenInGame);
-	TestEqual(TEXT("Action name text"), FP3FlowTestAccess::LabelText(E.Runner, 1)->GetText().ToString(), FString(TEXT("동승석으로 이동")));
+	TestEqual(TEXT("Action name text"), FP3FlowTestAccess::LabelText(E.Runner, 1)->GetText().ToString(), FString(TEXT("Move to passenger seat")));
 	TestTrue(TEXT("Black text"), FP3FlowTestAccess::Text(E.Runner)->GetColorAndOpacity().GetSpecifiedColor() == FLinearColor::Black);
 	TestEqual(TEXT("Large bold font gives about 2 cm glyphs"), FP3FlowTestAccess::Text(E.Runner)->GetFont().Size, 40.0f);
 	const auto Border = FP3FlowTestAccess::Border(E.Runner);
@@ -544,20 +544,20 @@ bool FP3HeadLogTest::RunTest(const FString&)
 	const FVector Start = E.Car->GetActorTransform().TransformPosition(FVector(E.Car->BodySizeCm.X/2 + E.Car->StartOutsideCm,0,150.5));
 	E.Head(FTransform(FRotator::ZeroRotator, Start));
 	E.Steps({P3Step(TEXT("10"), EVBoRStepRule::Seated, TEXT("Car.DriverSeat"))}); E.Runner->ProcessFlow(0);
-	TestTrue(TEXT("Start marker location in eye coordinates and mm"), E.Runner->LastRecord.Contains(TEXT("시작 위치")) && E.Runner->LastRecord.Contains(E.Car->Alignment->DescribeHead(true, Start)));
+	TestTrue(TEXT("Start marker location in eye coordinates and mm"), E.Runner->LastRecord.Contains(TEXT("Start position")) && E.Runner->LastRecord.Contains(E.Car->Alignment->DescribeHead(true, Start)));
 	E.Head(FTransform(FRotator::ZeroRotator, Eye)); E.Car->Seat->SampleHead(true, Eye, 1.5); E.Runner->ProcessFlow(0);
-	TestTrue(TEXT("First satisfied seat records near-zero head"), E.Runner->LastRecord.Contains(TEXT("착석 위치")) && E.Runner->LastRecord.Contains(TEXT("X=0.00 Y=0.00 Z=0.00 mm")));
+	TestTrue(TEXT("First satisfied seat records near-zero head"), E.Runner->LastRecord.Contains(TEXT("Seated position")) && E.Runner->LastRecord.Contains(TEXT("X=0.00 Y=0.00 Z=0.00 mm")));
 	const FString SeatRecord = E.Runner->LastRecord; E.Runner->ProcessFlow(0.1); TestEqual(TEXT("Seat location recorded once"), E.Runner->LastRecord, SeatRecord);
 	FP3FlowTestAccess::Toggle(E.Runner); E.Runner->ProcessFlow(0.9);
-	TestFalse(TEXT("F1 does not log earlier than 1 s"), E.Runner->LastRecord.Contains(TEXT("머리 위치")));
-	E.Runner->ProcessFlow(0.1); TestTrue(TEXT("F1 logs at 1 s"), E.Runner->LastRecord.Contains(TEXT("머리 위치")));
+	TestFalse(TEXT("F1 does not log earlier than 1 s"), E.Runner->LastRecord.Contains(TEXT("Head position")));
+	E.Runner->ProcessFlow(0.1); TestTrue(TEXT("F1 logs at 1 s"), E.Runner->LastRecord.Contains(TEXT("Head position")));
 	const FString TrackedRecord = E.Runner->LastRecord; E.HeadXR->bTracked = false; E.Runner->ProcessFlow(5);
 	TestEqual(TEXT("Tracking loss produces no position log"), E.Runner->LastRecord, TrackedRecord);
 	TestTrue(TEXT("Untracked head has no coordinates"), E.Car->Alignment->DescribeHead(false, Eye).IsEmpty());
 	E.HeadXR->bTracked = true; E.Command(EVBoRFlowCommand::Passenger); E.FinishSwitch();
 	FTransform Head; TestTrue(TEXT("Reads relocated tracked head"), E.Car->Alignment->ReadWorldHead(Head));
 	TestTrue(TEXT("Uses active viewpoint eye"), E.Car->Alignment->DescribeHead(true, Head.GetLocation()).Contains(TEXT("PassengerView")));
-	FP3FlowTestAccess::Toggle(E.Runner); E.Runner->ProcessFlow(5); TestFalse(TEXT("F1 off stops periodic position log"), E.Runner->LastRecord.Contains(TEXT("머리 위치")));
+	FP3FlowTestAccess::Toggle(E.Runner); E.Runner->ProcessFlow(5); TestFalse(TEXT("F1 off stops periodic position log"), E.Runner->LastRecord.Contains(TEXT("Head position")));
 	return true;
 }
 
@@ -605,7 +605,7 @@ bool FP3RepositionTest::RunTest(const FString&)
 	TestTrue(TEXT("Untracked event defers placement"), E.Runner->Panel->GetComponentLocation().Equals(FixedPanel) && E.Runner->Panel->bHiddenInGame);
 	E.Head(FTransform(FRotator::ZeroRotator, Eye)); E.HeadXR->bTracked = true; E.Runner->ProcessFlow(0);
 	TestTrue(TEXT("First tracked frame performs deferred placement"), E.Runner->Panel->GetComponentLocation().Equals(Eye + FVector(70, 0, 0)) && !E.Runner->Panel->bHiddenInGame);
-	// Stage capture 와 현재 머리를 같게 둠 (전환 후 각 eye 위치를 직접 검산, R1-7)
+	// Match Stage capture/current head (verify each eye position after transition, R1-7)
 	E.HeadXR->LocalHead = FTransform(FRotator(0, E.Saved.Capture.YawDeg, 0), E.Saved.Capture.PositionCm);
 	for (EVBoRFlowCommand Command : {EVBoRFlowCommand::Passenger, EVBoRFlowCommand::Rear, EVBoRFlowCommand::ReturnBase})
 	{
@@ -619,7 +619,7 @@ bool FP3RepositionTest::RunTest(const FString&)
 			{ TestFalse(FString::Printf(TEXT("Eye segment clear of %s"), *Plate->GetName()), FMath::LineBoxIntersection(Plate->Bounds.GetBox(), Head.GetLocation(), Target, Target - Head.GetLocation())); }
 		}
 	}
-	// 단계 시작도 같은 배치·가림 규칙을 따름 (E22)
+	// Same placement/occlusion rules on step start (E22)
 	for (USceneComponent* View : {static_cast<USceneComponent*>(E.Car->DriverEye.Get()), static_cast<USceneComponent*>(E.Car->PassengerView.Get()), static_cast<USceneComponent*>(E.Car->RearView.Get())})
 	{
 		E.Head(View->GetComponentTransform()); E.Steps({P3Step(TEXT("12"))});
@@ -683,7 +683,7 @@ bool FP3bShapeTest::RunTest(const FString&)
 	TestTrue(TEXT("Pulse advances one arrow after 0.14 s"), Materials[1]->K2_GetVectorParameterValue(TEXT("ColorParam")).Equals(Before,0.001));
 	TestTrue(TEXT("Previous arrow dim at 35 percent"), Materials[0]->K2_GetVectorParameterValue(TEXT("ColorParam")).Equals(FLinearColor(R->ArrowColor.R*0.35,R->ArrowColor.G*0.35,R->ArrowColor.B*0.35,1),0.001));
 	TestTrue(TEXT("Bright sRGB cyan"), Before.Equals(FLinearColor::FromSRGBColor(FColor::FromHex(TEXT("0fa7c4")))));
-	// 곡선에서도 화살표 전방을 따로 계산함 (방향 부호 오류 방지, P3b E2)
+	// Compute arrow forward separately on curves too (avoid direction sign error, P3b E2)
 	R = P3bRoute(E,TEXT("Route.Curve"),{FVector(0,-300,0),FVector(100,-250,0),FVector(200,-300,0)});
 	for (int32 I = 0; I < FP3bTestAccess::Materials(R).Num(); ++I)
 	{
@@ -733,7 +733,7 @@ bool FP3bBoundsTest::RunTest(const FString&)
 		TestTrue(TEXT("Unsafe or unknown route hidden"),R->IsHidden());
 		const FString Expected = bUnknown ? TEXT("Floor route hidden — play area unknown") : TEXT("Floor route hidden — outside the play area");
 		TestEqual(TEXT("English operator notice"),E.Runner->GetOperatorStatus().FloorRouteNotice,Expected);
-		TestTrue(TEXT("Korean VR notice"),E.Runner->GetOperatorText().Contains(bUnknown ? TEXT("바닥 경로 숨김 — 영역 모름") : TEXT("바닥 경로 숨김 — 플레이 영역 밖")));
+		TestTrue(TEXT("Operator VR notice"),E.Runner->GetOperatorText().Contains(bUnknown ? TEXT("Floor route hidden — unknown play area") : TEXT("Floor route hidden — outside play area")));
 		TestFalse(TEXT("Hidden route restores original marker"),FP3bTestAccess::Ring(E.Runner)[0]->bHiddenInGame);
 		E.Head(FTransform(FRotator::ZeroRotator,FVector(400,-300,160))); E.Runner->ProcessFlow(2);
 		TestFalse(TEXT("Disabled route has no arrival event"),FP3bTestAccess::Arrived(E.Runner));
@@ -741,7 +741,7 @@ bool FP3bBoundsTest::RunTest(const FString&)
 	}
 	E.HeadXR->PlayArea = FVector2D(10000,10000); E.Steps({P3bStep(TEXT("07"),TEXT("Route.Bounds"))});
 	TestTrue(TEXT("Safe route visible, notice cleared"),!R->IsHidden() && E.Runner->GetOperatorStatus().FloorRouteNotice.IsEmpty());
-	// Pawn 의 Stage 회전·이동을 직접 적용해 월드 경계와 혼동하지 않는지 확인 (P3b D6-b)
+	// Apply Pawn Stage rotation/translation directly (check no world-boundary confusion, P3b D6-b)
 	E.Pawn->SetActorLocationAndRotation(FVector(200,-300,0),FRotator(0,90,0)); E.HeadXR->PlayArea=FVector2D(200,1000);
 	E.Steps({P3bStep(TEXT("07"),TEXT("Route.Bounds"))}); TestFalse(TEXT("Rotated Stage wide axis accepts world-X route"),R->IsHidden());
 	E.HeadXR->PlayArea=FVector2D(1000,200); E.Steps({P3bStep(TEXT("07"),TEXT("Route.Bounds"))}); TestTrue(TEXT("Swapping Stage axes rejects route"),R->IsHidden());
@@ -765,7 +765,7 @@ bool FP3bHomeRouteTest::RunTest(const FString&)
 		FP3bRecords Records; E.Steps({P3bStep(TEXT("07"),TEXT("Route.Bounds"))});
 		TestFalse(TEXT("Switch draws route outside or without play area"),R->IsHidden());
 		TestEqual(TEXT("English operator notice says check is off"),E.Runner->GetOperatorStatus().FloorRouteNotice,FString(TEXT("Floor route shown — play area check off (home test)")));
-		TestTrue(TEXT("Korean VR notice says check is off"),E.Runner->GetOperatorText().Contains(TEXT("바닥 경로 표시 — 영역 검사 끔 (집 시험)")));
+		TestTrue(TEXT("Operator VR notice says check is off"),E.Runner->GetOperatorText().Contains(TEXT("Floor route visible — play area check off (home test)")));
 		TestTrue(TEXT("Route marker replaces target ring"),FP3bTestAccess::Ring(E.Runner)[0]->bHiddenInGame);
 		E.Runner->ProcessFlow(0.1); E.Runner->ProcessFlow(0.1);
 		TestEqual(TEXT("Notice recorded once per entry, no per-frame requery"),Records.Count(TEXT("play area check off")),1);
@@ -885,19 +885,19 @@ bool FP3bStartTest::RunTest(const FString&)
 	FP3World E; FP3bRecords Records;
 	const FVector Start=E.Car->GetActorTransform().TransformPosition(FVector(485,0,0.5));
 	E.Head(FTransform(FRotator::ZeroRotator,Start+FVector(51,0,160))); E.Steps({P3Step(TEXT("01")),P3Step(TEXT("02"))}); E.Runner->ProcessFlow(0.1);
-	TestEqual(TEXT("Outside start marker does not record"),Records.Count(TEXT("시작 위치 |")),0);
-	E.Head(FTransform(FRotator::ZeroRotator,Start+FVector(0,0,99))); E.Runner->ProcessFlow(0.1); TestEqual(TEXT("Headset held low does not record"),Records.Count(TEXT("시작 위치 |")),0);
+	TestEqual(TEXT("Outside start marker does not record"),Records.Count(TEXT("Start position |")),0);
+	E.Head(FTransform(FRotator::ZeroRotator,Start+FVector(0,0,99))); E.Runner->ProcessFlow(0.1); TestEqual(TEXT("Headset held low does not record"),Records.Count(TEXT("Start position |")),0);
 	E.Head(FTransform(FRotator::ZeroRotator,Start+FVector(50,0,100))); E.HeadXR->bTracked=false; E.Runner->ProcessFlow(1);
-	TestEqual(TEXT("Untracked start ignored"),Records.Count(TEXT("시작 위치 |")),0);
+	TestEqual(TEXT("Untracked start ignored"),Records.Count(TEXT("Start position |")),0);
 	E.HeadXR->bTracked=true; E.Runner->ProcessFlow(0.1); E.Runner->ProcessFlow(0.1);
-	TestEqual(TEXT("Threshold 50 cm / 100 cm records once"),Records.Count(TEXT("시작 위치 |")),1);
-	E.Command(EVBoRFlowCommand::Next); TestEqual(TEXT("Visited marker has no fallback"),Records.Count(TEXT("시작 표시를 거치지 않음")),0);
+	TestEqual(TEXT("Threshold 50 cm / 100 cm records once"),Records.Count(TEXT("Start position |")),1);
+	E.Command(EVBoRFlowCommand::Next); TestEqual(TEXT("Visited marker has no fallback"),Records.Count(TEXT("start marker not visited")),0);
 	E.Head(FTransform(FRotator::ZeroRotator,FVector(0,0,160))); E.Steps({P3Step(TEXT("01")),P3Step(TEXT("02"))}); E.Command(EVBoRFlowCommand::Next);
-	TestEqual(TEXT("Leaving first step records fallback once"),Records.Count(TEXT("시작 표시를 거치지 않음")),1);
-	for (const auto& Line : Records.Lines) { if (Line.Contains(TEXT("시작 표시를 거치지 않음"))) { TestTrue(TEXT("Fallback includes coordinates"),Line.Contains(TEXT("mm"))); } }
+	TestEqual(TEXT("Leaving first step records fallback once"),Records.Count(TEXT("start marker not visited")),1);
+	for (const auto& Line : Records.Lines) { if (Line.Contains(TEXT("start marker not visited"))) { TestTrue(TEXT("Fallback includes coordinates"),Line.Contains(TEXT("mm"))); } }
 	TArray<USceneComponent*> Components; E.Car->GetComponents(Components);
 	for (auto* C : Components) { C->ComponentTags.Remove(TEXT("Car.Start")); }
-	E.Steps({P3Step(TEXT("01"))}); E.Runner->ProcessFlow(0.1); TestEqual(TEXT("No marker keeps first tracked frame behavior"),Records.Count(TEXT("시작 위치 |")),2);
+	E.Steps({P3Step(TEXT("01"))}); E.Runner->ProcessFlow(0.1); TestEqual(TEXT("No marker keeps first tracked frame behavior"),Records.Count(TEXT("Start position |")),2);
 	return true;
 }
 
@@ -911,7 +911,7 @@ bool FP4cHeldTest::RunTest(const FString&)
 	Key->OnUnlockPressed.Broadcast(Key); Key->OnLockPressed.Broadcast(Key);
 	FP4cTestAccess::Hold(Key); E.Runner->ProcessFlow(0);
 	TestEqual(TEXT("E1 held advances to 02"),E.Runner->GetStepIndex(),1);
-	TestTrue(TEXT("E1 participant rule recorded"),E.Runner->LastCompletion.Contains(TEXT("참가자 규칙")));
+	TestTrue(TEXT("E1 participant rule recorded"),E.Runner->LastCompletion.Contains(TEXT("Participant rule")));
 	E.Command(EVBoRFlowCommand::Confirm); TestEqual(TEXT("E3 events before 02 ignored"),E.Runner->GetStepIndex(),1);
 	Key->OnUnlockPressed.Broadcast(Key); Key->OnLockPressed.Broadcast(Key);
 	E.Command(EVBoRFlowCommand::Previous);
@@ -946,7 +946,7 @@ bool FP4cButtonsTest::RunTest(const FString&)
 		TestFalse(TEXT("E4 participant confirmation visible"),FP3FlowTestAccess::Confirm(E.Runner)->IsHidden());
 		E.Command(EVBoRFlowCommand::Confirm);
 		TestEqual(TEXT("E4 Space advances after either order"),E.Runner->GetStepIndex(),2);
-		TestTrue(TEXT("E4 operator confirmation recorded"),E.Runner->LastCompletion.Contains(TEXT("진행자 확인")));
+		TestTrue(TEXT("E4 operator confirmation recorded"),E.Runner->LastCompletion.Contains(TEXT("Operator confirm")));
 	}
 	return true;
 }
@@ -980,8 +980,8 @@ bool FP4cValidationTest::RunTest(const FString&)
 			E.Runner->Scenario->Steps = {P3Step(TEXT("01"),Rule,Tag)};
 			TestFalse(TEXT("E7 invalid target blocks initialization"),E.Runner->InitializeFlow());
 			TestFalse(TEXT("E7 flow stopped"),E.Runner->IsRunning());
-			TestTrue(TEXT("E7 mismatch diagnostic"),E.Runner->ValidationProblems.Contains(TEXT("종류 불일치")));
-			if (FName(Tag) == TEXT("Car.MissingKey")) { TestTrue(TEXT("E7 missing tag diagnostic"),E.Runner->ValidationProblems.Contains(TEXT("0개 발견"))); }
+			TestTrue(TEXT("E7 mismatch diagnostic"),E.Runner->ValidationProblems.Contains(TEXT("type mismatch")));
+			if (FName(Tag) == TEXT("Car.MissingKey")) { TestTrue(TEXT("E7 missing tag diagnostic"),E.Runner->ValidationProblems.Contains(TEXT("found 0"))); }
 		}
 	}
 	return true;
@@ -995,35 +995,35 @@ bool FP4cStartTest::RunTest(const FString&)
 	const FTransform Start(FRotator::ZeroRotator,E.Car->GetActorTransform().TransformPosition(FVector(485,0,160.5)));
 	E.Head(Outside); E.Steps({P3Step(TEXT("01")),P3Step(TEXT("02"))});
 	E.Command(EVBoRFlowCommand::Next); E.Command(EVBoRFlowCommand::Previous); E.Command(EVBoRFlowCommand::Next);
-	TestEqual(TEXT("E8.1 revisiting 01 does not repeat fallback"),Records.Count(TEXT("시작 표시를 거치지 않음")),1);
+	TestEqual(TEXT("E8.1 revisiting 01 does not repeat fallback"),Records.Count(TEXT("start marker not visited")),1);
 	TestFalse(TEXT("E8.1 revisiting 01 never rearms"),FP4cTestAccess::Pending(E.Runner));
 	E.Runner->InitializeFlow(); E.Command(EVBoRFlowCommand::Previous);
 	TestTrue(TEXT("E8.2 previous at 01 preserves pending"),FP4cTestAccess::Pending(E.Runner));
-	TestEqual(TEXT("E8.2 previous at 01 no fallback"),Records.Count(TEXT("시작 표시를 거치지 않음")),1);
+	TestEqual(TEXT("E8.2 previous at 01 no fallback"),Records.Count(TEXT("start marker not visited")),1);
 	E.Head(Start); E.Runner->ProcessFlow(0); E.Command(EVBoRFlowCommand::Previous);
 	TestFalse(TEXT("E8.2 recorded start remains recorded"),FP4cTestAccess::Pending(E.Runner));
-	E.Runner->ProcessFlow(0); TestEqual(TEXT("E8.2 previous no duplicate start"),Records.Count(TEXT("시작 위치 |")),1);
+	E.Runner->ProcessFlow(0); TestEqual(TEXT("E8.2 previous no duplicate start"),Records.Count(TEXT("Start position |")),1);
 	E.Head(Outside); E.Runner->InitializeFlow(); E.Command(EVBoRFlowCommand::Restart);
-	TestEqual(TEXT("E8.3 R discards attempt without fallback"),Records.Count(TEXT("시작 표시를 거치지 않음")),1);
+	TestEqual(TEXT("E8.3 R discards attempt without fallback"),Records.Count(TEXT("start marker not visited")),1);
 	TestTrue(TEXT("E8.3 R rearms on base"),FP4cTestAccess::Pending(E.Runner));
-	E.Head(Start); E.Runner->ProcessFlow(0); TestEqual(TEXT("E8.3 start after R recorded"),Records.Count(TEXT("시작 위치 |")),2);
+	E.Head(Start); E.Runner->ProcessFlow(0); TestEqual(TEXT("E8.3 start after R recorded"),Records.Count(TEXT("Start position |")),2);
 	E.Head(Outside); E.Runner->InitializeFlow(); E.Command(EVBoRFlowCommand::Passenger); E.FinishSwitch();
 	E.Head(Outside); E.Command(EVBoRFlowCommand::Restart);
-	TestEqual(TEXT("E8.4 R at passenger no fallback"),Records.Count(TEXT("시작 표시를 거치지 않음")),1);
+	TestEqual(TEXT("E8.4 R at passenger no fallback"),Records.Count(TEXT("start marker not visited")),1);
 	TestFalse(TEXT("E8.4 return transition does not record old attempt"),FP4cTestAccess::Pending(E.Runner));
 	E.FinishSwitch(); E.Head(Outside); E.Runner->ProcessFlow(0);
 	TestEqual(TEXT("E8.4 returned to 01"),E.Runner->GetStepIndex(),0);
 	TestTrue(TEXT("E8.4 return rearms start"),FP4cTestAccess::Pending(E.Runner));
-	E.Head(Start); E.Runner->ProcessFlow(0); TestEqual(TEXT("E8.4 start after return recorded"),Records.Count(TEXT("시작 위치 |")),3);
-	// 떠나는 입력 네 가지가 모두 같은 fallback 경로를 씀 (P4c D3)
+	E.Head(Start); E.Runner->ProcessFlow(0); TestEqual(TEXT("E8.4 start after return recorded"),Records.Count(TEXT("Start position |")),3);
+	// All four leaving inputs share fallback path (P4c D3)
 	for (EVBoRFlowCommand Action : {EVBoRFlowCommand::Next,EVBoRFlowCommand::Confirm,EVBoRFlowCommand::EnterFreeMode})
 	{
-		E.Head(Outside); E.Runner->InitializeFlow(); const int32 Before = Records.Count(TEXT("시작 표시를 거치지 않음"));
-		E.Command(Action); TestEqual(TEXT("E8 leave records once"),Records.Count(TEXT("시작 표시를 거치지 않음")),Before+1);
+		E.Head(Outside); E.Runner->InitializeFlow(); const int32 Before = Records.Count(TEXT("start marker not visited"));
+		E.Command(Action); TestEqual(TEXT("E8 leave records once"),Records.Count(TEXT("start marker not visited")),Before+1);
 	}
 	E.Head(Outside); E.Steps({P3Step(TEXT("01"),EVBoRStepRule::KeyHeld,TEXT("Car.FrontKey"),EVBoRConfirmBy::None),P3Step(TEXT("02"))});
-	const int32 Before = Records.Count(TEXT("시작 표시를 거치지 않음")); FP4cTestAccess::Hold(E.Car->FrontKeyTable->Key); E.Runner->ProcessFlow(0);
-	TestEqual(TEXT("E8 rule leave records once"),Records.Count(TEXT("시작 표시를 거치지 않음")),Before+1);
+	const int32 Before = Records.Count(TEXT("start marker not visited")); FP4cTestAccess::Hold(E.Car->FrontKeyTable->Key); E.Runner->ProcessFlow(0);
+	TestEqual(TEXT("E8 rule leave records once"),Records.Count(TEXT("start marker not visited")),Before+1);
 	E.Car->Alignment->State = EVBoRAlignmentState::NoSavedValue; TestFalse(TEXT("Alignment blocks new attempt"),E.Runner->InitializeFlow());
 	E.Command(EVBoRFlowCommand::IgnoreAlignment); TestTrue(TEXT("O starts pending attempt"),FP4cTestAccess::Pending(E.Runner));
 	return true;
@@ -1036,25 +1036,25 @@ bool FP4cAssetTest::RunTest(const FString&)
 	if (!TestNotNull(TEXT("E9 asset loads"),Asset)) { return false; }
 	struct FExpected { const TCHAR* Id; const TCHAR* Text; EVBoRStepRule Rule; const TCHAR* Tag; EVBoRConfirmBy By; };
 	const FExpected Expected[] = {
-		{TEXT("01"),TEXT("테이블의 키를 집으세요."),EVBoRStepRule::KeyHeld,TEXT("Car.FrontKey"),EVBoRConfirmBy::None},
-		{TEXT("02"),TEXT("키 버튼으로 외장 조명을 켜고 꺼 보세요."),EVBoRStepRule::KeyUnlockAndLock,TEXT("Car.FrontKey"),EVBoRConfirmBy::Either},
-		{TEXT("03"),TEXT("차량 주변을 둘러보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Either},
-		{TEXT("04"),TEXT("리프트게이트를 열어보세요."),EVBoRStepRule::PoweredOpen,TEXT("Car.Liftgate"),EVBoRConfirmBy::None},
-		{TEXT("05"),TEXT("박스를 적재해 보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
-		{TEXT("06"),TEXT("리프트게이트를 닫아보세요."),EVBoRStepRule::PoweredClosed,TEXT("Car.Liftgate"),EVBoRConfirmBy::None},
-		{TEXT("07"),TEXT("도어 핸들을 조작해 보세요."),EVBoRStepRule::DoorUnlocked,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None},
-		{TEXT("08"),TEXT("문을 열어보세요."),EVBoRStepRule::DoorOpened,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None},
-		{TEXT("09"),TEXT("차량에 탑승해 보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
-		{TEXT("10"),TEXT("좌석에 앉아보세요."),EVBoRStepRule::Seated,TEXT("Car.DriverSeat"),EVBoRConfirmBy::Operator},
-		{TEXT("11"),TEXT("문을 닫아보세요."),EVBoRStepRule::DoorLatched,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None},
-		{TEXT("12"),TEXT("실내를 둘러보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Either},
-		{TEXT("13"),TEXT("가장 먼 버튼까지 손가락을 뻗어보세요."),EVBoRStepRule::ButtonPressed,TEXT("Car.ReachButton"),EVBoRConfirmBy::None},
-		{TEXT("14"),TEXT("동승석 위치에서 확인하세요."),EVBoRStepRule::Viewpoint,TEXT("Car.PassengerView"),EVBoRConfirmBy::Either},
-		{TEXT("15"),TEXT("2열 위치에서 확인하세요."),EVBoRStepRule::Viewpoint,TEXT("Car.RearView"),EVBoRConfirmBy::Either},
-		{TEXT("16"),TEXT("시트 폴딩 각도를 확인하세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
-		{TEXT("18"),TEXT("하차를 위해 문을 열어보세요."),EVBoRStepRule::DoorOpened,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None},
-		{TEXT("19"),TEXT("차량에서 내려보세요."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
-		{TEXT("20"),TEXT("문을 닫아보세요."),EVBoRStepRule::DoorLatched,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None}
+		{TEXT("01"),TEXT("Pick up the key from the table."),EVBoRStepRule::KeyHeld,TEXT("Car.FrontKey"),EVBoRConfirmBy::None},
+		{TEXT("02"),TEXT("Use the key button to turn the exterior lights on and off."),EVBoRStepRule::KeyUnlockAndLock,TEXT("Car.FrontKey"),EVBoRConfirmBy::Either},
+		{TEXT("03"),TEXT("Look around the vehicle."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Either},
+		{TEXT("04"),TEXT("Open the liftgate."),EVBoRStepRule::PoweredOpen,TEXT("Car.Liftgate"),EVBoRConfirmBy::None},
+		{TEXT("05"),TEXT("Load the box."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
+		{TEXT("06"),TEXT("Close the liftgate."),EVBoRStepRule::PoweredClosed,TEXT("Car.Liftgate"),EVBoRConfirmBy::None},
+		{TEXT("07"),TEXT("Operate the door handle."),EVBoRStepRule::DoorUnlocked,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None},
+		{TEXT("08"),TEXT("Open the door."),EVBoRStepRule::DoorOpened,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None},
+		{TEXT("09"),TEXT("Get in the vehicle."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
+		{TEXT("10"),TEXT("Sit in the seat."),EVBoRStepRule::Seated,TEXT("Car.DriverSeat"),EVBoRConfirmBy::Operator},
+		{TEXT("11"),TEXT("Close the door."),EVBoRStepRule::DoorLatched,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None},
+		{TEXT("12"),TEXT("Look around the interior."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Either},
+		{TEXT("13"),TEXT("Reach the farthest button with your finger."),EVBoRStepRule::ButtonPressed,TEXT("Car.ReachButton"),EVBoRConfirmBy::None},
+		{TEXT("14"),TEXT("Check from the passenger seat."),EVBoRStepRule::Viewpoint,TEXT("Car.PassengerView"),EVBoRConfirmBy::Either},
+		{TEXT("15"),TEXT("Check from the rear seat."),EVBoRStepRule::Viewpoint,TEXT("Car.RearView"),EVBoRConfirmBy::Either},
+		{TEXT("16"),TEXT("Check the seat folding angle."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
+		{TEXT("18"),TEXT("Open the door to get out."),EVBoRStepRule::DoorOpened,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None},
+		{TEXT("19"),TEXT("Get out of the vehicle."),EVBoRStepRule::Confirm,TEXT(""),EVBoRConfirmBy::Operator},
+		{TEXT("20"),TEXT("Close the door."),EVBoRStepRule::DoorLatched,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None}
 	};
 	if (!TestEqual(TEXT("E9 nineteen steps"),Asset->Steps.Num(),static_cast<int32>(UE_ARRAY_COUNT(Expected)))) { return false; }
 	for (int32 I = 0; I < Asset->Steps.Num(); ++I)
@@ -1167,7 +1167,7 @@ bool FP4dOpenTest::RunTest(const FString&)
 	G->Tick(1.5); E.Runner->ProcessFlow(0); TestEqual(TEXT("E2 opening waits"),E.Runner->GetStepIndex(),0);
 	G->Tick(4); TestEqual(TEXT("E2 no flow processing yet"),E.Runner->GetStepIndex(),0);
 	E.Runner->ProcessFlow(0); TestEqual(TEXT("E2 open completes next processing frame"),E.Runner->GetStepIndex(),1);
-	TestTrue(TEXT("E2 participant rule attribution"),E.Runner->LastCompletion.Contains(TEXT("참가자 규칙")));
+	TestTrue(TEXT("E2 participant rule attribution"),E.Runner->LastCompletion.Contains(TEXT("Participant rule")));
 	E.Steps({P3Step(TEXT("03")),Open,P3Step(TEXT("05"))}); E.Command(EVBoRFlowCommand::Next);
 	TestEqual(TEXT("E3 already open does not complete entered frame"),E.Runner->GetStepIndex(),1);
 	E.Runner->ProcessFlow(0); TestEqual(TEXT("E3 completes following frame"),E.Runner->GetStepIndex(),2);
@@ -1198,9 +1198,9 @@ bool FP4dTargetTest::RunTest(const FString&)
 	for (auto Rule : {EVBoRStepRule::PoweredOpen,EVBoRStepRule::PoweredClosed})
 	{
 		E.Steps({P3Step(TEXT("04"),Rule,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None)});
-		TestTrue(TEXT("E5 wrong type blocks"),!E.Runner->IsRunning() && E.Runner->ValidationProblems.Contains(TEXT("종류 불일치")));
+		TestTrue(TEXT("E5 wrong type blocks"),!E.Runner->IsRunning() && E.Runner->ValidationProblems.Contains(TEXT("type mismatch")));
 		E.Steps({P3Step(TEXT("04"),Rule,TEXT("Car.MissingGate"),EVBoRConfirmBy::None)});
-		TestTrue(TEXT("E5 missing tag blocks"),!E.Runner->IsRunning() && E.Runner->ValidationProblems.Contains(TEXT("0개 발견")));
+		TestTrue(TEXT("E5 missing tag blocks"),!E.Runner->IsRunning() && E.Runner->ValidationProblems.Contains(TEXT("found 0")));
 	}
 	return true;
 }
@@ -1451,7 +1451,7 @@ bool FP4eResetTest::RunTest(const FString&)
 		E.Command(EVBoRFlowCommand::Restart);
 		TestTrue(TEXT("R immediately stands all seats"), S->GetState() == EVBoRFoldingSeatState::Standing && Untagged->GetState() == EVBoRFoldingSeatState::Standing);
 		TestEqual(TEXT("Reset angle zero"), S->GetAngleDeg(), 0.0f); S->Tick(10); TestEqual(TEXT("No pending motion"), S->GetAngleDeg(), 0.0f);
-		TestEqual(TEXT("Reset record includes seat"), Records.Count(TEXT("시트 세움")), 1);
+		TestEqual(TEXT("Reset record includes seat"), Records.Count(TEXT("seat upright")), 1);
 	}
 	return true;
 }

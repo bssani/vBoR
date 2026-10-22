@@ -60,7 +60,7 @@ bool FP5fRest::RunTest(const FString&)
 {
 	FP5fWorld W; auto* K=W.Knob(); W.Play(); TestEqual(TEXT("Rest angle"),K->GetAngleDeg(),0.0); TestEqual(TEXT("Rest step"),K->GetStepIndex(),int64(0));
 	TestTrue(TEXT("Authored mesh world pose"),K->KnobMesh->GetComponentTransform().Equals(K->MeshRestFromRoot*K->GetActorTransform(),0.001));
-	TestTrue(TEXT("Input and validation boundary visible"),K->GetDebugText().Contains(TEXT("손바닥 감싸 쥐기만(엄지·검지 굴림 없음)")) && K->GetDebugText().Contains(TEXT("not-tested"))); return true;
+	TestTrue(TEXT("Input and validation boundary visible"),K->GetDebugText().Contains(TEXT("Palm wrap only (no thumb/index rolling)")) && K->GetDebugText().Contains(TEXT("not-tested"))); return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5fSigns,"vBoR.P5f.E2ClockwiseSigns",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)

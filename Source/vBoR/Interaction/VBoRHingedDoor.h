@@ -6,7 +6,7 @@
 class AVBoRHingedDoor;
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVBoRDoorEvent, AVBoRHingedDoor*, Door);
 
-// 기존 문 클래스·이벤트 인자는 유지함 (레벨·Blueprint 참조, P2c D1)
+// Keep existing door class/event arguments (level/Blueprint references, P2c D1)
 UCLASS(Blueprintable)
 class VBOR_API AVBoRHingedDoor : public AVBoRHingedPanel
 {

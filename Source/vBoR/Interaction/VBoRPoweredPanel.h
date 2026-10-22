@@ -19,7 +19,7 @@ enum class EVBoRPoweredSound : uint8 { OpenAccepted, CloseAccepted, Warning, Mot
 UENUM(BlueprintType)
 enum class EVBoRPoweredState : uint8 { Closed, OpeningWait, Opening, Open, ClosingWait, Closing };
 
-// 입력 접수와 대기 시간만 분리함 (포인터 callback 에서 이동·SDK 변경 방지, P4b D3·E11)
+// Separate acceptance from delay only (no motion/SDK changes in pointer callback, P4b D3/E11)
 struct FVBoRPoweredMotion
 {
 	EVBoRPoweredState State = EVBoRPoweredState::Closed;
@@ -77,7 +77,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Powered Panel") TObjectPtr<AVBoRPokeButton> OpenButton;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Powered Panel") TObjectPtr<AVBoRPokeButton> CloseButton;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel", meta = (Units = "cm")) FVector HingeLocationCm = FVector(0, 0, 145);
-	// Actor 원점에서의 닫힌 메시 자세. 메시 피벗이 차 원점이어도 자리를 보존함 (P4b D1)
+	// Closed mesh pose at Actor origin. Preserve car-origin mesh pivot position (P4b D1)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel") FTransform MeshRestFromRoot = FTransform(FQuat::Identity, FVector(-2.5, 0, 110), FVector(0.05, 1.3, 0.7));
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel", meta = (Units = "deg", ClampMin = "1", ClampMax = "170")) float OpenAngleDeg = 85;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel", meta = (Units = "deg/s", ClampMin = "0.1")) float SpeedDegPerSecond = 21.25f;
@@ -90,7 +90,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Sound", meta = (ToolTip = "Starts in the OnOpened arrival frame.")) FVBoRSoundCue OpenedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Sound", meta = (ToolTip = "Starts in the OnClosed arrival frame.")) FVBoRSoundCue ClosedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Sound", meta = (ToolTip = "Starts in the OnObstructed detection frame.")) FVBoRSoundCue ObstructedCue;
-	// 게이트 축 기준 cm·deg. 버튼 윗면 +Z 를 사용자 쪽 -X 로 향하게 둠 (P4b D6)
+	// Gate-axis cm/deg. Button top +Z faces user -X (P4b D6)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Buttons") FTransform OpenButtonFromHinge = FTransform(FRotator(90, 0, 0), FVector(-6, 20, -60));
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Buttons") FTransform CloseButtonFromHinge = FTransform(FRotator(90, 0, 0), FVector(-6, -20, -60));
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Buttons", meta = (Units = "cm")) FVector ButtonSizeCm = FVector(3, 3, 1);

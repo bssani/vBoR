@@ -224,7 +224,7 @@ bool FP4hSeats::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4hSeatReference,"vBoR.P4h.E9bMissingSeatReferenceAndFailedBase",P4hFlags)
 bool FP4hSeatReference::RunTest(const FString&)
 {
-	// 기준 좌석점 없으면 좌석 전환 거절, 전환 중 기준을 못 구하면 Pawn 그대로 (P4h 리뷰 R1-1)
+	// Reject seat transition without reference point; keep Pawn if reference lost mid-transition (P4h review R1-1)
 	FP4hWorld W; auto S = W.SavedPoints(); W.A->BaseEye = nullptr;
 	W.A->InitializeAlignment(W.Pawn,&S,W.A->Origin,W.A->Area); const FTransform Base = W.Pawn->GetActorTransform();
 	TestTrue(TEXT("Applied without eye point"),W.A->State == EVBoRAlignmentState::Applied);
@@ -270,10 +270,10 @@ bool FP4hCommandSeats::RunTest(const FString&)
 	FVBoRFlowCommand C{EVBoRFlowCommand::CapturePoint,EVBoRCommandSource::Participant,W.Runner->GetToken()};
 	TestEqual(TEXT("Participant cannot capture"),W.Runner->EvaluateCommand(C).Reason,FString(TEXT("Operator only")));
 	W.CaptureAll(); W.A->RequestReapply();
-	// 점 정렬 중 다시 적용 거절을 직접 확인함 (P4h D7)
+	// Directly check reapply rejection during point alignment (P4h D7)
 	TestFalse(TEXT("Direct reapply also blocked"),W.A->IsSwitching());
 	W.Button(PB::SavePoints); TestTrue(TEXT("Save starts fade"),W.A->IsSwitching());
-	// 저장 직후는 점 정렬이 끝나므로 Save 는 전체 기록 조건으로 거절됨
+	// Point alignment ends after save; Save rejected by full-capture requirement
 	TestEqual(TEXT("Save no longer in session"),W.Runner->EvaluateOperatorButton(PB::SavePoints).Reason,FString(TEXT("Capture all points first")));
 	W.FinishFade(); TestTrue(TEXT("Fresh P after save allowed"),W.Runner->EvaluateOperatorButton(PB::CapturePoint).bAccepted);
 	W.Button(PB::CapturePoint); TestEqual(TEXT("Fresh capture starts at point one"),W.A->GetCapturedPoints().Num(),0);
@@ -311,7 +311,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4hWriteFailure,"vBoR.P4h.E12WriteFailureRetai
 bool FP4hWriteFailure::RunTest(const FString&)
 {
 	FP4hWorld W; W.CaptureAll();
-	// 파일을 부모 경로로 써서 쓰기 실패를 재현함 (권한·OS 상태에 의존하지 않게, P4h E12)
+	// File as parent path forces write failure (independent of permissions/OS state, P4h E12)
 	IFileManager::Get().MakeDirectory(*FPaths::GetPath(W.Path),true); FFileHelper::SaveStringToFile(TEXT("block parent"),*W.Path); W.A->TestPath = W.Path / TEXT("blocked.json");
 	W.Button(PB::SavePoints); TestTrue(TEXT("Failed save keeps session"),W.A->IsPointAligning()); TestEqual(TEXT("Keeps all points"),W.A->GetCapturedPoints().Num(),4);
 	TestFalse(TEXT("No fade"),W.A->IsSwitching()); TestTrue(TEXT("Reason shown"),W.Runner->GetOperatorStatus().LastCommand.Contains(TEXT("write failed")));
@@ -327,7 +327,7 @@ bool FP4hMock::RunTest(const FString&)
 	{
 		auto* P = W.Car->AlignPoints[I].Get(); TestEqual(TEXT("Order"),P->Order,I+1); TestTrue(TEXT("Mock label"),P->Label.StartsWith(TEXT("Mock seat"))); TestTrue(TEXT("Position cm"),P->GetRelativeLocation().Equals(Expected[I]));
 		TestEqual(TEXT("No tags"),P->ComponentTags.Num(),0);
-		// 에디터에서 보이고 게임에서만 숨음 (P4h 리뷰 R1-2)
+		// Visible in editor, hidden only in game (P4h review R1-2)
 		TestTrue(TEXT("Visible in the editor for placement"),P->GetVisibleFlag()); TestFalse(TEXT("Hidden in game by default"),P->IsVisible());
 		TArray<USceneComponent*> Children; P->GetChildrenComponents(true,Children);
 		TestEqual(TEXT("Sphere and number"),Children.Num(),2);
@@ -338,7 +338,7 @@ bool FP4hMock::RunTest(const FString&)
 			if (const auto* Primitive = Cast<UPrimitiveComponent>(Child)) { TestTrue(TEXT("No collision"),Primitive->GetCollisionEnabled() == ECollisionEnabled::NoCollision); }
 		}
 	}
-	// 자식(구·번호)까지 게임 보임이 같이 바뀜 (P4h 리뷰 R1-3)
+	// Game visibility also propagates to children (sphere/number, P4h review R1-3)
 	const auto AllShown = [](UVBoRAlignPointComponent* P, bool bShown)
 	{
 		TArray<USceneComponent*> Parts; P->GetChildrenComponents(true,Parts); Parts.Add(P);

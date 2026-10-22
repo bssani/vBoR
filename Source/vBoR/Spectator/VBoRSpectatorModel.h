@@ -30,7 +30,7 @@ namespace VBoRSpectator
 	FVBoRSpectatorBanner Banner(const AVBoRScenarioRunner& Runner, const FVBoRSpectatorLabels& Labels);
 }
 
-// 이름별 직전 사용 상태와 해제 시각 보존 (순간 버튼·두 부품의 같은 이름, P5h D6·D7)
+// Keep prior usage/release time per name (momentary buttons/shared part names, P5h D6/D7)
 struct FVBoRSpectatorNames
 {
 	void Sample(const TArray<FString>& ActiveNames, double NowSeconds, double HoldSeconds);
@@ -48,7 +48,7 @@ private:
 	uint64 NextOrder = 0;
 };
 
-// 창 크기와 비율이 같으면 엔진 배치를 다시 넣지 않음 (P5h E15·E16)
+// No engine layout update if window size/ratio unchanged (P5h E15/E16)
 struct FVBoRSpectatorLayout
 {
 	bool Update(FIntPoint WindowSize, float EyeAspect, float MinPanelWidth);

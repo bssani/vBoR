@@ -77,22 +77,22 @@ void AP3VehicleMock::OnConstruction(const FTransform& Transform)
 	for (int32 I = 0; I < AlignPoints.Num(); ++I) { if (AlignPointsCm.IsValidIndex(I)) { AlignPoints[I]->SetRelativeLocation(AlignPointsCm[I]); } }
 	Footprint->SetRelativeLocation(FVector(0,0,BodySizeCm.Z*0.5));
 	Footprint->SetBoxExtent(FVector(BodySizeCm.X*0.5 + FootprintMarginCm, BodySizeCm.Y*0.5 + FootprintMarginCm, BodySizeCm.Z*0.5));
-	// 받침은 차에 고정함 (노브 회전에 따라 콘솔이 움직이지 않게, P5f D8, cm)
+	// Stand fixed to car (knob rotation must not move console, P5f D8, cm)
 	KnobSupport->SetRelativeLocation(KnobSupportCenterCm); KnobSupport->SetRelativeScale3D(KnobSupportSizeCm/100);
-	// 받침은 차에 고정함 (거울 회전에 따라 지붕이 움직이지 않게, P5e D8, cm)
+	// Stand fixed to car (mirror rotation must not move roof, P5e D8, cm)
 	const double MirrorRoofZ = BodySizeCm.Z-1.5;
 	MirrorSupport->SetRelativeLocation(FVector(MirrorPivotCm.X,MirrorPivotCm.Y,(MirrorRoofZ+MirrorPivotCm.Z)/2));
 	MirrorSupport->SetRelativeScale3D(FVector(1.5,1.5,FMath::Max(0.1,MirrorRoofZ-MirrorPivotCm.Z))/100);
 	DriverEye->SetRelativeLocation(DriverEyeCm); PassengerView->SetRelativeLocation(PassengerEyeCm); RearView->SetRelativeLocation(RearEyeCm);
 	Approach->SetBoxExtent(FVector(BodySizeCm.X/2 + ApproachSurroundCm, BodySizeCm.Y/2 + ApproachSurroundCm, BodySizeCm.Z));
-	// eye 아래 40 cm·위 25 cm 이므로 중심을 7.5 cm 내림 (P3 §2-4)
+	// 40 cm below/25 cm above eye: lower center 7.5 cm (P3 §2-4)
 	Seat->SetRelativeLocation(DriverEyeCm - FVector(0,0,7.5)); Seat->SetBoxExtent(FVector(25,25,32.5));
 	auto Plate = [this](int32 I, FVector P, FVector Size) { Plates[I]->SetRelativeLocation(P); Plates[I]->SetRelativeScale3D(Size/100); };
 	const double X = BodySizeCm.X/2, Y = BodySizeCm.Y/2, Z = BodySizeCm.Z;
 	Plate(0,FVector(0,0,1),FVector(BodySizeCm.X,BodySizeCm.Y,2));
 	Plate(1,FVector(-40,0,Z),FVector(BodySizeCm.X-120,BodySizeCm.Y,3));
 	Plate(2,FVector(X-50,0,65),FVector(100,BodySizeCm.Y,5));
-	// 개구부 바닥 아래만 남김 (트렁크 안을 뒤 벽 판이 가리지 않게, P4d D2, cm)
+	// Keep below opening floor only (rear wall must not obscure trunk, P4d D2, cm)
 	const float TrunkFloor = GetDefault<AP1TrunkMock>()->FloorHeightCm;
 	Plate(3,FVector(-X+10,0,TrunkFloor/2),FVector(20,BodySizeCm.Y,TrunkFloor));
 	Plate(4,FVector(0,Y,25),FVector(BodySizeCm.X,4,50));
@@ -104,7 +104,7 @@ void AP3VehicleMock::OnConstruction(const FTransform& Transform)
 	Plate(10,DriverEyeCm+FVector(-28,0,-40),FVector(8,46,60));
 	Plate(11,DashboardCenterCm,DashboardSizeCm);
 	Plate(12,DriverEyeCm+FVector(55,0,-28),FVector(5,30,30));
-	// 차 앞 +X 에서 -X 를 바라봄. 이 표시 위에서 시작 머리 기록함 (U-10, P3b D9)
+	// At car front +X facing -X. Record start head over this marker (U-10, P3b D9)
 	StartMarker->SetRelativeLocation(FVector(X+StartOutsideCm,0,0.5)); StartMarker->SetRelativeRotation(FRotator(0,180,0)); StartMarker->SetRelativeScale3D(FVector(0.6,0.6,0.005));
 	MockLabel->SetRelativeLocation(FVector(X+StartOutsideCm-40,0,60)); MockLabel->SetRelativeRotation(FRotator::ZeroRotator); MockLabel->SetRelativeScale3D(FVector(0.08));
 	PlaceReachButton();
@@ -113,11 +113,11 @@ void AP3VehicleMock::OnConstruction(const FTransform& Transform)
 void AP3VehicleMock::BeginPlay()
 {
 	Super::BeginPlay();
-	MockLabel->SetSlateWidget(SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 32)).ColorAndOpacity(FLinearColor::Yellow).Text(FText::FromString(TEXT("시작 위치 / 근사 형상·자리값"))));
+	MockLabel->SetSlateWidget(SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 32)).ColorAndOpacity(FLinearColor::Yellow).Text(FText::FromString(TEXT("Start position / Approximate geometry, placeholder values"))));
 	FrontKeyTable = CreateKeyTable(FrontKeyTableCm, TEXT("Car.FrontKey"), TEXT("Car.FrontKey.Unlock"), TEXT("Car.FrontKey.Lock"));
 	RearKeyTable = CreateKeyTable(RearKeyTableCm, TEXT("Car.RearKey"), TEXT("Car.RearKey.Unlock"), TEXT("Car.RearKey.Lock"));
 	CreateRearSection();
-	// 운전석과 같은 eye 기준 높이. 차 안쪽 폭 한 판으로 둠 (P4e D2, 근사 cm)
+	// Same eye reference height as driver. One panel across interior width (P4e D2, approximate cm)
 	RearCushion = NewObject<UStaticMeshComponent>(this, TEXT("ApproximateRearCushion"));
 	RearCushion->SetupAttachment(RootComponent);
 	RearCushion->SetStaticMesh(Plates[9]->GetStaticMesh());
@@ -142,7 +142,7 @@ void AP3VehicleMock::BeginPlay()
 	const FTransform DoorWorld(FRotator(0,GetActorRotation().Yaw+180,0), GetActorTransform().TransformPosition(DoorHingeCm));
 	Door->Tags.Add(TEXT("Car.DriverDoor")); Door->SpectatorName = FText::FromString(TEXT("Driver Door"));
 	Door->FinishSpawning(DoorWorld); Door->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
-	// Actor 원점은 차 원점, 메시·축만 부품 자리로 옮김 (차 원점 피벗 흉내, P2b D3)
+	// Actor origin = car origin; move mesh/axis only (simulate car-origin pivot, P2b D3)
 	OutsideAxisHandle = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
 	OutsideAxisHandle->AxisPivot->SetRelativeLocation(OutsideHandlePivotCm);
 	OutsideAxisHandle->MeshRestFromRoot = FTransform(FQuat::Identity, OutsideHandlePivotCm - FVector(0,0,2), FVector(0.18,0.04,0.04));
@@ -151,7 +151,7 @@ void AP3VehicleMock::BeginPlay()
 	OutsideAxisHandle->FinishSpawning(GetActorTransform());
 	OutsideAxisHandle->AttachToComponent(Door->HingePivot, FAttachmentTransformRules::KeepWorldTransform);
 	Door->SetAxisHandle(0, OutsideAxisHandle);
-	// 차 +Y 가 실내 쪽. 레버 아래를 당기면 +X 축으로 젖혀짐 (근사 자리값, P2d D5)
+	// Car +Y = interior. Pull lever bottom to tilt around +X (placeholder, P2d D5)
 	InsideAxisHandle = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
 	InsideAxisHandle->AxisPivot->SetRelativeLocation(InsideHandlePivotCm);
 	InsideAxisHandle->MeshRestFromRoot = FTransform(FQuat::Identity, InsideHandlePivotCm - FVector(0,0,2), FVector(0.18,0.04,0.04));
@@ -160,11 +160,11 @@ void AP3VehicleMock::BeginPlay()
 	InsideAxisHandle->FinishSpawning(GetActorTransform());
 	InsideAxisHandle->AttachToComponent(Door->HingePivot, FAttachmentTransformRules::KeepWorldTransform);
 	Door->SetAxisHandle(1, InsideAxisHandle);
-	// +Y 윗면·+Z 차 -Y 축. 양의 열림이 위로 향함 (가로 경첩, P2c D3)
+	// +Y top/+Z car -Y. Positive opening points up (horizontal hinge, P2c D3)
 	ConsoleLid = GetWorld()->SpawnActorDeferred<AVBoRHingedPanel>(AVBoRHingedPanel::StaticClass(), GetActorTransform(), this);
 	ConsoleLid->HingePivot->SetRelativeTransform(FTransform(FQuat(FVector::XAxisVector, PI / 2), ConsoleLidPivotCm));
 	ConsoleLid->MeshRestFromRoot = FTransform(FQuat::Identity, ConsoleLidPivotCm + FVector(17.5,0,0), FVector(0.35,0.24,0.03));
-	// 앞면 가운데를 잡음. 표시는 차 -X 로 0.75 cm 들어감 (근사 자리값, P2d R1 D8)
+	// Grab front center. Visual recesses 0.75 cm along car -X (placeholder, P2d R1 D8)
 	ConsoleLid->OutsideHandle->SetRelativeLocation(FVector(36,0,0));
 	ConsoleLid->OutsideHandle->SetBoxExtent(FVector(4,4,8));
 	ConsoleLid->OutsideHandleMesh->SetRelativeScale3D(FVector(0.02,0.03,0.14));
@@ -177,13 +177,13 @@ void AP3VehicleMock::BeginPlay()
 	ConsoleLid->SpectatorName = FText::FromString(TEXT("Console Box"));
 	ConsoleLid->FinishSpawning(GetActorTransform());
 	ConsoleLid->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
-	// +X 차 +Z·+Y 차 -X·+Z 차 -Y. 아래 경첩에서 앉은 쪽으로 내려옴 (근사 cm, P5a D2·D6)
+	// +X car +Z/+Y car -X/+Z car -Y. Lower hinge drops toward seat (approximate cm, P5a D2/D6)
 	Glovebox = GetWorld()->SpawnActorDeferred<AVBoRHingedPanel>(AVBoRHingedPanel::StaticClass(), GetActorTransform(), this);
 	Glovebox->HingePivot->SetRelativeTransform(FTransform(FRotationMatrix::MakeFromXZ(FVector::ZAxisVector, -FVector::YAxisVector).ToQuat(), GloveboxHingeCm));
 	Glovebox->MeshRestFromRoot = FTransform(FQuat::Identity, GloveboxHingeCm + FVector(0,0,GloveboxSizeCm.Z/2), GloveboxSizeCm/100);
 	Glovebox->bUseLatch = true; Glovebox->bAllowPalmOpening = false; Glovebox->bUseInsideGrabArea = false;
 	Glovebox->MaxAngleDeg = GloveboxMaxAngleDeg; Glovebox->MinAxisDistanceCm = GloveboxMinAxisDistanceCm;
-	// 윗변 +Y 축. 아랫변을 -X·위로 당김 (손잡이만 복귀, 근사 cm, P5a D3·D4)
+	// Upper edge +Y axis. Pull lower edge -X/up (handle alone returns, approximate cm, P5a D3/D4)
 	GloveboxHandle = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
 	GloveboxHandle->AxisPivot->SetRelativeLocation(GloveboxHandlePivotCm);
 	GloveboxHandle->MeshRestFromRoot = FTransform(FQuat::Identity, GloveboxHandlePivotCm - FVector(0,0,GloveboxHandleSizeCm.Z/2), GloveboxHandleSizeCm/100);
@@ -196,7 +196,7 @@ void AP3VehicleMock::BeginPlay()
 	Glovebox->FinishSpawning(GetActorTransform());
 	Glovebox->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	GloveboxHandle->AttachToComponent(Glovebox->HingePivot, FAttachmentTransformRules::KeepWorldTransform);
-	// 차 원점 메시·축 자리값. +X 회전으로 끝이 위로 감 (근사 cm·deg, P5b D9)
+	// Car-origin mesh/axis placeholders. +X rotation raises tip (approximate cm/deg, P5b D9)
 	GearLever = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
 	GearLever->AxisPivot->SetRelativeTransform(FTransform(GearAxisRotation, GearPivotCm));
 	GearLever->MeshRestFromRoot = FTransform(GearAxisRotation.Quaternion(), GearPivotCm + GearAxisRotation.RotateVector(FVector(0,GearSizeCm.Y/2,0)), GearSizeCm/100);
@@ -207,14 +207,14 @@ void AP3VehicleMock::BeginPlay()
 	GearLever->PushMarginCm = LeverPushMarginCm;
 	GearLever->SpectatorName = FText::FromString(TEXT("Gear Lever"));
 	GearLever->FinishSpawning(GetActorTransform()); GearLever->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
-	// 버튼 +Z 면을 레버 끝 +Y 로 놓음. 잡기·단계와 연결하지 않음 (P5b D8)
+	// Button +Z face at lever tip +Y. Independent of grab/step (P5b D8)
 	const FTransform ButtonFromPivot(FRotationMatrix::MakeFromZ(FVector::YAxisVector).ToQuat(), FVector(0,GearSizeCm.Y,0));
 	const FTransform ButtonWorld = ButtonFromPivot * GearLever->AxisPivot->GetComponentTransform();
 	GearButton = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), ButtonWorld, this);
 	GearButton->ButtonMesh->SetRelativeScale3D(GearButtonSizeCm/100); GearButton->HitAreaScale = 1;
 	GearButton->SpectatorName = FText::FromString(TEXT("Gear Button"));
 	GearButton->FinishSpawning(ButtonWorld); GearButton->AttachToComponent(GearLever->AxisPivot, FAttachmentTransformRules::KeepWorldTransform);
-	// 왼쪽 -Y 레버는 회전 부호를 뒤집음 (값 + 일 때 끝이 위로, 근사 cm·deg, P5c D7)
+	// Reverse left -Y lever rotation sign (positive value raises tip, approximate cm/deg, P5c D7)
 	TurnSignalLever = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
 	TurnSignalLever->AxisPivot->SetRelativeTransform(FTransform(TurnSignalAxisRotation, TurnSignalPivotCm));
 	TurnSignalLever->MeshRestFromRoot = FTransform(TurnSignalAxisRotation.Quaternion(), TurnSignalPivotCm + TurnSignalAxisRotation.RotateVector(FVector(0,-TurnSignalSizeCm.Y/2,0)), TurnSignalSizeCm/100);
@@ -226,7 +226,7 @@ void AP3VehicleMock::BeginPlay()
 	TurnSignalLever->PushMarginCm = LeverPushMarginCm;
 	TurnSignalLever->SpectatorName = FText::FromString(TEXT("Turn Signal Lever"));
 	TurnSignalLever->FinishSpawning(GetActorTransform()); TurnSignalLever->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
-	// 판은 에디터·기존 시험 기준으로 남김 (차 원점 피벗, 근사 cm·deg, P5d D8)
+	// Keep panel for editor/existing tests (car-origin pivot, approximate cm/deg, P5d D8)
 	SteeringWheel = GetWorld()->SpawnActorDeferred<AVBoRSteeringWheel>(AVBoRSteeringWheel::StaticClass(),GetActorTransform(),this);
 	if (SteeringWheel)
 	{
@@ -246,7 +246,7 @@ void AP3VehicleMock::BeginPlay()
 		RearviewMirror->MeshRestFromRoot = FTransform(FQuat::Identity,MirrorCenterCm,MirrorSizeCm/100);
 		RearviewMirror->SpectatorName = FText::FromString(TEXT("Rearview Mirror"));
 		RearviewMirror->FinishSpawning(GetActorTransform()); RearviewMirror->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform);
-		// 근사 색은 근사 차에서만 칠함 (Blueprint 자식의 실제 재질 보존, P5l D4)
+		// Approximate colors on mock car only (preserve Blueprint child materials, P5l D4)
 		if (auto* Material = LoadObject<UMaterialInterface>(nullptr,IsdkContentAssetPaths::Materials::GrabbableDefault))
 		{
 			auto* FaceMaterial = UMaterialInstanceDynamic::Create(Material,RearviewMirror);
@@ -254,7 +254,7 @@ void AP3VehicleMock::BeginPlay()
 			RearviewMirror->PartMesh->SetMaterial(0,FaceMaterial);
 		}
 	}
-	// Actor 원점은 차 원점, +Z 가 노브 윗면임 (근사 지름·높이 cm, P5f D8·U-09)
+	// Actor origin = car origin, +Z knob top (approximate diameter/height cm, P5f D8/U-09)
 	ConsoleKnob = GetWorld()->SpawnActorDeferred<AVBoRKnob>(AVBoRKnob::StaticClass(),GetActorTransform(),this);
 	if (ConsoleKnob)
 	{
@@ -303,7 +303,7 @@ void AP3VehicleMock::KeyLockPressed(AVBoRKeyFob* Key) { OnKeyLockPressed.Broadca
 void AP3VehicleMock::PlaceReachButton()
 {
 	if (!ReachButton || !ReachButton->ButtonMesh->GetStaticMesh()) { return; }
-	// 윗면·크기를 판에서 읽음. Z 자리값은 쓰지 않음 (대시보드에 묻힘 방지, R1-6)
+	// Read top/size from panel, no placeholder Z (avoid dashboard burial, R1-6)
 	const FBox Dashboard = Plates[11]->GetStaticMesh()->GetBoundingBox().TransformBy(Plates[11]->GetRelativeTransform());
 	const FBox Button = ReachButton->ButtonMesh->GetStaticMesh()->GetBoundingBox().TransformBy(
 		ReachButton->ButtonMesh->GetComponentTransform().GetRelativeTransform(ReachButton->GetActorTransform()));
@@ -349,7 +349,7 @@ void AP3VehicleMock::CreateRearSection()
 	Trunk->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	Liftgate = GetWorld()->SpawnActorDeferred<AVBoRPoweredPanel>(AVBoRPoweredPanel::StaticClass(), RearPose, this);
 	Liftgate->Tags.Add(TEXT("Car.Liftgate"));
-	// 개구부 +X 가 차 안쪽. P1 시험대와 같은 축·버튼 자리값 (P4d D2, cm)
+	// Opening +X = car interior. Same axis/button placeholders as P1 bench (P4d D2, cm)
 	Liftgate->HingeLocationCm = FVector(0,0,Trunk->FloorHeightCm+Trunk->InsideHeightCm);
 	Liftgate->MeshRestFromRoot = FTransform(FQuat::Identity, FVector(-Trunk->PanelThicknessCm*0.5,0,Trunk->FloorHeightCm+Trunk->InsideHeightCm*0.5), FVector(Trunk->PanelThicknessCm,Trunk->InsideWidthCm,Trunk->InsideHeightCm)/100);
 	Liftgate->OpenButtonFromHinge.SetLocation(FVector(-Trunk->PanelThicknessCm-1,20,-Trunk->InsideHeightCm+10));
