@@ -46,7 +46,9 @@
 - **집 시험 도구(콘솔 변수, 기본 꺼짐):**
   - `vBoR.HomeShift`: 키패드로 1 m씩 옮김
   - `vBoR.RouteIgnorePlayArea`: 플레이 영역 밖이어도 바닥 경로를 그림
-  - **회사 평가에서는 켜지 않는다.**
+  - `vBoR.EyeAlignment`: 켜져 있는 동안만 `L_P0c_BuckEye`에서 저장한 눈 위치 정렬을 L_Main에 적용한다(P5u). 끄면 바로 정렬 전 자리로 돌아간다. 꺼져 있으면 L_Main은 4점 정렬 저장값만 쓰고, 4점 저장값이 없으면 정렬 상태가 "No saved value"가 되어 시작이 막힌다(진행자 `O`로 무시하고 시작할 수는 있다).
+    - 집 PC에서 계속 켜 두려면 리포 루트에 `Config/UserEngine.ini`를 만들고 `[ConsoleVariables]` 아래 `vBoR.EyeAlignment=1`을 적는다. 이 파일은 git에 올라가지 않는다(`.gitignore`). `Saved/Config/…/Engine.ini`에 적으면 에디터가 지운다.
+  - **회사 평가에서는 켜지 않는다.** 회사 PC에 `Config/UserEngine.ini`가 없는지 확인한다.
 
 ## 3. 회사 PC에서 처음 설정
 
@@ -62,7 +64,7 @@
 
 ## 4. CAD에서 확인할 값 — 회사 PC에서 처음 할 일
 
-근사값은 모두 `Source/vBoR/P3Probe/P3VehicleMock.h`의 `자리값` 카테고리 프로퍼티(약 59개)에 있다. **그 목록이 곧 CAD에서 뽑을 값의 목록이다.** 아래는 묶음과 쓰는 곳이다.
+근사값은 모두 `Source/vBoR/P3Probe/P3VehicleMock.h`의 `Placeholder` 카테고리 프로퍼티(약 59개)에 있다. **그 목록이 곧 CAD에서 뽑을 값의 목록이다.** 아래는 묶음과 쓰는 곳이다.
 
 | # | 묶음 | 뽑을 값 | 쓰는 곳 | 주의 |
 |---|---|---|---|---|

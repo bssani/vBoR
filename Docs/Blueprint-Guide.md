@@ -91,7 +91,7 @@ L_Main
 2. **BP를 레벨에 놓을 때 Actor 위치는 차 원점(월드 원점)이다.** CAD 메시는 피벗이 차 원점에 묶여 있으므로, 메시를 원래 자리에 둔 채 **축 컴포넌트만** 경첩·회전축 자리로 옮긴다(U-09, P2b D3). 근사 차가 같은 방식이다("Actor 원점은 차 원점, 메시·축만 부품 자리로", `P3VehicleMock.cpp:145`).
 3. **메시:** 부품 메시 컴포넌트(표의 "메시")에 CAD 메시를 넣는다. 문에 붙어 같이 도는 것(유리·미러·트림)은 하나로 merge해서 넣는다(U-14). 손잡이처럼 따로 움직이는 것은 따로 BP다.
 4. **`MeshRestFromRoot`는 차 원점에서 본 메시 자리다.** 메시 피벗이 차 원점 그대로면 **단위 변환**(위치 0, 회전 0, 크기 1)으로 둔다.
-   - 지금 BP의 값은 근사 상자용 크기·위치다. CAD 메시로 바꿀 때 같이 바꾼다. 문·패널의 "설정 검사"가 바꾸지 않은 것을 경고한다("Non-cube DoorMesh still uses mock MeshRestFromRoot", `Interaction/VBoRHingedPanel.cpp:292`).
+   - 지금 BP의 값은 근사 상자용 크기·위치다. CAD 메시로 바꿀 때 같이 바꾼다. 문·패널의 "Check setup"가 바꾸지 않은 것을 경고한다("Non-cube DoorMesh still uses mock MeshRestFromRoot", `Interaction/VBoRHingedPanel.cpp:292`).
    - 메시 충돌로 잡는 부품은 피벗을 옮기고, 옮긴 만큼을 여기에 넣는다(§4.3).
 5. **축 컴포넌트:** 표의 "축"에 CAD의 경첩·회전 중심 위치와 방향을 넣는다. 방향 규칙은 근사 차 줄(표의 "예")의 주석에 있다. 처음 하나는 그 줄을 그대로 따라 하고, Play로 열리는 방향을 확인한 뒤 나머지를 맞춘다.
 6. **태그**는 Actor의 Tags(Details → Actor → Tags)에 넣는다. **`SpectatorName`**은 TV 띠에 보일 영어 이름이다(예 `Driver Door`).
@@ -159,10 +159,10 @@ L_Main
    - 아무것도 안 보이면 Details → LOD0 → Sections에서 그 섹션의 `Enable Collision`이 꺼져 있는 것이다.
    - 보이는 메시보다 거칠면 Nanite 대체 메시로 만들어졌을 수 있다(확인 안 한 엔진 동작). 잡기·밀기도 그 거친 모양으로 판정된다.
 2. **Simple Collision** 보기로 이미 simple 충돌이 있는지 본다. 있어도 큰 상자 하나 수준이면 지금 잡는 상자와 다를 게 없다. 그러면 아래 잡기 3의 Use Complex Collision As Simple로 바꾼다.
-3. 문은 `Double Sided Geometry`를 켠 뒤 문 BP의 "설정 검사"를 누른다. Play 없이 trace되는지 알려 준다(아래 밀기 4).
-4. 잡는 부품에는 "설정 검사" 버튼이 없다. 옵션을 켜고 Play를 한 번 해서, Output Log에 `grab mesh …` 경고가 없는지 본다.
+3. 문은 `Double Sided Geometry`를 켠 뒤 문 BP의 "Check setup"를 누른다. Play 없이 trace되는지 알려 준다(아래 밀기 4).
+4. 잡는 부품에는 "Check setup" 버튼이 없다. 옵션을 켜고 Play를 한 번 해서, Output Log에 `grab mesh …` 경고가 없는지 본다.
 
-**잡기 — `메시 충돌로 잡기`(`bGrabWithMesh`).** 1축 부품·스티어링 휠·룸미러·노브의 Input 칸에 있다.
+**잡기 — `Grab with mesh collision`(`bGrabWithMesh`).** 1축 부품·스티어링 휠·룸미러·노브의 Input 칸에 있다.
 1. **메시 피벗을 손이 잡는 부분 가운데로 옮긴다.**
    - 이유: ISDK는 손바닥에 닿은 후보 중 충돌 컴포넌트 **원점**이 가장 가까운 것을 고른다(`Plugins/MetaXRInteraction/Source/OculusInteraction/Private/Interaction/GrabDetectors/IsdkHandGrabDetector.cpp:397-460`). CAD 메시는 피벗이 모두 차 원점이다. 그대로 두면 휠과 레버처럼 가까운 부품 사이에서 무엇이 잡힐지 정해지지 않는다.
    - 옵션을 켰는데 피벗이 Actor 원점에서 1 cm 안이면 Play 때 경고한다("grab mesh pivot is at the actor origin").
@@ -183,12 +183,12 @@ L_Main
   - 삼각형 충돌은 표면만 있고 안이 없다. 손바닥 감지 구(반지름 4 cm)가 표면에 닿을 때만 hover된다. 그래서 두께 8 cm보다 두꺼운 부품 안으로 손이 완전히 들어가면 hover가 끊긴다. 손잡이·레버·노브·미러·휠 테는 얇아서 거의 해당하지 않는다.
   - 피벗 변경은 메시 에셋에 들어간다. 그래서 CAD를 다시 import하면 사라질 수 있다. **부품마다 옮긴 값을 기록해 둔다.** 다시 옮기고 `MeshRestFromRoot`에 같은 값을 넣는다.
 
-**밀기 — `메시 표면으로 밀기`(`bPushOnMeshSurface`).** 문·콘솔·글러브박스(`AVBoRHingedPanel`)의 Push face 칸에 있다.
+**밀기 — `Push on mesh surface`(`bPushOnMeshSurface`).** 문·콘솔·글러브박스(`AVBoRHingedPanel`)의 Push face 칸에 있다.
 1. **피벗은 옮기지 않는다.** `DoorMesh`는 차 원점 피벗 그대로 두고, `MeshRestFromRoot`는 단위 변환이다. 손 점마다 그 자리의 면을 trace로 읽기 때문이다(P2g D2).
 2. **메시 에셋에서 `Double Sided Geometry`를 켠다**(Static Mesh 에디터 → Collision).
    - 복합 trace는 기본으로 뒷면을 무시한다. 그래서 한 장짜리 겉판이나 면 방향이 뒤집힌 곳에서는 trace가 빠진다(P2g 리뷰 참고 1).
 3. 충돌은 따로 만들지 않아도 된다. 엔진이 렌더 삼각형으로 복합 충돌을 만든다.
-4. 옵션을 켜고 **"설정 검사"**를 누른다.
+4. 옵션을 켜고 **"Check setup"**를 누른다.
    - "DoorMesh has no traceable collision"이 나오면 trace가 안 되는 것이다. 그러면 bounds로 민다.
    - 켜면 미는 면 상자(`bUsePushFaceBox`)는 쓰지 않는다("PushFaceBox ignored …" 알림). 두께 경고도 내지 않는다.
 - merge한 사이드미러 같은 돌출도 미는 면이 된다. 미러를 밀면 문이 밀린다.
@@ -291,7 +291,7 @@ L_Main
 - 레벨 Outliner에서 손잡이를 **문(판) Actor 밑으로 끌어다 붙인다.** Play 때 판이 자기 밑의 손잡이를 찾아 연결하고, 경첩 축(`HingePivot`)에 붙여 같이 돌게 한다(`Interaction/VBoRHingedPanel.cpp:200-210`, `:328`).
   - Child Actor 컴포넌트로 넣는 경우에는 그 컴포넌트를 BP 안에서 **`HingePivot` 밑에** 둔다. 아니면 연결하지 않고 경고한다(`:236-238`).
 - 손잡이 하나를 두 판이 같이 쓰면, 먼저 연결한 판이 갖는다(경고).
-- 판 Details의 **"설정 검사"** 버튼(Hinged panel → Setup)이 Play 전에 같은 판정을 보여 준다. 판마다 한 번 누른다.
+- 판 Details의 **"Check setup"** 버튼(Hinged panel → Setup)이 Play 전에 같은 판정을 보여 준다. 판마다 한 번 누른다.
 
 ### 6.2 기어 끝 버튼 → 레버 (자동화로 확인 — P4i, VR 전)
 
@@ -360,7 +360,7 @@ L_Main
 
 ## 9. 넣은 뒤 확인 — 순서대로
 
-1. **판마다 "설정 검사"**를 눌러 Output Log에 문제가 없는지 본다(§6.1).
+1. **판마다 "Check setup"**를 눌러 Output Log에 문제가 없는지 본다(§6.1).
 2. **Play(PIE) 한 번** — Output Log에서 찾을 것:
    - `Template Mismatch during attachment`(ensure)가 없을 것. P4f에서 네이티브 부모의 BP 자식이 이것을 냈다. 정렬 점(`UVBoRAlignPointComponent`)도 같은 구조라 처음 한 번은 꼭 본다(P4h 리뷰 참고 2).
    - `P2e setup:` 경고가 없을 것(손잡이 연결).
