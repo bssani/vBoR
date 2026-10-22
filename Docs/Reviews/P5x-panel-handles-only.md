@@ -2,6 +2,34 @@
 
 첫 리뷰 전. 명세 §3의 중단 규칙에 따라 질문을 기록했고, 개정 1 답을 반영함. Claude 리뷰 대기.
 
+## 1회차 (2026-10-23, Claude) — 통과 (문제 없음, 참고 3개)
+
+- 리뷰한 커밋: `2efff1a`(중단 wip) + `a59956c` fix: 판 손잡이 연결과 생성 순서 정리. 베이스 `main@f668723`. 명세 개정 1(`5617297`).
+- Codex 토큰: 12.49M(중단 전후 한 세션 합계). 중단(Q1·Q2)은 Claude 감사 누락 탓이다.
+
+### 확인한 것
+
+| 항목 | 결과 |
+|---|---|
+| D1 | 헤더·구현에서 명세 목록만 지웠다. 남은 추가 줄은 D2 경고 조건·문장, 손 펴기 때 `HoldingGrabber` 없이 `EndAxisHold`, `bUseLatch` 툴팁(내장 상자 문구 제거)뿐. `CancelSelections`는 손잡이 Actor 정리만 남았고 `PreInitializeComponents`는 잡기 연결 없이 그대로 |
+| D2 | 경고 조건 `bUseLatch && !OutsideAxisHandle && !InsideAxisHandle`, 문장 "Latched panel has no opening handle." |
+| D3·D6 | `BP_ConsoleHandle` 새로(Translate·`MaxTravelCm`). `BP_Door_FL`·`BP_ConsoleLid`·`BP_Glovebox`·`L_Main`에 지운 컴포넌트·프로퍼티 이름이 남지 않았다(바이너리 검사). `L_Main`에 `BP_ConsoleHandle` 있음. 바뀐 에셋은 명세의 5개뿐. 에셋 한글 0 |
+| D4 | 근사 차 콘솔 손잡이: 직선·0.75 cm·복귀·바깥·`bReverse`(경첩 −X)·"Console Box", 메시 회전·크기는 옛 표시와 같음(경첩 X 90°, 0.02×0.03×0.14). 문은 deferred와 `FinishSpawning`에 같은 `DoorWorld`, 손잡이를 먼저 붙이고 칸에 넣은 뒤 `FinishSpawning`(Q2 답대로) |
+| D5 | P2 시험대가 손잡이 Actor 두 개를 기존 자리 값으로 만들고 칸에 넣는다. 종료 때 같이 지운다 |
+| D7 | P4i 목록·16개·짝·연결 확인에 콘솔 손잡이 추가, E1–E4 통과 |
+| 시험 | 지운 시험 3개는 §3 표대로(P2Door PalmHandleOverlap, P2d E2, P2d E10). P2d 단언 106 → 76은 그 두 시험과 내장 상자 확인 줄 때문이다. E14는 손잡이 Actor가 손 펴기·잠김·Reset·SDK 놓기 뒤 0 cm로 돌아오는지로, E16은 직선·0.75 cm·복귀·바깥·손바닥만·경첩 부모·앞 가운데 36 cm·경첩 −X로 바뀌었다. 새 `vBoR.P5x.*` 4개는 기본 객체 컴포넌트, 덜 누름(0.5 cm 잠김 유지), 끝까지 누름(풀림·같은 손으로 들어 올림·놓으면 손잡이 0, 판 그 각), 손잡이 없는 판(경고 1·`Unlock` 뒤 밀기)을 본다 |
+| 빌드·시험 재현 | non-unity·unity Succeeded(링크만 함. Codex 로그 `P5x-Rev1-NonUnity.log` 4개·`P5x-Rev1-Unity.log` 2개 컴파일, 경고 0). `vBoR.*` 557/557 통과(556 − 3 + 4, `Saved/Logs/P5xReviewAll.log`) |
+
+### 문제
+
+없음.
+
+### 참고 (고치지 않아도 됨)
+
+1. **콘솔 동작이 바뀌었다:** 잡기만 하면 풀리던 것이 0.6 cm 이상 눌러야 풀린다(명세 D3). Quest 3에서 문턱이 자연스러운지 본다(T-08, `not-tested`). 문턱은 `BP_ConsoleHandle`의 `OpenThreshold`·`MaxTravelCm`으로 바꾼다.
+2. **`Attempts`(내장 상자 hover 집계)는 이제 늘지 않는다.** 측정 문구 형식을 지키려고 칸은 그대로다(명세 범위 밖). 손잡이 시도는 손잡이 Actor의 집계로 본다.
+3. **사용자 확인:** `BP_Door_FL` 뷰포트에 손잡이 상자가 더 보이지 않는지. Blueprint-Guide의 내장 잡는 자리·콘솔 설명은 머지 뒤 Claude가 고친다.
+
 ## 질문
 
 ### Q1 — 기존 시험 감사 표 밖의 콘솔 단언 두 곳
