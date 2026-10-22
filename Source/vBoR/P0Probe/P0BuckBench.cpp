@@ -17,6 +17,7 @@
 #include "Misc/CoreDelegates.h"
 #include "Misc/Paths.h"
 #include "HAL/PlatformTime.h"
+#include "HAL/FileManager.h"
 
 DEFINE_LOG_CATEGORY(LogP0Buck);
 
@@ -152,6 +153,18 @@ void AP0BuckBench::LoadAndApply(const FVBoRBuckHeadFrame& Frame)
 	ApplySaved(Frame, false);
 }
 
+bool AP0BuckBench::BackupPointSave(FString& Failure)
+{
+	FVBoRBuckSavedAlignment Previous; FString LoadReason;
+	if (!FVBoRBuckAlignmentStore::Load(SavePath, Previous, LoadReason) || Previous.Version != 2) { return true; }
+	const FString Backup = FPaths::ChangeExtension(SavePath, TEXT("points-backup.json"));
+	// 복사 실패 때 원본 4점 값을 지킴 (P5u D4)
+	if (IFileManager::Get().Copy(*Backup, *SavePath, true) != COPY_OK)
+	{ Failure = TEXT("Point alignment backup failed; previous alignment retained: ") + Backup; return false; }
+	Record(TEXT("Point alignment backed up: ") + Backup);
+	return true;
+}
+
 void AP0BuckBench::ApplySaved(const FVBoRBuckHeadFrame& Frame, bool bFreshSave)
 {
 	const auto Eyes = FindEyes(GetWorld());
@@ -252,7 +265,7 @@ void AP0BuckBench::ProcessFrame(double, const FVBoRBuckHeadFrame& Frame)
 						Candidate.SavedAt = FDateTime::UtcNow().ToIso8601();
 						Candidate.TrackingOrigin = Frame.TrackingOrigin; Candidate.PlayAreaCm = Frame.PlayAreaCm; Candidate.Capture = Result;
 						FString Reason;
-						if (!FVBoRBuckAlignmentStore::Save(SavePath, Candidate, Reason)) { LastCapture += TEXT(" | ") + Reason; Record(LastCapture); }
+						if (!BackupPointSave(Reason) || !FVBoRBuckAlignmentStore::Save(SavePath, Candidate, Reason)) { LastCapture += TEXT(" | ") + Reason; Record(LastCapture); }
 						else { Saved = Candidate; bHasSaved = true; ApplySaved(Frame, true); }
 					}
 				}

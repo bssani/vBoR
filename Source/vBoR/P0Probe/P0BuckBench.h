@@ -56,6 +56,9 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 private:
+#if WITH_DEV_AUTOMATION_TESTS
+	friend struct FP5uTestAccess;
+#endif
 	friend struct FP4hTestAccess;
 	friend struct FP0BuckTestAccess;
 	UPROPERTY() TObjectPtr<APawn> AlignmentPawn;
@@ -83,6 +86,7 @@ private:
 	FVBoRBuckHeadFrame ReadHead() const;
 	void ProcessFrame(double DeltaSeconds, const FVBoRBuckHeadFrame& Frame);
 	void LoadAndApply(const FVBoRBuckHeadFrame& Frame);
+	bool BackupPointSave(FString& Failure);
 	void ApplySaved(const FVBoRBuckHeadFrame& Frame, bool bFreshSave);
 	void StartSave();
 	void ReleaseSave();

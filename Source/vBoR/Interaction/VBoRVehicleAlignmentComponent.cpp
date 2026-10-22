@@ -13,6 +13,14 @@
 #include "Kismet/GameplayStatics.h"
 #include "Misc/CoreDelegates.h"
 #include "Misc/Paths.h"
+#include "HAL/IConsoleManager.h"
+
+namespace
+{
+	TAutoConsoleVariable<int32> CVarEyeAlignment(TEXT("vBoR.EyeAlignment"), 0,
+		TEXT("Home testing only: 1 = apply the P0-c version 1 save with saved eye height. 0 = point alignment only. Changes take effect while playing."));
+	const TCHAR* EyeDisabledReason = TEXT("저장값 없음 — 눈 방식 저장값(집 시험용)은 vBoR.EyeAlignment 0이라 쓰지 않음. 진행자 창 P로 점 정렬 또는 P0-c 저장 후 vBoR.EyeAlignment 1로 켬");
+}
 
 UVBoRVehicleAlignmentComponent::UVBoRVehicleAlignmentComponent()
 {
@@ -25,6 +33,8 @@ void UVBoRVehicleAlignmentComponent::BeginPlay()
 	if (!BaseEye) { BaseEye = GetOwner()->FindComponentByClass<UVBoREyePointComponent>(); }
 	RecenterHandle = FCoreDelegates::VRHeadsetRecenter.AddUObject(this, &UVBoRVehicleAlignmentComponent::HandleRecenter);
 	AlignmentPawn = UGameplayStatics::GetPlayerPawn(this, 0);
+	if (AlignmentPawn) { BeforeSetupPawn = AlignmentPawn->GetActorTransform(); }
+	bEyeEnabled = CVarEyeAlignment.GetValueOnGameThread() != 0;
 	LoadSetupAlignment();
 }
 
@@ -47,8 +57,10 @@ void UVBoRVehicleAlignmentComponent::LoadSetupAlignment()
 {
 	FVBoRBuckSavedAlignment Loaded; FString LoadReason;
 	const bool bLoaded = FVBoRBuckAlignmentStore::Load(SavedAlignmentPath(), Loaded, LoadReason);
+	const bool bEyeBlocked = bLoaded && Loaded.Version == 1 && CVarEyeAlignment.GetValueOnGameThread() == 0;
 	int32 Origin; FVector2D Bounds; ReadPointEnvironment(Origin,Bounds);
-	InitializeAlignment(AlignmentPawn, bLoaded ? &Loaded : nullptr, Origin, Bounds);
+	InitializeSetup(AlignmentPawn, bLoaded && !bEyeBlocked ? &Loaded : nullptr, Origin, Bounds, true);
+	if (bEyeBlocked) { Reason = EyeDisabledReason; }
 	if (!bLoaded) { Reason += TEXT(" — ") + LoadReason; }
 }
 
@@ -64,7 +76,14 @@ void UVBoRVehicleAlignmentComponent::EndPlay(const EEndPlayReason::Type EndPlayR
 }
 
 void UVBoRVehicleAlignmentComponent::InitializeAlignment(APawn* Pawn, const FVBoRBuckSavedAlignment* Value, int32 Origin, const FVector2D& PlayArea)
+{ InitializeSetup(Pawn, Value, Origin, PlayArea, false); }
+
+void UVBoRVehicleAlignmentComponent::InitializeSetup(APawn* Pawn, const FVBoRBuckSavedAlignment* Value, int32 Origin, const FVector2D& PlayArea, bool bFromFile)
 {
+	bAlignmentFromFile = bFromFile;
+	bFileEyeAlignment = bFromFile && Value && Value->Version == 1;
+	bPendingEyeEnable = false; bRestoringEye = false;
+	bool bApplied = false;
 	AlignmentPawn = Pawn; bHasSaved = Value != nullptr;
 	CurrentViewpoint = nullptr; PendingViewpoint = nullptr; bSwitching = false; bReapplying = false;
 	State = EVBoRAlignmentState::NoSavedValue;
@@ -83,10 +102,12 @@ void UVBoRVehicleAlignmentComponent::InitializeAlignment(APawn* Pawn, const FVBo
 		{
 			// 참가자의 현재 머리 자세를 읽지 않음 (체격 차이 유지, P3 D2)
 			AlignmentPawn->SetActorTransform(Base, false, nullptr, ETeleportType::TeleportPhysics);
+			bApplied = true;
 			HomeShiftCm = FVector2D::ZeroVector;
 			State = Decision.bNeedsCheck ? EVBoRAlignmentState::NeedsCheck : EVBoRAlignmentState::Applied;
 		}
 	}
+	bFileEyeAlignment &= bApplied;
 	FString SeatFailure; DriverSeatReference(SeatFailure);
 	if (!SeatFailure.IsEmpty()) { State = EVBoRAlignmentState::NeedsCheck; Reason = SeatFailure; }
 	UE_LOG(LogP3Flow, Log, TEXT("정렬 %s"), *Describe());
@@ -102,6 +123,7 @@ void UVBoRVehicleAlignmentComponent::HandleRecenter()
 void UVBoRVehicleAlignmentComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	UpdateEyeAlignment();
 	if (bHasSaved && State == EVBoRAlignmentState::Applied && GEngine && GEngine->XRSystem.IsValid())
 	{
 		const auto Check = FVBoRBuckAlignment::CheckEnvironment(Saved, GEngine->XRSystem->GetTrackingOrigin(),
@@ -110,6 +132,34 @@ void UVBoRVehicleAlignmentComponent::TickComponent(float DeltaTime, ELevelTick T
 	}
 	AdvancePointCapture();
 	AdvanceSwitch(DeltaTime);
+}
+
+void UVBoRVehicleAlignmentComponent::UpdateEyeAlignment()
+{
+	const bool bEnabled = CVarEyeAlignment.GetValueOnGameThread() != 0;
+	if (bEnabled != bEyeEnabled)
+	{
+		bEyeEnabled = bEnabled;
+		bPendingEyeEnable = bEnabled && bAlignmentFromFile;
+		if (!bEnabled && bFileEyeAlignment) { RestoreBeforeEyeAlignment(); }
+	}
+	if (!bPendingEyeEnable || !ReapplyRejection().IsEmpty()) { return; }
+	bPendingEyeEnable = false;
+	FVBoRBuckSavedAlignment Value; FString Failure;
+	if (!bFileEyeAlignment && FVBoRBuckAlignmentStore::Load(SavedAlignmentPath(), Value, Failure) && Value.Version == 1)
+	{ RequestReapply(); }
+}
+
+void UVBoRVehicleAlignmentComponent::RestoreBeforeEyeAlignment()
+{
+	// 파일의 눈 정렬만 되돌림. 직접 초기화·4점 정렬은 대상 아님 (P5u D6)
+	State = EVBoRAlignmentState::NoSavedValue; Reason = EyeDisabledReason;
+	bHasSaved = false; bFileEyeAlignment = false;
+	if (bSwitching && !bReapplying && !bRestoringEye) { ++SwitchDiscards; }
+	PendingViewpoint = nullptr; bReapplying = false;
+	bRestoringEye = true; bSwitching = true; bMoved = false; SwitchElapsed = 0;
+	if (APlayerController* PC = AlignmentPawn ? Cast<APlayerController>(AlignmentPawn->GetController()) : nullptr)
+	{ if (PC->PlayerCameraManager) { PC->PlayerCameraManager->StartCameraFade(0, 1, FadeSeconds, FLinearColor::Black, false, true); } }
 }
 
 bool UVBoRVehicleAlignmentComponent::SwitchViewpoint(UVBoRViewpointComponent* Viewpoint)
@@ -175,6 +225,7 @@ bool UVBoRVehicleAlignmentComponent::RequestReapply()
 
 FString UVBoRVehicleAlignmentComponent::EnglishReason() const
 {
+	if (Reason == EyeDisabledReason) { return TEXT("P0-c head save ignored: vBoR.EyeAlignment is 0. Use P for point alignment, or vBoR.EyeAlignment 1 for home testing."); }
 	if (Reason.StartsWith(TEXT("저장값 없음"))) { return TEXT("Capture points with P, or save the Buck alignment in P0-c"); }
 	if (Reason.StartsWith(TEXT("재중심"))) { return TEXT("Recenter detected; check the setup alignment"); }
 	if (Reason.StartsWith(TEXT("Pawn"))) { return TEXT("Check Pawn, eye point and WorldToMeters"); }
@@ -206,7 +257,7 @@ bool UVBoRVehicleAlignmentComponent::RequestSwitch(UVBoRViewpointComponent* View
 void UVBoRVehicleAlignmentComponent::AdvanceSwitch(double DeltaSeconds)
 {
 	if (!bSwitching) { return; }
-	if (!bReapplying && State != EVBoRAlignmentState::Applied)
+	if (!bReapplying && !bRestoringEye && State != EVBoRAlignmentState::Applied)
 	{
 		bSwitching = false; ++SwitchDiscards;
 		if (APlayerController* PC = Cast<APlayerController>(AlignmentPawn->GetController()))
@@ -216,7 +267,12 @@ void UVBoRVehicleAlignmentComponent::AdvanceSwitch(double DeltaSeconds)
 	SwitchElapsed += FMath::Max(0.0, DeltaSeconds);
 	if (!bMoved && SwitchElapsed >= FadeSeconds)
 	{
-		if (bReapplying)
+		if (bRestoringEye)
+		{
+			if (AlignmentPawn) { AlignmentPawn->SetActorTransform(BeforeSetupPawn, false, nullptr, ETeleportType::TeleportPhysics); }
+			HomeShiftCm = FVector2D::ZeroVector; CurrentViewpoint = nullptr;
+		}
+		else if (bReapplying)
 		{
 			// 설치 저장값만 다시 읽음. InitializeAlignment 의 전환 초기화 뒤 암전 상태 복구 (P5i D8)
 			LoadSetupAlignment(); bReapplying = true; bSwitching = true;
@@ -241,6 +297,7 @@ void UVBoRVehicleAlignmentComponent::AdvanceSwitch(double DeltaSeconds)
 	if (bMoved && SwitchElapsed >= 2 * FadeSeconds)
 	{
 		bSwitching = false;
+		if (bRestoringEye) { bRestoringEye = false; return; }
 		if (bReapplying) { bReapplying = false; ++ReapplyCompletions; return; }
 		++SwitchCompletions;
 		UE_LOG(LogP3Flow, Log, TEXT("시점 완료 %s requests=%d complete=%d discarded=%d"), CurrentViewpoint ? *CurrentViewpoint->GetName() : TEXT("기준"), SwitchRequests, SwitchCompletions, SwitchDiscards);
@@ -274,6 +331,6 @@ FString UVBoRVehicleAlignmentComponent::DescribeHead(bool bTracked, const FVecto
 FString UVBoRVehicleAlignmentComponent::Describe() const
 {
 	const TCHAR* Name = State == EVBoRAlignmentState::Applied ? TEXT("적용됨") : State == EVBoRAlignmentState::NoSavedValue ? TEXT("저장값 없음") : TEXT("확인 필요");
-	return FString::Printf(TEXT("%s %s | 저장 %s | 시점 %s%s | 요청 %d 완료 %d 버림 %d"), Name, *Reason, *Saved.SavedAt,
+	return FString::Printf(TEXT("%s%s %s | 저장 %s | 시점 %s%s | 요청 %d 완료 %d 버림 %d"), Name, bFileEyeAlignment ? TEXT(" 눈 방식(집 시험)") : TEXT(""), *Reason, *Saved.SavedAt,
 		CurrentViewpoint ? *CurrentViewpoint->GetName() : TEXT("기준"), bSwitching ? TEXT(" (전환 중)") : TEXT(""), SwitchRequests, SwitchCompletions, SwitchDiscards);
 }
