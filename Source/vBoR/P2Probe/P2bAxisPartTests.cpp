@@ -50,7 +50,6 @@ struct FP2bTestAccess
 	static void Apply(AVBoRHingedDoor* Door, double Angle, int32 Unlocks, int32 Latches) { Door->ApplyState(Angle, Unlocks, Latches); }
 	static bool NeedsOpen(AVBoRAxisPart* Part) { return Part->bNeedsPalmOpen[0]; }
 	static void PalmOpen(AVBoRHingedDoor* Door, AVBoRAxisPart* Part) { Door->bNeedsPalmOpen[0] = Part->bNeedsPalmOpen[0] = false; }
-	static void Pointer(AVBoRHingedDoor* Door, const FIsdkInteractionPointerEvent& Event) { Door->HandleOutsidePointer(Event); }
 };
 
 namespace
@@ -182,8 +181,8 @@ bool FP2bBenchSizeTest::RunTest(const FString& Parameters)
 		const FBox Bounds = Door->DoorMesh->GetStaticMesh()->GetBoundingBox().TransformBy(Door->DoorMesh->GetRelativeTransform());
 		TestTrue(TEXT("Mesh bounds follow requested size"), Bounds.GetSize().Equals(Size, 0.001));
 		TestTrue(TEXT("Push faces exactly match resized mesh"), Door->GetMotion().FaceMinCm.Equals(Bounds.Min) && Door->GetMotion().FaceMaxCm.Equals(Bounds.Max));
-		TestTrue(TEXT("Outside handle follows resized trailing edge and face"), Door->OutsideHandle->GetRelativeLocation().Equals(FVector(Size.X - Bench->OutsideHandleInsetCm, Bounds.Max.Y + 4, Bench->OutsideHandleHeightCm - Bench->BottomHeightCm)));
-		TestTrue(TEXT("Inside handle follows resized trailing edge and face"), Door->InsideHandle->GetRelativeLocation().Equals(FVector(Size.X - Bench->InsideHandleInsetCm, Bounds.Min.Y - 4, Bench->InsideHandleHeightCm - Bench->BottomHeightCm)));
+		TestTrue(TEXT("Outside handle follows resized trailing edge and face"), Door->OutsideAxisHandle->AxisPivot->GetRelativeLocation().Equals(FVector(Size.X - Bench->OutsideHandleInsetCm, Bounds.Max.Y + 4, Bench->OutsideHandleHeightCm - Bench->BottomHeightCm)));
+		TestTrue(TEXT("Inside handle follows resized trailing edge and face"), Door->InsideAxisHandle->AxisPivot->GetRelativeLocation().Equals(FVector(Size.X - Bench->InsideHandleInsetCm, Bounds.Min.Y - 4, Bench->InsideHandleHeightCm - Bench->BottomHeightCm)));
 	}
 	return true;
 }
@@ -360,8 +359,6 @@ bool FP2bDoorTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("E13 latch cancels hold and requires palm open"),Motion.bLocked && Part->GetHoldingHand()==INDEX_NONE && FP2bTestAccess::NeedsOpen(Part));
 	FP2bTestAccess::Begin(Part,P2bPose(FVector(100,9,60))); FP2bTestAccess::Value(Part,25);
 	TestFalse(TEXT("E13 closed palm cannot reopen"),FP2bTestAccess::Transfer(Door,Part,P2bHand()));
-	FIsdkInteractionPointerEvent Event; Event.Type = EIsdkPointerEventType::Select; FP2bTestAccess::Pointer(Door,Event);
-	TestTrue(TEXT("E12 connected door collider disabled and direct event ignored"),Motion.bLocked && Door->OutsideHandle->GetCollisionEnabled()==ECollisionEnabled::NoCollision && !Door->OutsideGrab->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm));
 	return true;
 }
 

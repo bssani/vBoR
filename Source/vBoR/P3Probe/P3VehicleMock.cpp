@@ -164,24 +164,28 @@ void AP3VehicleMock::BeginPlay()
 	ConsoleLid = GetWorld()->SpawnActorDeferred<AVBoRHingedPanel>(AVBoRHingedPanel::StaticClass(), GetActorTransform(), this);
 	ConsoleLid->HingePivot->SetRelativeTransform(FTransform(FQuat(FVector::XAxisVector, PI / 2), ConsoleLidPivotCm));
 	ConsoleLid->MeshRestFromRoot = FTransform(FQuat::Identity, ConsoleLidPivotCm + FVector(17.5,0,0), FVector(0.35,0.24,0.03));
-	// Grab front center. Visual recesses 0.75 cm along car -X (placeholder, P2d R1 D8)
-	ConsoleLid->OutsideHandle->SetRelativeLocation(FVector(36,0,0));
-	ConsoleLid->OutsideHandle->SetBoxExtent(FVector(4,4,8));
-	ConsoleLid->OutsideHandleMesh->SetRelativeScale3D(FVector(0.02,0.03,0.14));
-	ConsoleLid->HandleVisualPressOffsetCm = FVector(-0.75,0,0);
-	ConsoleLid->InsideHandle->SetRelativeLocation(FVector(35,-5.5,0));
 	ConsoleLid->MaxAngleDeg = 100;
 	ConsoleLid->bUseLatch = true;
 	ConsoleLid->bAllowPalmOpening = false;
-	ConsoleLid->bUseInsideGrabArea = false;
 	ConsoleLid->SpectatorName = FText::FromString(TEXT("Console Box"));
+	// Press toward car -X; mesh keeps its old world pose (P5x D3/D4, cm)
+	ConsoleHandle = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
+	ConsoleHandle->AxisPivot->SetRelativeLocation(ConsoleHandlePivotCm);
+	ConsoleHandle->MeshRestFromRoot = FTransform(FQuat(FVector::XAxisVector, PI/2), ConsoleHandlePivotCm, FVector(0.02,0.03,0.14));
+	ConsoleHandle->Movement = EVBoRAxisMovement::Translate; ConsoleHandle->MaxTravelCm = 0.75;
+	ConsoleHandle->Axis = EAxis::X; ConsoleHandle->bReverse = true;
+	ConsoleHandle->Release = EVBoRAxisRelease::Return; ConsoleHandle->DoorHandleSide = EVBoRDoorHandleSide::Outside;
+	ConsoleHandle->SpectatorName = FText::FromString(TEXT("Console Box"));
+	ConsoleHandle->FinishSpawning(GetActorTransform());
+	ConsoleLid->OutsideAxisHandle = ConsoleHandle;
 	ConsoleLid->FinishSpawning(GetActorTransform());
+	ConsoleHandle->AttachToComponent(ConsoleLid->HingePivot, FAttachmentTransformRules::KeepWorldTransform);
 	ConsoleLid->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	// +X car +Z/+Y car -X/+Z car -Y. Lower hinge drops toward seat (approximate cm, P5a D2/D6)
 	Glovebox = GetWorld()->SpawnActorDeferred<AVBoRHingedPanel>(AVBoRHingedPanel::StaticClass(), GetActorTransform(), this);
 	Glovebox->HingePivot->SetRelativeTransform(FTransform(FRotationMatrix::MakeFromXZ(FVector::ZAxisVector, -FVector::YAxisVector).ToQuat(), GloveboxHingeCm));
 	Glovebox->MeshRestFromRoot = FTransform(FQuat::Identity, GloveboxHingeCm + FVector(0,0,GloveboxSizeCm.Z/2), GloveboxSizeCm/100);
-	Glovebox->bUseLatch = true; Glovebox->bAllowPalmOpening = false; Glovebox->bUseInsideGrabArea = false;
+	Glovebox->bUseLatch = true; Glovebox->bAllowPalmOpening = false;
 	Glovebox->MaxAngleDeg = GloveboxMaxAngleDeg; Glovebox->MinAxisDistanceCm = GloveboxMinAxisDistanceCm;
 	// Upper edge +Y axis. Pull lower edge -X/up (handle alone returns, approximate cm, P5a D3/D4)
 	GloveboxHandle = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), GetActorTransform(), this);
@@ -325,6 +329,7 @@ void AP3VehicleMock::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	if (Door) { Door->Destroy(); }
 	if (OutsideAxisHandle) { OutsideAxisHandle->Destroy(); }
 	if (InsideAxisHandle) { InsideAxisHandle->Destroy(); }
+	if (ConsoleHandle) { ConsoleHandle->Destroy(); }
 	if (ConsoleLid) { ConsoleLid->Destroy(); }
 	if (GloveboxHandle) { GloveboxHandle->Destroy(); }
 	if (Glovebox) { Glovebox->Destroy(); }

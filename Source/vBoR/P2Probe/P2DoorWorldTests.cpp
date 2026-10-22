@@ -3,6 +3,7 @@
 #include "P2DoorBench.h"
 #include "P2DoorBenchGameMode.h"
 #include "../Interaction/VBoRHingedDoor.h"
+#include "../Interaction/VBoRAxisPart.h"
 #include "Components/BoxComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -16,52 +17,25 @@
 #include "Rig/IsdkRayInteractionRigComponent.h"
 #include "StructTypesNonGenerated.h"
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2DoorHandleOverlapTest, "vBoR.P2Door.World.PalmHandleOverlap", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-bool FP2DoorHandleOverlapTest::RunTest(const FString& Parameters)
-{
-	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
-	AVBoRHingedDoor* Door = World->SpawnActor<AVBoRHingedDoor>();
-	AActor* PalmActor = World->SpawnActor<AActor>();
-	USphereComponent* Palm = NewObject<USphereComponent>(PalmActor);
-	PalmActor->SetRootComponent(Palm);
-	Palm->InitSphereRadius(4);
-	Palm->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	Palm->SetCollisionObjectType(ECC_WorldDynamic);
-	Palm->SetCollisionResponseToAllChannels(ECR_Overlap);
-	Palm->SetGenerateOverlapEvents(true);
-	Palm->SetWorldLocation(FVector(300, 300, 300));
-	Palm->RegisterComponent();
-	World->InitializeActorsForPlay(FURL());
-	World->GetWorldSettings()->NotifyBeginPlay();
-	for (int32 H = 0; H < 2; ++H)
-	{
-		UBoxComponent* Handle = H == 0 ? Door->OutsideHandle.Get() : Door->InsideHandle.Get();
-		UIsdkGrabbableComponent* Grab = H == 0 ? Door->OutsideGrab.Get() : Door->InsideGrab.Get();
-		Palm->SetWorldLocation(Handle->GetComponentLocation());
-		TestTrue(TEXT("E20 palm sphere overlaps handle after movement"), Palm->IsOverlappingComponent(Handle));
-		TestTrue(TEXT("E20 collider resolves to correct ISDK grabbable"), UIsdkFunctionLibrary::FindGrabbableByComponent(Handle) == Grab);
-		TestFalse(TEXT("Door mesh never overlaps palm"), Palm->IsOverlappingComponent(Door->DoorMesh));
-		Palm->SetWorldLocation(FVector(300, 300, 300));
-		TestFalse(TEXT("Withdrawal ends handle overlap"), Palm->IsOverlappingComponent(Handle));
-	}
-	World->EndPlay(EEndPlayReason::Quit); World->DestroyWorld(false);
-	return true;
-}
-
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2DoorAssemblyTest, "vBoR.P2Door.World.AssemblyAndRig", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP2DoorAssemblyTest::RunTest(const FString& Parameters)
 {
 	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
-	AVBoRHingedDoor* Door = World->SpawnActor<AVBoRHingedDoor>();
+	AP2DoorBench* Bench = World->SpawnActor<AP2DoorBench>();
 	AP2PalmGrabPawn* Pawn = World->SpawnActor<AP2PalmGrabPawn>();
 	World->InitializeActorsForPlay(FURL());
 	World->GetWorldSettings()->NotifyBeginPlay();
+	Bench->PlaceFromHead(FTransform(FVector(0,0,165)), 0);
+	AVBoRHingedDoor* Door = Bench->Door;
 	TestTrue(TEXT("Hinge is below independent root"), Door->HingePivot->GetAttachParent() == Door->GetRootComponent());
-	TestTrue(TEXT("Door and both handles follow pivot"), Door->DoorMesh->GetAttachParent() == Door->HingePivot && Door->OutsideHandle->GetAttachParent() == Door->HingePivot && Door->InsideHandle->GetAttachParent() == Door->HingePivot);
-	TestTrue(TEXT("Palm only outside and inside"), Door->OutsideGrab->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm) && Door->InsideGrab->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm) && !Door->OutsideGrab->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch) && !Door->InsideGrab->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch));
-	TestTrue(TEXT("Grab targets pivot, preserves root"), Door->OutsideTransformer->GetTransformTarget() == Door->HingePivot && Door->InsideTransformer->GetTransformTarget() == Door->HingePivot);
-	TestFalse(TEXT("Outside throwing disabled"), Door->OutsideTransformer->IsThrowingEnabled());
-	TestFalse(TEXT("Inside throwing disabled"), Door->InsideTransformer->IsThrowingEnabled());
+	TestTrue(TEXT("Door follows hinge"), Door->DoorMesh->GetAttachParent() == Door->HingePivot);
+	for (AVBoRAxisPart* Handle : {Door->OutsideAxisHandle.Get(), Door->InsideAxisHandle.Get()})
+	{
+		if (TestNotNull(TEXT("Bench handle connected"), Handle))
+		{
+			TestTrue(TEXT("Handle follows hinge"), Handle->GetRootComponent()->GetAttachParent() == Door->HingePivot);
+		}
+	}
 	TestNotNull(TEXT("Original material still present"), Door->DoorMesh->GetMaterial(0));
 	TestNotNull(TEXT("State is overlay, not base replacement"), Door->DoorMesh->GetOverlayMaterial());
 	TestTrue(TEXT("P0 default still poke only"), !GetDefault<AVBoRHandRigPawn>()->bAllowPalmGrab);
@@ -97,7 +71,7 @@ bool FP2DoorBenchTest::RunTest(const FString& Parameters)
 		TestTrue(TEXT("Outside face 60 cm ahead"), FMath::Abs(FVector::DotProduct(Outside - Head.GetLocation(), Forward) - 60) < 0.01);
 		TestTrue(TEXT("Hinge left of head, behind-edge offset 30 cm"), Bench->GetActorTransform().InverseTransformPosition(Head.GetLocation()).Equals(FVector(80, 65, 140), 0.01));
 		TestTrue(TEXT("Door bottom floor+35 cm"), FMath::Abs(Door->HingePivot->GetComponentLocation().Z - 60) < 0.01);
-		TestTrue(TEXT("Handles floor+95 and +85 cm"), FMath::Abs(Door->OutsideHandle->GetComponentLocation().Z - 120) < 0.01 && FMath::Abs(Door->InsideHandle->GetComponentLocation().Z - 110) < 0.01);
+		TestTrue(TEXT("Handles floor+95 and +85 cm"), FMath::Abs(Door->OutsideAxisHandle->AxisPivot->GetComponentLocation().Z - 120) < 0.01 && FMath::Abs(Door->InsideAxisHandle->AxisPivot->GetComponentLocation().Z - 110) < 0.01);
 		const int32 Trial = Bench->GetTrialNumber();
 		Bench->NextTrial();
 		TestEqual(TEXT("E18 B increments trial"), Bench->GetTrialNumber(), Trial + 1);

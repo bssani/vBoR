@@ -1,10 +1,10 @@
 #include "P2DoorBench.h"
 #include "../Interaction/VBoRHingedDoor.h"
+#include "../Interaction/VBoRAxisPart.h"
 #include "../Interaction/VBoRHandRigPawn.h"
 #include "Camera/CameraComponent.h"
 #include "Components/InputComponent.h"
 #include "Components/StaticMeshComponent.h"
-#include "Components/BoxComponent.h"
 #include "Components/TextRenderComponent.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
@@ -78,8 +78,20 @@ void AP2DoorBench::PlaceFromHead(const FTransform& Head, double FloorZ)
 		{
 			const FVector MeshSize = Door->DoorMesh->GetStaticMesh()->GetBoundingBox().GetSize();
 			Door->MeshRestFromRoot = FTransform(FQuat::Identity, FVector(DoorSizeCm.X * 0.5, 0, DoorSizeCm.Z * 0.5), DoorSizeCm / MeshSize);
-			Door->OutsideHandle->SetRelativeLocation(FVector(DoorSizeCm.X - OutsideHandleInsetCm, DoorSizeCm.Y * 0.5 + 4, OutsideHandleHeightCm - BottomHeightCm));
-			Door->InsideHandle->SetRelativeLocation(FVector(DoorSizeCm.X - InsideHandleInsetCm, -DoorSizeCm.Y * 0.5 - 4, InsideHandleHeightCm - BottomHeightCm));
+			// Actor origin = door origin; axis/mesh hold handle position (P5x D5, cm)
+			for (int32 Side = 0; Side < 2; ++Side)
+			{
+				const FVector Pivot(DoorSizeCm.X - (Side == 0 ? OutsideHandleInsetCm : InsideHandleInsetCm),
+					(Side == 0 ? 1 : -1) * (DoorSizeCm.Y * 0.5 + 4),
+					(Side == 0 ? OutsideHandleHeightCm : InsideHandleHeightCm) - BottomHeightCm);
+				AVBoRAxisPart* Handle = GetWorld()->SpawnActorDeferred<AVBoRAxisPart>(AVBoRAxisPart::StaticClass(), Pose, this);
+				Handle->AxisPivot->SetRelativeLocation(Pivot);
+				Handle->MeshRestFromRoot = FTransform(FQuat::Identity, Pivot - FVector(0,0,2), FVector(0.18,0.04,0.04));
+				Handle->Axis = EAxis::X; Handle->bReverse = Side == 0;
+				Handle->DoorHandleSide = Side == 0 ? EVBoRDoorHandleSide::Outside : EVBoRDoorHandleSide::Inside;
+				Handle->FinishSpawning(Pose);
+				if (Side == 0) { Door->OutsideAxisHandle = Handle; } else { Door->InsideAxisHandle = Handle; }
+			}
 			Door->FinishSpawning(Pose);
 			Door->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 			AddTickPrerequisiteActor(Door);
@@ -149,6 +161,11 @@ void AP2DoorBench::Tick(float DeltaSeconds)
 void AP2DoorBench::EndPlay(const EEndPlayReason::Type Reason)
 {
 	Snapshot(FString::Printf(TEXT("Trial %d end summary"), TrialNumber), true);
-	if (IsValid(Door)) { Door->Destroy(); }
+	if (IsValid(Door))
+	{
+		if (IsValid(Door->OutsideAxisHandle)) { Door->OutsideAxisHandle->Destroy(); }
+		if (IsValid(Door->InsideAxisHandle)) { Door->InsideAxisHandle->Destroy(); }
+		Door->Destroy();
+	}
 	Super::EndPlay(Reason);
 }

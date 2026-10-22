@@ -316,9 +316,9 @@ bool FP5hParts::RunTest(const FString&)
 	P5hEvent(Axis->Grabbable,Pointer,EIsdkPointerEventType::Unselect);
 	TestFalse(TEXT("Axis handle released"),Axis->IsSpectatorInteracting());
 	Panel->Hands[0] = P5hHand(FVector(30,0,50));
-	P5hEvent(Panel->OutsideGrab,Pointer,EIsdkPointerEventType::Select);
+	FP2dTestAccess::Motion(Panel).BeginGrab(0,0,Panel->Hands[0]);
 	TestTrue(TEXT("Console box face handle held"),Panel->IsSpectatorInteracting());
-	P5hEvent(Panel->OutsideGrab,Pointer,EIsdkPointerEventType::Unselect);
+	FP2dTestAccess::Motion(Panel).ReleaseGrab(true);
 	Panel->Hands[0] = P5hHand(FVector(30,8,50)); Panel->Tick(0.1f);
 	Panel->Hands[0] = P5hHand(FVector(30,4,50)); Panel->Tick(0.1f);
 	TestTrue(TEXT("Door-style palm push"),Panel->IsSpectatorInteracting());

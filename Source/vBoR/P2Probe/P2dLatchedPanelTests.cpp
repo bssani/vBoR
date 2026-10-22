@@ -34,10 +34,27 @@ namespace
 	AP2cTrackedPanel* P2dLid(FP2dWorld& W)
 	{
 		AP2cTrackedPanel* Panel = W.World->SpawnActor<AP2cTrackedPanel>();
-		Panel->bUseLatch = true; Panel->bUseInsideGrabArea = false;
+		Panel->bUseLatch = true;
 		Panel->HingePivot->SetRelativeTransform(FTransform(FQuat(FVector::XAxisVector, PI/2), FVector(-45,0,70)));
 		Panel->MeshRestFromRoot = FTransform(FQuat::Identity, FVector(-27.5,0,70), FVector(0.35,0.24,0.03));
 		Panel->MaxAngleDeg = 100; Panel->OnConstruction(Panel->GetActorTransform()); return Panel;
+	}
+	AP2bTrackedPart* P2dConsoleHandle(FP2dWorld& W, AP2cTrackedPanel* Panel, int32 Side = 0)
+	{
+		auto* Part = W.World->SpawnActorDeferred<AP2bTrackedPart>(AP2bTrackedPart::StaticClass(), Panel->GetActorTransform());
+		Part->AxisPivot->SetRelativeLocation(FVector(-9,0,70));
+		Part->MeshRestFromRoot = FTransform(FQuat(FVector::XAxisVector, PI/2), FVector(-9,0,70), FVector(0.02,0.03,0.14));
+		Part->Movement = EVBoRAxisMovement::Translate; Part->MaxTravelCm = 0.75;
+		Part->Axis = EAxis::X; Part->bReverse = true;
+		Part->FinishSpawning(Panel->GetActorTransform()); Panel->SetAxisHandle(Side, Part);
+		return Part;
+	}
+	void P2dPress(AVBoRAxisPart* Part, double Cm = 0.75)
+	{
+		const FVector Rest = Part->PartMesh->GetComponentLocation();
+		FP2dTestAccess::Begin(Part, 0, UIsdkFunctionLibrary::MakeGrabPoseStruct(11, Rest, FQuat::Identity));
+		FP2dTestAccess::Move(Part, UIsdkFunctionLibrary::MakeGrabPoseStruct(11, Rest - Part->GetActorForwardVector()*Cm, FQuat::Identity));
+		Part->Tick(0.01f);
 	}
 	UP2cEventObserver* P2dObserve(AVBoRHingedPanel* Panel)
 	{
@@ -93,51 +110,29 @@ bool FP2dLockedPush::RunTest(const FString&)
 	TestEqual(TEXT("Both locked contacts counted"), Panel->GetMotion().Metrics.Ignored[0], 2); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2dDisabledArea, "vBoR.P2d.Panel.E2DisabledGrabIgnoresInjectedSelect", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-bool FP2dDisabledArea::RunTest(const FString&)
-{
-	FP2dWorld W; AP2cTrackedPanel* Panel = P2dLid(W); UIsdkGrabberComponent* Grab = P2dGrabber(W); W.Play();
-	Panel->Hands[0] = P2dFace(0,0); P2dSelect(Panel->InsideGrab, Grab);
-	TestTrue(TEXT("Disabled inside stays locked"), Panel->GetMotion().bLocked);
-	TestEqual(TEXT("Disabled inside never grabs"), Panel->GetMotion().GrabHand, INDEX_NONE);
-	TestEqual(TEXT("No disabled unlock count"), Panel->GetMotion().Metrics.Unlocks, 0);
-	TestEqual(TEXT("No inside collision"), Panel->InsideHandle->GetCollisionEnabled(), ECollisionEnabled::NoCollision);
-	TestFalse(TEXT("No inside overlap"), Panel->InsideHandle->GetGenerateOverlapEvents());
-	TestFalse(TEXT("No inside visibility"), Panel->InsideHandle->IsVisible());
-	TestFalse(TEXT("No inside SDK palm input"), Panel->InsideGrab->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm));
-	Panel->bUseOutsideGrabArea = false; Panel->OnConstruction(Panel->GetActorTransform()); P2dSelect(Panel->OutsideGrab, Grab);
-	TestEqual(TEXT("Outside disable also rejects select"), Panel->GetMotion().GrabHand, INDEX_NONE); return true;
-}
-
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2dFrontGrab, "vBoR.P2d.Panel.E3FrontGrabUnlockAndSameHandLift", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP2dFrontGrab::RunTest(const FString&)
 {
-	FP2dWorld W; AP3VehicleMock* Car = W.World->SpawnActor<AP3VehicleMock>(); AP2cTrackedPanel* Panel = P2dLid(W);
-	UIsdkGrabberComponent* Grab = P2dGrabber(W); W.Play();
-	Panel->bAllowPalmOpening = Car->ConsoleLid->bAllowPalmOpening;
-	Panel->HandleVisualPressOffsetCm = Car->ConsoleLid->HandleVisualPressOffsetCm;
-	Panel->OutsideHandle->SetRelativeLocation(Car->ConsoleLid->OutsideHandle->GetRelativeLocation());
-	Panel->OnConstruction(Panel->GetActorTransform());
+	FP2dWorld W; AP2cTrackedPanel* Panel = P2dLid(W); auto* Handle = P2dConsoleHandle(W,Panel);
+	Panel->bAllowPalmOpening = false; W.Play();
 	UP2cEventObserver* Observer = P2dObserve(Panel); UP2dAudioObserver* Audio = FP2dTestAccess::ObserveAudio(Panel);
-	const FTransform BoxRest = Panel->OutsideHandle->GetRelativeTransform();
-	Panel->Hands[0] = P2dFace(0,0,36); P2dSelect(Panel->OutsideGrab,Grab);
-	TestFalse(TEXT("Front grab unlocks immediately"), Panel->GetMotion().bLocked);
+	Panel->Hands[0] = P2dFace(0,0,36); P2dPress(Handle);
+	TestFalse(TEXT("Full handle press unlocks"), Panel->GetMotion().bLocked);
 	TestEqual(TEXT("Same hand transfers"), Panel->GetMotion().GrabHand, 0);
 	TestEqual(TEXT("Outside is unlock source"), Panel->GetMotion().Metrics.LastUnlockHandle, 0);
 	TestEqual(TEXT("One unlock"), Observer->Unlocks, 1); TestEqual(TEXT("Same unlock sound requested"), Audio->Plays, 1);
-	TestTrue(TEXT("Handle visual presses inward"), Panel->OutsideHandleMesh->GetRelativeLocation().Equals(Panel->HandleVisualPressOffsetCm));
-	TestTrue(TEXT("Grab box stays at rest"), Panel->OutsideHandle->GetRelativeTransform().Equals(BoxRest));
+	TestTrue(TEXT("Handle pressed 0.75 cm"), FMath::IsNearlyEqual(Handle->GetOpenRatio()*Handle->MaxTravelCm,0.75f));
 	Panel->Hands[0] = P2dFace(35,0,36); Panel->Tick(1);
 	TestTrue(TEXT("Same hand lifts lid 35 deg"), FMath::IsNearlyEqual(Panel->GetMotion().AngleDeg,35.0,0.001));
-	TestTrue(TEXT("Press offset does not accumulate"), Panel->OutsideHandleMesh->GetRelativeLocation().Equals(Panel->HandleVisualPressOffsetCm)); return true;
+	TestTrue(TEXT("Press does not accumulate"), FMath::IsNearlyEqual(Handle->GetOpenRatio()*Handle->MaxTravelCm,0.75f)); return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2dRelatch, "vBoR.P2d.Panel.E4PushClosesAndRelatches", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP2dRelatch::RunTest(const FString&)
 {
 	FP2dWorld W; AP2cTrackedPanel* Panel = P2dLid(W); Panel->bAllowPalmOpening = false;
-	UIsdkGrabberComponent* Grab = P2dGrabber(W); W.Play(); UP2cEventObserver* Observer = P2dObserve(Panel);
-	Panel->Hands[0] = P2dFace(0,0); P2dSelect(Panel->OutsideGrab,Grab);
+	auto* Handle = P2dConsoleHandle(W,Panel); W.Play(); UP2cEventObserver* Observer = P2dObserve(Panel);
+	Panel->Hands[0] = P2dFace(0,0); P2dPress(Handle);
 	Panel->Hands[0] = P2dFace(40,0); Panel->Tick(1);
 	Panel->bPalmClosed[0] = false; Panel->Tick(0.1f);
 	TestTrue(TEXT("Opening arms latch"), Panel->GetMotion().bLatchArmed && Panel->GetMotion().AngleDeg > 5);
@@ -170,8 +165,6 @@ bool FP2dButtonUnlock::RunTest(const FString&)
 	UP2cEventObserver* Events = P2dObserve(Panel); UP2dAudioObserver* Audio = FP2dTestAccess::ObserveAudio(Panel);
 	UP2dButtonObserver* Observer = NewObject<UP2dButtonObserver>(Panel); Observer->Panel = Panel;
 	Button->OnButtonPressed.AddDynamic(Observer, &UP2dButtonObserver::Pressed);
-	Panel->OutsideTransformer->GetCancelGrabEventDelegate()->AddDynamic(Observer, &UP2dButtonObserver::Cancel);
-	Panel->InsideTransformer->GetCancelGrabEventDelegate()->AddDynamic(Observer, &UP2dButtonObserver::Cancel);
 	Part->GrabComponent->GetCancelGrabEventDelegate()->AddDynamic(Observer, &UP2dButtonObserver::Cancel);
 	FIsdkInteractionPointerEvent Event; Event.Type = EIsdkPointerEventType::Select; Event.Interactable = Button->Poke.Get();
 	Button->Poke->GetInteractionPointerEventDelegate().Broadcast(Event);
@@ -204,8 +197,8 @@ bool FP2dNoOpUnlock::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2dNoHandleWarning, "vBoR.P2d.Panel.E7MissingOpeningWarning", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP2dNoHandleWarning::RunTest(const FString&)
 {
-	AddExpectedMessagePlain(TEXT("Latched panel has no opening handle or grab area"), ELogVerbosity::Warning);
-	FP2dWorld W; AP2cTrackedPanel* Panel = P2dLid(W); Panel->bUseOutsideGrabArea = false; W.Play();
+	AddExpectedMessagePlain(TEXT("Latched panel has no opening handle"), ELogVerbosity::Warning);
+	FP2dWorld W; AP2cTrackedPanel* Panel = P2dLid(W); W.Play();
 	TestTrue(TEXT("Warning does not block button unlock"), Panel->Unlock()); return true;
 }
 
@@ -238,35 +231,14 @@ bool FP2dInsideClose::RunTest(const FString&)
 	TestEqual(TEXT("No second unlock for open-door lever"), Motion.Metrics.Unlocks, 1); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2dInsideBox, "vBoR.P2d.Door.E10ConnectedInsideBoxIgnoresSelect", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
-bool FP2dInsideBox::RunTest(const FString&)
-{
-	FP2dWorld W; AP3VehicleMock* Car = W.World->SpawnActor<AP3VehicleMock>();
-	AP2bTrackedDoor* TrackedDoor = W.World->SpawnActor<AP2bTrackedDoor>(); UIsdkGrabberComponent* Grab = P2dGrabber(W); W.Play();
-	// No shared ownership with mock car (keep connected grab-area test only, P2e §3/Q1)
-	AVBoRAxisPart* TrackedHandle = W.World->SpawnActor<AVBoRAxisPart>();
-	TrackedDoor->SetAxisHandle(1,TrackedHandle); TrackedDoor->Hands[0] = P2dHandAt(FVector(85,-9,50));
-	P2dSelect(TrackedDoor->InsideGrab,Grab);
-	TestTrue(TEXT("Connected box rejects even a tracked hand"), TrackedDoor->GetMotion().bLocked);
-	TestEqual(TEXT("Connected box never starts grab"), TrackedDoor->GetMotion().GrabHand,INDEX_NONE);
-	P2dSelect(Car->Door->InsideGrab,Grab);
-	TestTrue(TEXT("Actual P3 inside box stays locked"), Car->Door->GetMotion().bLocked);
-	TestEqual(TEXT("No injected box unlock"), Car->Door->GetMotion().Metrics.Unlocks, 0);
-	TestEqual(TEXT("No box collision"), Car->Door->InsideHandle->GetCollisionEnabled(), ECollisionEnabled::NoCollision);
-	TestFalse(TEXT("No box display"), Car->Door->InsideHandle->IsVisible());
-	TestFalse(TEXT("No box SDK grab"), Car->Door->InsideGrab->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm));
-	TestTrue(TEXT("Inside lever follows door hinge"), Car->InsideAxisHandle->GetRootComponent()->GetAttachParent() == Car->Door->HingePivot);
-	return true;
-}
-
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2dFreePanel, "vBoR.P2d.Panel.E11LatchDisabledPushAndGrab", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP2dFreePanel::RunTest(const FString&)
 {
-	FP2dWorld W; AP2cTrackedPanel* Panel = P2dLid(W); Panel->bUseLatch = false; Panel->bUseInsideGrabArea = true;
-	Panel->OnConstruction(Panel->GetActorTransform()); UIsdkGrabberComponent* Grab = P2dGrabber(W); W.Play();
+	FP2dWorld W; AP2cTrackedPanel* Panel = P2dLid(W); Panel->bUseLatch = false;
+	Panel->OnConstruction(Panel->GetActorTransform()); auto* Handle = P2dConsoleHandle(W,Panel,1); W.Play();
 	Panel->Hands[0] = P2dFace(0,-2,30,FVector(0,1,0)); Panel->Tick(0.1f); Panel->Hands[0] = P2dFace(0,2,30,FVector(0,1,0)); Panel->Tick(1);
 	TestTrue(TEXT("Latch-disabled panel accepts closed push"), Panel->GetMotion().AngleDeg > 0);
-	P2dSelect(Panel->InsideGrab,Grab); TestEqual(TEXT("Enabled inside still accepts SDK select"), Panel->GetMotion().GrabHandle, 1);
+	P2dPress(Handle); TestEqual(TEXT("Inside handle accepts same-hand grab"), Panel->GetMotion().GrabHandle, 1);
 	TestEqual(TEXT("Free panel has no unlock count"), Panel->GetMotion().Metrics.Unlocks, 0); return true;
 }
 
@@ -275,7 +247,6 @@ bool FP2dPalmOpeningDefault::RunTest(const FString&)
 {
 	FP2dWorld W; AP2cTrackedPanel* Panel = P2dLid(W); Panel->bUseLatch = false; W.Play();
 	TestTrue(TEXT("Panel allows palm opening by default"), Panel->bAllowPalmOpening && Panel->GetMotion().bAllowPalmOpening);
-	TestTrue(TEXT("Handle display offset defaults to zero"), Panel->HandleVisualPressOffsetCm.IsZero());
 	Panel->Hands[0] = P2dFace(0,-2,30,FVector(0,1,0)); Panel->Tick(0.1f);
 	Panel->Hands[0] = P2dFace(0,25,30,FVector(0,1,0)); Panel->Tick(1);
 	const double Open = Panel->GetMotion().AngleDeg;
@@ -291,45 +262,35 @@ bool FP2dPalmOpeningDefault::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2dVisualReturn, "vBoR.P2d.Panel.E14VisualReturnsOnReleaseLatchAndReset", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP2dVisualReturn::RunTest(const FString&)
 {
-	FP2dWorld W; AP2cTrackedPanel* Panel = P2dLid(W); Panel->bUseInsideGrabArea = true;
-	Panel->HandleVisualPressOffsetCm = FVector(-0.75,0,0);
-	const FVector OutsideRest(1,2,3), InsideRest(3,2,1);
-	Panel->OutsideHandleMesh->SetRelativeLocation(OutsideRest); Panel->InsideHandleMesh->SetRelativeLocation(InsideRest);
+	FP2dWorld W; AP2cTrackedPanel* Panel = P2dLid(W); auto* Handle = P2dConsoleHandle(W,Panel);
 	UIsdkGrabberComponent* Grab = P2dGrabber(W); W.Play();
-	Panel->Hands[0] = P2dFace(0,0); P2dSelect(Panel->OutsideGrab,Grab);
-	TestTrue(TEXT("Child rest location preserved during press"), Panel->OutsideHandleMesh->GetRelativeLocation().Equals(OutsideRest + Panel->HandleVisualPressOffsetCm));
-	TestTrue(TEXT("Other side remains at rest"), Panel->InsideHandleMesh->GetRelativeLocation().Equals(InsideRest));
-	Panel->bPalmClosed[0] = false; Panel->Tick(0.1f);
-	TestEqual(TEXT("Palm open ends grab"), Panel->GetMotion().GrabHand,INDEX_NONE);
-	TestTrue(TEXT("Palm open returns visual"), Panel->OutsideHandleMesh->GetRelativeLocation().Equals(OutsideRest));
-	Panel->bPalmClosed[0] = true; P2dSelect(Panel->InsideGrab,Grab);
-	TestTrue(TEXT("Inside grab presses only inside visual"), Panel->InsideHandleMesh->GetRelativeLocation().Equals(InsideRest + Panel->HandleVisualPressOffsetCm));
+	Panel->Hands[0] = P2dFace(0,0); P2dPress(Handle);
 	Panel->Hands[0] = P2dFace(40,0); Panel->Tick(1);
-	Panel->Hands[0] = P2dFace(0,0); Panel->Tick(1);
+	Panel->bPalmClosed[0] = false; Panel->Tick(0.1f); Handle->Tick(1);
+	TestEqual(TEXT("Palm open ends grab"), Panel->GetMotion().GrabHand,INDEX_NONE);
+	TestTrue(TEXT("Palm open returns handle"), FMath::IsNearlyZero(Handle->GetOpenRatio()));
+	Panel->bPalmClosed[0] = true; P2dPress(Handle);
+	Panel->Hands[0] = P2dFace(0,0); Panel->Tick(1); Handle->Tick(1);
 	TestTrue(TEXT("Latch ends grab"), Panel->GetMotion().bLocked && Panel->GetMotion().GrabHand == INDEX_NONE);
-	TestTrue(TEXT("Latch returns inside visual"), Panel->InsideHandleMesh->GetRelativeLocation().Equals(InsideRest));
-	Panel->bPalmClosed[0] = false; Panel->Tick(0.1f); Panel->bPalmClosed[0] = true;
-	P2dSelect(Panel->OutsideGrab,Grab); Panel->ResetDoor();
-	TestTrue(TEXT("Reset returns visual"), Panel->OutsideHandleMesh->GetRelativeLocation().Equals(OutsideRest));
+	TestTrue(TEXT("Latch returns handle"), FMath::IsNearlyZero(Handle->GetOpenRatio()));
+	FP2dTestAccess::PalmOpen(Panel,Handle,0); P2dPress(Handle); Panel->ResetDoor(); Handle->Tick(1);
+	TestTrue(TEXT("Reset returns handle"), FMath::IsNearlyZero(Handle->GetOpenRatio()));
 	TestEqual(TEXT("Reset ends grab"), Panel->GetMotion().GrabHand,INDEX_NONE);
-	Panel->bPalmClosed[0] = false; Panel->Tick(0.1f); Panel->bPalmClosed[0] = true;
-	P2dSelect(Panel->OutsideGrab,Grab);
-	FIsdkInteractionPointerEvent Event; Event.Interactor = Grab; Event.Interactable = Panel->OutsideGrab;
-	Event.Type = EIsdkPointerEventType::Unselect; Panel->OutsideGrab->GetInteractionPointerEventDelegate().Broadcast(Event);
-	TestTrue(TEXT("SDK unselect returns visual immediately"), Panel->OutsideHandleMesh->GetRelativeLocation().Equals(OutsideRest));
-	return true;
+	FP2dTestAccess::PalmOpen(Panel,Handle,0); P2dSelect(Handle->Grabbable,Grab); P2dPress(Handle,0.5);
+	FIsdkInteractionPointerEvent Event; Event.Interactor = Grab; Event.Interactable = Handle->Grabbable;
+	Event.Type = EIsdkPointerEventType::Unselect; Handle->Grabbable->GetInteractionPointerEventDelegate().Broadcast(Event); Handle->Tick(1);
+	TestTrue(TEXT("SDK unselect returns handle"), FMath::IsNearlyZero(Handle->GetOpenRatio())); return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2dRegrab, "vBoR.P2d.Panel.E15OpenLidRegrabMovesBothWays", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP2dRegrab::RunTest(const FString&)
 {
 	FP2dWorld W; AP2cTrackedPanel* Panel = P2dLid(W); Panel->bAllowPalmOpening = false;
-	Panel->HandleVisualPressOffsetCm = FVector(-0.75,0,0);
-	UIsdkGrabberComponent* Grab = P2dGrabber(W); W.Play();
-	Panel->Hands[0] = P2dFace(0,0); P2dSelect(Panel->OutsideGrab,Grab);
+	auto* Handle = P2dConsoleHandle(W,Panel); W.Play();
+	Panel->Hands[0] = P2dFace(0,0); P2dPress(Handle);
 	Panel->Hands[0] = P2dFace(30,0); Panel->Tick(1);
 	Panel->bPalmClosed[0] = false; Panel->Tick(0.1f); Panel->bPalmClosed[0] = true;
-	P2dSelect(Panel->OutsideGrab,Grab);
+	Handle->Tick(1); FP2dTestAccess::PalmOpen(Panel,Handle,0); P2dPress(Handle);
 	TestEqual(TEXT("Open lid accepts front regrab"), Panel->GetMotion().GrabHand,0);
 	Panel->Hands[0] = P2dFace(60,0); Panel->Tick(1);
 	TestTrue(TEXT("Regrab lifts without palm opening"), FMath::IsNearlyEqual(Panel->GetMotion().AngleDeg,60.0,0.001));
@@ -338,42 +299,32 @@ bool FP2dRegrab::RunTest(const FString&)
 	TestEqual(TEXT("Open regrab does not unlock twice"), Panel->GetMotion().Metrics.Unlocks,1);
 	Panel->Hands[0] = P2dFace(0,0); Panel->Tick(1);
 	TestTrue(TEXT("Closing relatches and cancels grab"), Panel->GetMotion().bLocked && Panel->GetMotion().GrabHand == INDEX_NONE);
-	TestTrue(TEXT("Closing returns visual"), Panel->OutsideHandleMesh->GetRelativeLocation().IsZero());
+	Handle->Tick(1);
+	TestTrue(TEXT("Closing returns handle"), FMath::IsNearlyZero(Handle->GetOpenRatio()));
 	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2dActualConsole, "vBoR.P2d.P3.E16ActualConsoleConfiguration", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP2dActualConsole::RunTest(const FString&)
 {
-	FP2dWorld W; AP3VehicleMock* Car = W.World->SpawnActor<AP3VehicleMock>(); UIsdkGrabberComponent* Grab = P2dGrabber(W); W.Play();
-	AVBoRHingedPanel* Panel = Car->ConsoleLid;
-	if (!TestNotNull(TEXT("Actual car creates lid"),Panel)) { return false; }
-	TestNull(TEXT("No outside axis tab"),Panel->OutsideAxisHandle.Get());
-	TestNull(TEXT("No inside axis tab"),Panel->InsideAxisHandle.Get());
+	FP2dWorld W; AP3VehicleMock* Car = W.World->SpawnActor<AP3VehicleMock>(); W.Play();
+	AVBoRHingedPanel* Panel = Car->ConsoleLid; AVBoRAxisPart* Handle = Car->ConsoleHandle;
+	if (!TestNotNull(TEXT("Actual lid"),Panel) || !TestNotNull(TEXT("Actual handle"),Handle)) { return false; }
+	TestTrue(TEXT("Outside handle connected"),Panel->OutsideAxisHandle == Handle);
+	TestNull(TEXT("No inside handle"),Panel->InsideAxisHandle.Get());
 	TestTrue(TEXT("Actual lid enables latch"),Panel->bUseLatch && Panel->GetMotion().bLocked);
 	TestFalse(TEXT("Actual lid disables palm opening"),Panel->bAllowPalmOpening || Panel->GetMotion().bAllowPalmOpening);
-	TestTrue(TEXT("Actual front area enabled"),Panel->bUseOutsideGrabArea);
-	TestFalse(TEXT("Actual inside area disabled"),Panel->bUseInsideGrabArea);
-	TestEqual(TEXT("Actual front has query collision"),Panel->OutsideHandle->GetCollisionEnabled(),ECollisionEnabled::QueryOnly);
-	TestTrue(TEXT("Actual front has overlap"),Panel->OutsideHandle->GetGenerateOverlapEvents());
-	TestTrue(TEXT("Actual front visible"),Panel->OutsideHandleMesh->IsVisible());
-	TestTrue(TEXT("Actual front accepts palm grab"),Panel->OutsideGrab->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm));
-	TestEqual(TEXT("Actual inside has no collision"),Panel->InsideHandle->GetCollisionEnabled(),ECollisionEnabled::NoCollision);
-	TestFalse(TEXT("Actual inside has no overlap"),Panel->InsideHandle->GetGenerateOverlapEvents());
-	TestFalse(TEXT("Actual inside hidden"),Panel->InsideHandleMesh->IsVisible());
-	TestFalse(TEXT("Actual inside rejects palm grab"),Panel->InsideGrab->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm));
-	const FVector Front = Panel->OutsideHandle->GetRelativeLocation();
-	TestTrue(TEXT("Grab site is beyond front edge"),Front.X > Panel->GetMotion().FaceMaxCm.X);
-	TestTrue(TEXT("Grab site centered across front and thickness"),FMath::IsNearlyZero(Front.Y) && FMath::IsNearlyZero(Front.Z));
-	TestTrue(TEXT("Press direction is inward along front normal"),Panel->HandleVisualPressOffsetCm.X < 0 && FMath::IsNearlyZero(Panel->HandleVisualPressOffsetCm.Y) && FMath::IsNearlyZero(Panel->HandleVisualPressOffsetCm.Z));
-	TestTrue(TEXT("Visible handle follows front box"),Panel->OutsideHandleMesh->GetAttachParent() == Panel->OutsideHandle);
+	TestEqual(TEXT("Translate handle"),Handle->Movement,EVBoRAxisMovement::Translate);
+	TestEqual(TEXT("Travel cm"),Handle->MaxTravelCm,0.75f);
+	TestEqual(TEXT("Return handle"),Handle->Release,EVBoRAxisRelease::Return);
+	TestEqual(TEXT("Outside side"),Handle->DoorHandleSide,EVBoRDoorHandleSide::Outside);
+	TestTrue(TEXT("Palm only"),Handle->bAllowPalmGrab && !Handle->bAllowPinchGrab && !Handle->bAllowPush);
+	TestTrue(TEXT("Handle follows hinge"),Handle->GetRootComponent()->GetAttachParent() == Panel->HingePivot);
+	const FVector Front = Panel->HingePivot->GetComponentTransform().InverseTransformPosition(Handle->AxisPivot->GetComponentLocation());
+	TestTrue(TEXT("Front center at 36 cm"),Front.Equals(FVector(36,0,0),0.001));
+	TestTrue(TEXT("Press direction is hinge -X"),Handle->Axis == EAxis::X && Handle->bReverse && Handle->AxisPivot->GetForwardVector().Equals(Panel->HingePivot->GetForwardVector(),0.001));
 	TArray<AActor*> Attached; Car->GetAttachedActors(Attached,true,true);
 	int32 AxisParts = 0; for (AActor* Actor : Attached) { if (Actor->IsA(AVBoRAxisPart::StaticClass()) && Actor != Car->GloveboxHandle && Actor != Car->GearLever && Actor != Car->TurnSignalLever) { ++AxisParts; } }
-	TestEqual(TEXT("Only door levers remain attached, no console tab"),AxisParts,2);
-	P2dSelect(Panel->InsideGrab,Grab);
-	TestTrue(TEXT("Actual inside injected select keeps lock"),Panel->GetMotion().bLocked);
-	TestEqual(TEXT("Actual inside injected select never grabs"),Panel->GetMotion().GrabHand,INDEX_NONE);
-	TestEqual(TEXT("Actual inside injected select never unlocks"),Panel->GetMotion().Metrics.Unlocks,0);
-	return true;
+	TestEqual(TEXT("Door levers and console handle"),AxisParts,3); return true;
 }
 #endif

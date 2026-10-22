@@ -44,7 +44,7 @@ TArray<FP4iBP> P4iBlueprints()
 {
 	return {{TEXT("BP_Car_Core"), AActor::StaticClass()}, {TEXT("BP_Door_FL"), AVBoRHingedDoor::StaticClass()},
 		{TEXT("BP_DoorHandle_FL_Ext"), AVBoRAxisPart::StaticClass()}, {TEXT("BP_DoorHandle_FL_Int"), AVBoRAxisPart::StaticClass()},
-		{TEXT("BP_ConsoleLid"), AVBoRHingedPanel::StaticClass()}, {TEXT("BP_Glovebox"), AVBoRHingedPanel::StaticClass()},
+		{TEXT("BP_ConsoleHandle"), AVBoRAxisPart::StaticClass()}, {TEXT("BP_ConsoleLid"), AVBoRHingedPanel::StaticClass()}, {TEXT("BP_Glovebox"), AVBoRHingedPanel::StaticClass()},
 		{TEXT("BP_GloveboxHandle"), AVBoRAxisPart::StaticClass()}, {TEXT("BP_GearLever"), AVBoRAxisPart::StaticClass()},
 		{TEXT("BP_TurnSignalLever"), AVBoRAxisPart::StaticClass()}, {TEXT("BP_GearButton"), AVBoRPokeButton::StaticClass()},
 		{TEXT("BP_ReachButton"), AVBoRPokeButton::StaticClass()}, {TEXT("BP_SteeringWheel"), AVBoRSteeringWheel::StaticClass()},
@@ -114,9 +114,9 @@ TMap<FString, AActor*> P4iSpawn(UWorld* W, FAutomationTestBase& T)
 		if (!T.TestNotNull(N, C)) { continue; }
 		Parts.Add(N, W->SpawnActor<AActor>(C));
 	}
-	if (Parts.Num() != 15) { return Parts; }
+	if (Parts.Num() != 16) { return Parts; }
 	Parts[TEXT("BP_ReachButton")]->SetActorLocation(FVector(40,25,91.5));
-	for (const auto& Pair : TArray<TPair<FString,FString>>{{TEXT("BP_DoorHandle_FL_Ext"),TEXT("BP_Door_FL")},{TEXT("BP_DoorHandle_FL_Int"),TEXT("BP_Door_FL")},{TEXT("BP_GloveboxHandle"),TEXT("BP_Glovebox")}})
+	for (const auto& Pair : TArray<TPair<FString,FString>>{{TEXT("BP_DoorHandle_FL_Ext"),TEXT("BP_Door_FL")},{TEXT("BP_DoorHandle_FL_Int"),TEXT("BP_Door_FL")},{TEXT("BP_GloveboxHandle"),TEXT("BP_Glovebox")},{TEXT("BP_ConsoleHandle"),TEXT("BP_ConsoleLid")}})
 	{
 		Parts[Pair.Key]->AttachToActor(Parts[Pair.Value], FAttachmentTransformRules::KeepWorldTransform);
 	}
@@ -166,9 +166,9 @@ bool FP4iPoses::RunTest(const FString&)
 	if(!P4iApproximate()) { AddInfo(TEXT("L_Main has no Approx folder; mock comparison skipped (CAD state)")); return true; }
 	FP4iWorld MockWorld, BPWorld;
 	auto* Mock = MockWorld.World->SpawnActor<AP3VehicleMock>(); MockWorld.Play();
-	auto Parts = P4iSpawn(BPWorld.World,*this); if (Parts.Num()!=15) { return false; } BPWorld.Play();
+	auto Parts = P4iSpawn(BPWorld.World,*this); if (Parts.Num()!=16) { return false; } BPWorld.Play();
 	TArray<TPair<AActor*, FString>> Pairs = {{Mock->Door,TEXT("BP_Door_FL")},{Mock->OutsideAxisHandle,TEXT("BP_DoorHandle_FL_Ext")},
-		{Mock->InsideAxisHandle,TEXT("BP_DoorHandle_FL_Int")},{Mock->ConsoleLid,TEXT("BP_ConsoleLid")},{Mock->Glovebox,TEXT("BP_Glovebox")},
+		{Mock->InsideAxisHandle,TEXT("BP_DoorHandle_FL_Int")},{Mock->ConsoleHandle,TEXT("BP_ConsoleHandle")},{Mock->ConsoleLid,TEXT("BP_ConsoleLid")},{Mock->Glovebox,TEXT("BP_Glovebox")},
 		{Mock->GloveboxHandle,TEXT("BP_GloveboxHandle")},{Mock->GearLever,TEXT("BP_GearLever")},{Mock->TurnSignalLever,TEXT("BP_TurnSignalLever")},
 		{Mock->ReachButton,TEXT("BP_ReachButton")},{Mock->SteeringWheel,TEXT("BP_SteeringWheel")},{Mock->RearviewMirror,TEXT("BP_RearviewMirror")},
 		{Mock->ConsoleKnob,TEXT("BP_ConsoleKnob")},{Mock->Liftgate,TEXT("BP_Liftgate")},{Mock->RearSeat,TEXT("BP_RearSeatBack")}};
@@ -217,7 +217,7 @@ bool FP4iPoses::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4iLinks, "vBoR.P4i.E3Connections", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP4iLinks::RunTest(const FString&)
 {
-	FP4iWorld W; auto Parts=P4iSpawn(W.World,*this); if(Parts.Num()!=15) { return false; }
+	FP4iWorld W; auto Parts=P4iSpawn(W.World,*this); if(Parts.Num()!=16) { return false; }
 	TArray<AVBoRKeyTable*> Tables;
 	for (const TCHAR* Name : {TEXT("BP_KeyFob_Front"),TEXT("BP_KeyFob_Rear")})
 	{
@@ -226,6 +226,9 @@ bool FP4iLinks::RunTest(const FString&)
 	}
 	W.Play();
 	auto* Door=CastChecked<AVBoRHingedPanel>(Parts[TEXT("BP_Door_FL")]);
+	auto* Console=CastChecked<AVBoRHingedPanel>(Parts[TEXT("BP_ConsoleLid")]);
+	TestTrue(TEXT("Console linked"),Console->OutsideAxisHandle==Parts[TEXT("BP_ConsoleHandle")]);
+	if (TestNotNull(TEXT("Console handle"),Console->OutsideAxisHandle.Get())) { TestTrue(TEXT("Console handle attached to hinge"),Console->OutsideAxisHandle->GetRootComponent()->GetAttachParent()==Console->HingePivot); }
 	auto* Glove=CastChecked<AVBoRHingedPanel>(Parts[TEXT("BP_Glovebox")]);
 	TestTrue(TEXT("Outside linked"),Door->OutsideAxisHandle==Parts[TEXT("BP_DoorHandle_FL_Ext")]);
 	TestTrue(TEXT("Inside linked"),Door->InsideAxisHandle==Parts[TEXT("BP_DoorHandle_FL_Int")]);
@@ -265,7 +268,7 @@ bool FP4iLevel::RunTest(const FString&)
 	TestEqual(TEXT("One alignment"),AlignmentCount,1);
 	for(const auto& BP:P4iBlueprints()) { FString N(BP.Name);TestEqual(N,Counts.FindRef(P4iClass(N)),N.Contains(TEXT("KeyFob"))?0:1); }
 	if(TestNotNull(TEXT("Stand"),Stand)&&TestNotNull(TEXT("Target"),Target)) { TestTrue(TEXT("Stand load target"),Stand->LoadTarget==Target); }
-	for(const auto& Pair:TArray<TPair<FString,FString>>{{TEXT("BP_DoorHandle_FL_Ext"),TEXT("BP_Door_FL")},{TEXT("BP_DoorHandle_FL_Int"),TEXT("BP_Door_FL")},{TEXT("BP_GloveboxHandle"),TEXT("BP_Glovebox")}})
+	for(const auto& Pair:TArray<TPair<FString,FString>>{{TEXT("BP_DoorHandle_FL_Ext"),TEXT("BP_Door_FL")},{TEXT("BP_DoorHandle_FL_Int"),TEXT("BP_Door_FL")},{TEXT("BP_GloveboxHandle"),TEXT("BP_Glovebox")},{TEXT("BP_ConsoleHandle"),TEXT("BP_ConsoleLid")}})
 	{
 		AActor** A=Actors.FindByPredicate([&](AActor* X){return X->GetClass()==P4iClass(Pair.Key);});
 		if(TestTrue(TEXT("Placed handle"),A!=nullptr)) { TestTrue(TEXT("Outliner parent"),(*A)->GetAttachParentActor()&&(*A)->GetAttachParentActor()->GetClass()==P4iClass(Pair.Value)); }

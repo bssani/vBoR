@@ -33,7 +33,6 @@ namespace
 			Panel->HingePivot->SetRelativeTransform(Source->HingePivot->GetRelativeTransform());
 			Panel->MeshRestFromRoot = Source->MeshRestFromRoot;
 			Panel->bUseLatch = Source->bUseLatch; Panel->bAllowPalmOpening = Source->bAllowPalmOpening;
-			Panel->bUseInsideGrabArea = Source->bUseInsideGrabArea;
 			Panel->MaxAngleDeg = Source->MaxAngleDeg; Panel->MinAxisDistanceCm = Source->MinAxisDistanceCm;
 			const AVBoRAxisPart* Lever = Car->GloveboxHandle;
 			Handle = World->SpawnActorDeferred<AP2bTrackedPart>(AP2bTrackedPart::StaticClass(), Car->GetActorTransform());
@@ -218,7 +217,6 @@ bool FP5aActualCar::RunTest(const FString&)
 	AVBoRHingedPanel* Panel = W.Car->Glovebox; AVBoRAxisPart* Handle = W.Car->GloveboxHandle;
 	if (!TestNotNull(TEXT("Actual panel"), Panel) || !TestNotNull(TEXT("Actual handle"), Handle)) { return false; }
 	TestTrue(TEXT("Latched with palm opening disabled"), Panel->bUseLatch && Panel->GetMotion().bLocked && !Panel->bAllowPalmOpening);
-	TestFalse(TEXT("Inside grab option disabled"), Panel->bUseInsideGrabArea);
 	TestTrue(TEXT("Actual outside handle connected"), Panel->OutsideAxisHandle == Handle);
 	TestTrue(TEXT("Handle parent is panel hinge"), Handle->GetRootComponent()->GetAttachParent() == Panel->HingePivot);
 	TestTrue(TEXT("Panel actor at car origin"), Panel->GetActorTransform().Equals(W.Car->GetActorTransform(),0.001));
@@ -233,18 +231,6 @@ bool FP5aActualCar::RunTest(const FString&)
 	TestEqual(TEXT("Handle alone returns"), Handle->Release,EVBoRAxisRelease::Return);
 	TestFalse(TEXT("Door has no physics gravity"), Panel->DoorMesh->IsSimulatingPhysics());
 	TestTrue(TEXT("Passenger side below dashboard"), W.Car->GloveboxHingeCm.Y > 0 && W.Car->GloveboxHingeCm.Z + W.Car->GloveboxSizeCm.Z < W.Car->DashboardCenterCm.Z - W.Car->DashboardSizeCm.Z/2);
-	for (int32 I = 0; I < 2; ++I)
-	{
-		UBoxComponent* Box = I == 0 ? Panel->OutsideHandle.Get() : Panel->InsideHandle.Get();
-		UIsdkGrabbableComponent* Grab = I == 0 ? Panel->OutsideGrab.Get() : Panel->InsideGrab.Get();
-		TestEqual(TEXT("Disabled box collision"), Box->GetCollisionEnabled(),ECollisionEnabled::NoCollision);
-		TestFalse(TEXT("Disabled box overlap"), Box->GetGenerateOverlapEvents());
-		TestFalse(TEXT("Disabled visual"), (I == 0 ? Panel->OutsideHandleMesh : Panel->InsideHandleMesh)->IsVisible());
-		TestFalse(TEXT("Disabled palm input"), Grab->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm));
-	}
-	FIsdkInteractionPointerEvent Event; Event.Type = EIsdkPointerEventType::Select; Event.Interactor = P5aGrabber(W); Event.Interactable = Panel->InsideGrab;
-	Panel->InsideGrab->GetInteractionPointerEventDelegate().Broadcast(Event);
-	TestTrue(TEXT("Injected inside select remains locked"), Panel->GetMotion().bLocked && Panel->GetMotion().GrabHand == INDEX_NONE && Panel->GetMotion().Metrics.Unlocks == 0);
 	W.Car->Destroy(); TestTrue(TEXT("Car EndPlay destroys panel and handle"), Panel->IsActorBeingDestroyed() && Handle->IsActorBeingDestroyed()); return true;
 }
 
@@ -275,7 +261,7 @@ bool FP5aWarnings::RunTest(const FString&)
 	for (bool bPalm : {false,true})
 	{
 		AVBoRHingedPanel* Panel = W.World->SpawnActorDeferred<AVBoRHingedPanel>(AVBoRHingedPanel::StaticClass(),FTransform::Identity);
-		Panel->bUseLatch = true; Panel->bUseOutsideGrabArea = Panel->bUseInsideGrabArea = false;
+		Panel->bUseLatch = true;
 		Panel->bAllowPalmOpening = bPalm; Panel->FinishSpawning(FTransform::Identity);
 	}
 	W.World->InitializeActorsForPlay(FURL()); W.World->GetWorldSettings()->NotifyBeginPlay(); return true;
