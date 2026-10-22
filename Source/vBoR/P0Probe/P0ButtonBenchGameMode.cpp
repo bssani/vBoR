@@ -11,7 +11,7 @@ AP0ButtonBenchGameMode::AP0ButtonBenchGameMode()
 
 void AP0ButtonBenchGameMode::StartPlay()
 {
-	// Pawn 의 modifier·data source 초기화 뒤 시험대를 생성함 (P0-b §2)
+	// Spawn bench after Pawn modifier/data source init (P0-b §2)
 	Super::StartPlay();
 	GetWorld()->SpawnActor<AP0ButtonBench>(BenchClass);
 }

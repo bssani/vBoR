@@ -11,7 +11,7 @@ bool VBoRReadWorldHead(UWorld* World, FTransform& OutHead)
 	const auto& XR = GEngine->XRSystem;
 	FQuat Rotation; FVector Position;
 	if (!XR->IsTracking(IXRTrackingSystem::HMDDeviceId) || !XR->GetCurrentPose(IXRTrackingSystem::HMDDeviceId, Rotation, Position)) { return false; }
-	// Stage 자세를 현재 Pawn 의 world 좌표로 바꿈 (P3 D2)
+	// Convert Stage pose to current Pawn world coordinates (P3 D2)
 	OutHead = FTransform(Rotation, Position) * XR->GetTrackingToWorldTransform();
 	return !OutHead.ContainsNaN();
 }
@@ -43,7 +43,7 @@ void UVBoRApproachZoneComponent::SampleHead(bool bTracked, const FVector& WorldH
 	bNear = bInside;
 	if (bNear) { ++Approaches; LastApproachSeconds = Now; OnParticipantApproached.Broadcast(); }
 	else { ++Departures; LastDepartureSeconds = Now; OnParticipantDeparted.Broadcast(); }
-	UE_LOG(LogP3Flow, Log, TEXT("접근 near=%d approaches=%d departures=%d time=%.3f s"), bNear, Approaches, Departures, Now);
+	UE_LOG(LogP3Flow, Log, TEXT("Approach near=%d approaches=%d departures=%d time=%.3f s"), bNear, Approaches, Departures, Now);
 }
 
 UVBoRSeatZoneComponent::UVBoRSeatZoneComponent()
@@ -63,7 +63,7 @@ void UVBoRSeatZoneComponent::SampleHead(bool bTracked, const FVector& WorldHead,
 {
 	if (!bTracked)
 	{
-		if (bWasTracked) { ++TrackingPauses; UE_LOG(LogP3Flow, Log, TEXT("좌석 추적 보류 count=%d dwell=%.3f s"), TrackingPauses, DwellSeconds); }
+		if (bWasTracked) { ++TrackingPauses; UE_LOG(LogP3Flow, Log, TEXT("Seat tracking paused count=%d dwell=%.3f s"), TrackingPauses, DwellSeconds); }
 		bWasTracked = false; return;
 	}
 	const bool bRecovered = !bWasTracked; bWasTracked = true;
@@ -71,6 +71,6 @@ void UVBoRSeatZoneComponent::SampleHead(bool bTracked, const FVector& WorldHead,
 	const FVector E = GetUnscaledBoxExtent();
 	bInside = P.X <= E.X && P.Y <= E.Y && P.Z <= E.Z;
 	if (!bInside) { DwellSeconds = 0; }
-	// 복구 frame 의 dt 에 추적 손실 시간이 섞일 수 있어 세지 않음 (P3 E7)
+	// Ignore recovery-frame dt (may include tracking-loss time, P3 E7)
 	else if (!bRecovered) { DwellSeconds += FMath::Max(0.0, DeltaSeconds); }
 }

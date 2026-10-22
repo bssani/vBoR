@@ -26,7 +26,7 @@ public:
 	void Configure();
 };
 
-// SDK 가 속도를 넣은 뒤 검사함 (PostEvent 의 delegate 는 물리 복원보다 먼저 불림, P4a D5)
+// Check after SDK velocity assignment (PostEvent delegate precedes physics restore, P4a D5)
 UCLASS()
 class VBOR_API UVBoRKeyGrabbableComponent : public UIsdkGrabbableComponent
 {

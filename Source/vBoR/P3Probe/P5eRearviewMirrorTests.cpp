@@ -65,7 +65,7 @@ namespace
 		~FP5eWarnings() { GLog->RemoveOutputDevice(this); }
 		virtual void Serialize(const TCHAR* Message, ELogVerbosity::Type Verbosity, const FName& Category) override
 		{
-			// 기대 경고는 UE 자동화가 Verbose 로 낮춘 뒤 전달함 (P5l E13)
+			// UE automation forwards expected warning as Verbose (P5l E13)
 			if (Category == TEXT("LogTwoAxisPart") && FString(Message).Contains(TEXT("Missing mesh or invalid two-axis settings")) &&
 				(Verbosity == ELogVerbosity::Warning || Verbosity == ELogVerbosity::Verbose)) { ++Count; }
 		}
@@ -78,7 +78,7 @@ bool FP5eRest::RunTest(const FString&)
 	FP5eWorld W; auto* Part=W.Part(); W.Play();
 	TestEqual(TEXT("Yaw rest"),Part->GetYawDeg(),0.f); TestEqual(TEXT("Pitch rest"),Part->GetPitchDeg(),0.f);
 	TestTrue(TEXT("Authored world pose"),Part->PartMesh->GetComponentTransform().Equals(Part->MeshRestFromRoot*Part->GetActorTransform(),0.001));
-	TestTrue(TEXT("No reflection boundary"),Part->GetDebugText().Contains(TEXT("반사 없음")) && Part->GetDebugText().Contains(TEXT("not-tested"))); return true;
+	TestTrue(TEXT("No reflection boundary"),Part->GetDebugText().Contains(TEXT("no reflection")) && Part->GetDebugText().Contains(TEXT("not-tested"))); return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5eYaw,"vBoR.P5e.E2GrabPointYaw",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
@@ -652,7 +652,7 @@ bool FP5nMirrorBand::RunTest(const FString&)
 			}
 		}
 	}
-	// 띠 안에서 시작해도 같은 손·점·면으로 띠 밖에서 계속 밂 (P5n D3)
+	// Start inside strip, continue pushing outside with same hand/point/face (P5n D3)
 	FP5eWorld W; auto* Part=W.Part(); W.Play();
 	P5ePoint(Part->Hands[0],FVector(-1,3.9,0)); Part->Tick(0.016f);
 	P5ePoint(Part->Hands[0],FVector(-2.5,3.9,0)); Part->Tick(0.016f);

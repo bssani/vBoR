@@ -9,7 +9,7 @@ struct FVBoRCarryMotion
 		FQuat Swing;
 		FQuat Twist;
 		Rotation.GetNormalized().ToSwingTwist(FVector::UpVector, Swing, Twist);
-		// q 와 -q 의 같은 회전을 최단 swing 으로 맞춤 (P1 R1-2, ±90 deg Euler 특이점 제외)
+		// Shortest swing for equivalent q and -q (P1 R1-2, avoid ±90 deg Euler singularity)
 		if (Swing.W < 0) { Swing = Swing * -1.0; }
 		const double Angle = 2.0 * FMath::Acos(FMath::Clamp(Swing.W, 0.0, 1.0));
 		const double Limit = FMath::DegreesToRadians(FMath::Max(0.0, TiltLimitDeg));
@@ -38,7 +38,7 @@ struct FVBoRCarryMotion
 		double Fraction = 1.0;
 		if (!Fits(Fraction))
 		{
-			// 높이 차로 더하는 기울기만 줄임 (두 손 진입 때 자기 축 회전을 유지, P1 D6·R3-2)
+			// Limit tilt added by height difference only (preserve axial rotation on two-hand entry, P1 D6/R3-2)
 			double Allowed = 0.0;
 			double Rejected = 1.0;
 			for (int32 Step = 0; Step < 24; ++Step)
@@ -69,7 +69,7 @@ struct FVBoRCarryMotion
 	}
 };
 
-// SDK selection 과 별도로 두 손을 소유함 (손실 취소가 놓기로 바뀌지 않게, P1 D6)
+// Own both hands separately from SDK selection (tracking cancellation must not release, P1 D6)
 struct FVBoRCarrySession
 {
 	int32 Hand = INDEX_NONE;
@@ -93,7 +93,7 @@ struct FVBoRCarrySession
 	int32 TwoHandEntries = 0;
 	double TwoHandSeconds = 0;
 	double LastTime = 0;
-	// 5 cm 미만 또는 수직에 가까운 두 점은 방향 대신 첫 손의 이동만 따름 (P1 D6 자리값)
+	// Under 5 cm or near-vertical points: follow first-hand translation only (P1 D6 placeholder)
 	static constexpr double MinPairDistanceCm = 5.0;
 	bool HasHand(int32 Id) const { return Id != INDEX_NONE && (Hand == Id || SecondHand == Id); }
 	bool IsTwoHanded() const { return SecondHand != INDEX_NONE; }
@@ -151,7 +151,7 @@ struct FVBoRCarrySession
 		}
 		if (IsTwoHanded() && bPairDirectionValid != HasDirection(Poses))
 		{
-			// 방향을 잃거나 되찾는 frame 은 재기준만 잡음 (근접 교차 때 Yaw 반전 방지, P1 D6)
+			// Rebase only on direction loss/recovery frame (avoid Yaw flip at close crossing, P1 D6)
 			Rebase(Poses, ObjectPose);
 			return false;
 		}
@@ -174,7 +174,7 @@ struct FVBoRCarrySession
 			Anchor = (Poses[0].GetLocation() + Poses[1].GetLocation()) * 0.5;
 		}
 		else if (!IsTwoHanded()) { Delta = FVBoRCarryMotion::LimitedHandDelta(StartHand, Poses[Hand], TiltLimitDeg); }
-		// 처음 놓인 자세로 제한함 (재잡기·추적 복구·손 수 변경으로 기울기 누적 방지, P1 R3-2)
+		// Limit against initial placed pose (no tilt accumulation on regrab/recovery/hand-count change, P1 R3-2)
 		const FQuat Rotation = bPairMotion ? (Delta * StartObject.GetRotation()).GetNormalized() :
 			(FVBoRCarryMotion::LimitWorldTilt(Delta * StartObject.GetRotation() * RestRotation.Inverse(), TiltLimitDeg) * RestRotation).GetNormalized();
 		const FQuat Applied = Rotation * StartObject.GetRotation().Inverse();

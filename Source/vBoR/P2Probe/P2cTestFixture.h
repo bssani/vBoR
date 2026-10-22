@@ -4,7 +4,7 @@
 #include "../Interaction/VBoRHingedDoor.h"
 #include "P2cTestFixture.generated.h"
 
-// 추적 대신 경첩 좌표의 손만 넣음 (실제 판 Tick 검증, P2c §4)
+// Hand in hinge coordinates instead of tracking (validate real panel Tick, P2c §4)
 UCLASS()
 class AP2cTrackedPanel : public AVBoRHingedPanel
 {

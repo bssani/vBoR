@@ -26,7 +26,7 @@ public:
 	FLinearColor GuideColor = FLinearColor(0, 0.8, 0.4, 0.15);
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Load Target")
 	TObjectPtr<UStaticMeshComponent> Guide;
-	// 목표 자세와 별도로 공간 전체를 잼 (비켜 놓인 짐도 안착 판정, P1 R4-1)
+	// Measure full region separately from target pose (accept offset loads, P1 R4-1)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Load Target")
 	TObjectPtr<UBoxComponent> LoadingRegion;
 protected:

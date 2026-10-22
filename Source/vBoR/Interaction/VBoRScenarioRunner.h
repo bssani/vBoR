@@ -39,23 +39,23 @@ class VBOR_API AVBoRScenarioRunner : public AActor
 public:
 	AVBoRScenarioRunner();
 	virtual void Tick(float DeltaSeconds) override;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="안내") TObjectPtr<UVBoRScenarioAsset> Scenario;
-	UPROPERTY(VisibleAnywhere, Category="안내") TObjectPtr<UWidgetComponent> Panel;
-	UPROPERTY(EditAnywhere, Category="안내", meta=(Units="cm")) float PanelDistanceCm = 70;
-	UPROPERTY(EditAnywhere, Category="안내", meta=(Units="cm")) float PanelBelowCm = 0;
-	UPROPERTY(EditAnywhere, Category="안내", meta=(Units="cm")) FVector2D PanelSizeCm = FVector2D(50, 32);
-	UPROPERTY(EditAnywhere, Category="안내", meta=(Units="cm")) float ButtonDistanceCm;
-	UPROPERTY(EditAnywhere, Category="안내", meta=(Units="cm")) float ButtonBelowCm;
-	UPROPERTY(EditAnywhere, Category="안내", meta=(Units="s", ClampMin="0")) float ConfirmLockSeconds;
-	UPROPERTY(EditAnywhere, Category="안내", meta=(Units="s", ClampMin="0.01")) float SeatedPanelSeconds;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="안내") FText FreeModeInstruction;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Guidance") TObjectPtr<UVBoRScenarioAsset> Scenario;
+	UPROPERTY(VisibleAnywhere, Category="Guidance") TObjectPtr<UWidgetComponent> Panel;
+	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float PanelDistanceCm = 70;
+	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float PanelBelowCm = 0;
+	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) FVector2D PanelSizeCm = FVector2D(50, 32);
+	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float ButtonDistanceCm;
+	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float ButtonBelowCm;
+	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="s", ClampMin="0")) float ConfirmLockSeconds;
+	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="s", ClampMin="0.01")) float SeatedPanelSeconds;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Guidance") FText FreeModeInstruction;
 	bool InitializeFlow();
 	void QueueCommand(const FVBoRFlowCommand& Command);
 	void ProcessFlow(double DeltaSeconds);
 	FVBoRFlowToken GetToken() const { return {StepIndex, Generation}; }
 	int32 GetStepIndex() const { return StepIndex; }
 	bool IsFinished() const { return bFinished; }
-	UFUNCTION(BlueprintPure, Category="안내") bool IsFreeMode() const { return bFreeMode; }
+	UFUNCTION(BlueprintPure, Category="Guidance") bool IsFreeMode() const { return bFreeMode; }
 	bool IsRunning() const { return bRunning; }
 	FString GetPanelText() const;
 	FString GetOperatorText() const;
@@ -76,7 +76,7 @@ public:
 	EVBoROperatorStyle GetOperatorStyle(EVBoROperatorButton Button) const;
 	FString OperatorButtonBadge(EVBoROperatorButton Button) const;
 	FString ReapplyHelp() const;
-	UFUNCTION(BlueprintCallable, Category="안내") void ShowOperatorWindow();
+	UFUNCTION(BlueprintCallable, Category="Guidance") void ShowOperatorWindow();
 	bool HasOperatorWindow() const { return OperatorWindow.IsValid(); }
 protected:
 	virtual void BeginPlay() override;
@@ -143,7 +143,7 @@ private:
 	FVBoRCommandDecision EvaluateCommand(const FVBoRFlowCommand& Command, UVBoRViewpointComponent* Viewpoint) const;
 	FString OperatorButtonBadge(EVBoROperatorButton Button, UVBoRViewpointComponent* Viewpoint) const;
 	UVBoRViewpointComponent* CommandViewpoint(EVBoRFlowCommand Action) const;
-	// 동승석·2열 시점은 시작 검사 때 한 번 찾음 (CAD Actor 수만 개를 frame 마다 순회 안 하게, P5o)
+	// Cache passenger/rear viewpoints once at startup (no per-frame scan of thousands of CAD Actors, P5o)
 	TWeakObjectPtr<UVBoRViewpointComponent> SeatViews[2];
 	UVBoRViewpointComponent* ScanSeatView(FName Tag) const;
 #if WITH_DEV_AUTOMATION_TESTS

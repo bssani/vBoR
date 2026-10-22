@@ -212,9 +212,9 @@ bool FP5dRuntimeSettings::RunTest(const FString&)
 {
 	FP5dWorld W; auto* Wheel = W.Wheel(); auto* Grabber = P5dPointer(Wheel);
 	TestEqual(TEXT("Valid construction leaves grab collision enabled"),Wheel->GrabBox->GetCollisionEnabled(),ECollisionEnabled::QueryOnly);
-	// construction 없이 실행 초기화만 거침 (레벨에 저장된 잘못된 값 재현, P5d R1-1)
+	// Runtime init without construction (reproduce invalid saved-level values, P5d R1-1)
 	Wheel->MaxGrabRadiusCm = Wheel->MinGrabRadiusCm - 1;
-	// 기대한 경고는 UE 가 Verbose 로 낮춤. 공식 계수로 1회 확인함 (P5d R1-1)
+	// UE downgrades expected warning to Verbose. Verify once via official count (P5d R1-1)
 	AddExpectedMessagePlain(TEXT("Missing mesh or invalid wheel limits/radii; grabbing disabled"),ELogVerbosity::Warning);
 	Wheel->PreInitializeComponents(); GLog->FlushThreadedLogs();
 	TestFalse(TEXT("Invalid runtime settings disable Palm"),Wheel->Grabbable->IsGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm));
@@ -286,7 +286,7 @@ bool FP5dCar::RunTest(const FString&)
 	TestTrue(TEXT("Car origin pivot"),Wheel->GetActorTransform().Equals(CarWorld,0.001)); TestTrue(TEXT("Hub position"),Wheel->AxisPivot->GetRelativeLocation().Equals(Car->SteeringHubCm));
 	TestTrue(TEXT("Rest world pose"),Wheel->WheelMesh->GetComponentTransform().Equals(Wheel->MeshRestFromRoot*CarWorld,0.001)); TestEqual(TEXT("Starts straight"),Wheel->GetAngleDeg(),0.f);
 	TestTrue(TEXT("Plate hidden in play"),FP5dTestAccess::Plates(Car)[12]->bHiddenInGame);
-	// 실제 광학 입력 대신 휠 자세만 합성함 (옮기고 기울인 차의 부호·겹침 확인, P5d E16)
+	// Synthesize wheel pose instead of optical input (sign/overlap on moved/tilted car, P5d E16)
 	Wheel->AxisPivot->SetRelativeTransform(FTransform(FQuat(FVector::XAxisVector,-PI/2))*FTransform(Car->SteeringAxisRotation,Car->SteeringHubCm));
 	const FVector Marker=CarWorld.InverseTransformPosition(Wheel->TopMarker->GetComponentLocation())-Car->SteeringHubCm;
 	TestTrue(TEXT("Positive clockwise points car right"),Marker.Y>15 && FMath::Abs(Marker.Z)<0.001);

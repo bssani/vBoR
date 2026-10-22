@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 
-// HingePivot 의 닫힌 좌표계: +X 뒤 끝, +Y 바깥, +Z 경첩 축 (P2 D6, cm)
+// Closed HingePivot coordinates: +X trailing edge, +Y outside, +Z hinge axis (P2 D6, cm)
 struct FVBoRDoorHand
 {
 	bool bTracked = false;
@@ -15,9 +15,9 @@ enum class EVBoRDoorIgnore : uint8 { Locked, PalmDirection, Behind, NearAxis, Ou
 struct FVBoRDoorMetrics
 {
 	int32 Unlocks = 0, Latches = 0, LastUnlockHandle = INDEX_NONE;
-	int32 PushStarts[2][2] = {}; // 손, 면 (0 바깥 / 1 안쪽)
+	int32 PushStarts[2][2] = {}; // Hand, face (0 outside / 1 inside)
 	int32 Ignored[static_cast<int32>(EVBoRDoorIgnore::Count)] = {};
-	int32 Attempts[2][2] = {}, Grabs[2][2] = {}; // 손, 손잡이
+	int32 Attempts[2][2] = {}, Grabs[2][2] = {}; // Hand, handle
 	int32 RateLimitedFrames = 0, Pauses = 0, IgnoredReleases = 0, PushTrackingLosses = 0;
 	double PushedDeg = 0, HeldSeconds = 0, PausedSeconds = 0, RecoveryDistanceCm = 0;
 	FVBoRDoorMetrics Since(const FVBoRDoorMetrics& Before) const;
@@ -31,20 +31,20 @@ struct FVBoRDoorMotion
 	double LatchAngleDeg = 2, RearmAngleDeg = 5;
 	double PalmLimitDeg = 60, MinAxisDistanceCm = 15, FrontToleranceCm = 0.5;
 	double AngleDeg = 0;
-	bool bUseLatch = true; // 기존 문은 잠금 켬, 공통 판은 끔 (P2c D2)
+	bool bUseLatch = true; // Lock enabled for existing door, disabled for shared panel (P2c D2)
 	bool bAllowPalmOpening = true;
 	bool bLocked = true, bLatchArmed = false, bPaused = false;
 	int32 GrabHand = INDEX_NONE, GrabHandle = INDEX_NONE;
 	int32 PushHand = INDEX_NONE, PushFace = INDEX_NONE;
 	double PalmAngleDeg[2] = {-1, -1};
 	FVBoRDoorMetrics Metrics;
-	// 문 좌표의 점·면 → 면 Y (cm). 빈 질의는 기존 평면 유지 (P2g D5)
+	// Door-space point/face → face Y (cm). Empty query keeps existing plane (P2g D5)
 	TFunction<bool(const FVector&, int32, double&)> QueryFace;
 	bool BeginGrab(int32 Hand, int32 Handle, const FVBoRDoorHand& Input);
 	bool Unlock(int32 Handle = INDEX_NONE);
 	bool ReleaseGrab(bool bTracked);
 	void Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSeconds);
-	void Reset(); // 누적은 유지함 (P2 E18)
+	void Reset(); // Keep totals (P2 E18)
 	FVector ToDoor(const FVector& HingePoint) const;
 private:
 	FVBoRDoorHand Previous[2];

@@ -57,7 +57,7 @@ UWorld* P4iMainWorld()
 	UPackage* Package=LoadPackage(nullptr,TEXT("/Game/Main/L_Main"),LOAD_None);
 	return Package ? UWorld::FindWorldInPackage(Package) : nullptr;
 }
-// 회사에서 Approx 폴더를 지우면 근사 차와 같은 값인지는 더 보지 않음 (CAD 로 바뀜, P4i R1-1)
+// Skip mock-car comparison after company Approx folder deletion (CAD replaces it, P4i R1-1)
 bool P4iApproximate()
 {
 	UWorld* W=P4iMainWorld(); if(!W) { return false; }
@@ -89,7 +89,7 @@ void P4iComponents(FAutomationTestBase& T, AActor* Expected, AActor* Actual)
 			if (auto* Box = Cast<UBoxComponent>(C)) { T.TestTrue(TEXT("Box extent"), Box->GetUnscaledBoxExtent().Equals(CastChecked<UBoxComponent>(*Match)->GetUnscaledBoxExtent(), .01)); }
 		}
 	}
-	// Actor 원점 보정값·조립용 side 만 다름. 조작 설정은 부모와 같아야 함 (P4i D2·D3·D5)
+	// Only Actor-origin correction/assembly side differ. Interaction settings match parent (P4i D2/D3/D5)
 	for (TFieldIterator<FProperty> It(Expected->GetClass()); It; ++It)
 	{
 		FProperty* P = *It;
@@ -131,7 +131,7 @@ bool FP4iPreview::RunTest(const FString&)
 	TestNull(TEXT("Preview has no ISDK subsystem"), UIsdkWorldSubsystem::TryGet(Preview.World));
 	AVBoRPokeButton* Button = Preview.World->SpawnActor<AVBoRPokeButton>();
 	Preview.World->InitializeActorsForPlay(FURL());
-	// 썸네일은 BeginPlay 없이 초기화함 (P4i E7·Q2)
+	// Thumbnail initializes without BeginPlay (P4i E7/Q2)
 	Button->PreInitializeComponents();
 	TestNull(TEXT("Preview SDK wiring skipped"), Button->ButtonVisual->GetPokeInteractable());
 	TestNull(TEXT("Preview audio skipped"), Button->PointerAudio->GetSelectAudio());
@@ -190,7 +190,7 @@ bool FP4iPoses::RunTest(const FString&)
 		USceneComponent** Match = MockComponents.FindByPredicate([&Name,C](USceneComponent* M)
 		{
 			if (M->GetName()!=Name) { return false; }
-			// 점마다 같은 이름의 표시 자식이 있음 (다른 점의 sphere 와 비교하지 않게, P4i E2)
+			// Same-named visual children per point (avoid comparing other point's sphere, P4i E2)
 			return Name!=TEXT("PointSphere") && Name!=TEXT("PointNumber")
 				|| (M->GetAttachParent() && C->GetAttachParent() && M->GetAttachParent()->GetFName()==C->GetAttachParent()->GetFName());
 		});
@@ -202,7 +202,7 @@ bool FP4iPoses::RunTest(const FString&)
 			if (auto* Point=Cast<UVBoRAlignPointComponent>(C)) { auto* M=CastChecked<UVBoRAlignPointComponent>(*Match); TestEqual(TEXT("Point order"),Point->Order,M->Order); TestEqual(TEXT("Point label"),Point->Label,M->Label); }
 		}
 	}
-	// 축을 움직인 뒤 자식의 world 자세도 같아야 함 (P4i E2, deg)
+	// Child world pose must also match after axis movement (P4i E2, deg)
 	for (AActor* Door : {static_cast<AActor*>(Mock->Door),Parts[TEXT("BP_Door_FL")]})
 	{
 		USceneComponent* H=CastChecked<AVBoRHingedPanel>(Door)->HingePivot; H->AddLocalRotation(FRotator(0,40,0));
@@ -240,7 +240,7 @@ bool FP4iLinks::RunTest(const FString&)
 	TMap<FName,int32> Tags;
 	for (TActorIterator<AActor> It(W.World);It;++It) { for(FName Tag:It->Tags) { if(Tag.ToString().StartsWith(TEXT("Car."))) { ++Tags.FindOrAdd(Tag); } } TArray<UActorComponent*> Cs;It->GetComponents(Cs);for(auto* C:Cs) { for(FName Tag:C->ComponentTags) { if(Tag.ToString().StartsWith(TEXT("Car."))) { ++Tags.FindOrAdd(Tag); } } } }
 	for(const TCHAR* Tag:{TEXT("Car.DriverDoor"),TEXT("Car.ReachButton"),TEXT("Car.Liftgate"),TEXT("Car.RearSeat"),TEXT("Car.FrontKey"),TEXT("Car.RearKey"),TEXT("Car.DriverView"),TEXT("Car.PassengerView"),TEXT("Car.RearView"),TEXT("Car.DriverSeat"),TEXT("Car.Footprint"),TEXT("Car.Start")}) { TestEqual(Tag,Tags.FindRef(FName(Tag)),1); }
-	// 접근 구역은 지금 단계에서 안 쓰므로 0–1개 (Blueprint-Guide §3)
+	// Approach zone unused in current steps, allow 0–1 (Blueprint-Guide §3)
 	TestTrue(TEXT("Car.Approach at most one"),Tags.FindRef(FName(TEXT("Car.Approach")))<=1);
 	return true;
 }
@@ -283,15 +283,15 @@ bool FP4iLevel::RunTest(const FString&)
 		if(auto* Route=Cast<AVBoRFloorRoute>(A))
 		{
 			++Routes;bool Around=A->ActorHasTag(TEXT("Route.AroundCar"));TestTrue(TEXT("Route tag"),Around||A->ActorHasTag(TEXT("Route.ToDriverDoor")));
-			// 경로 점은 실제 방에 맞춰 옮기므로 근사 상태에서만 근사 차와 비교함 (P4i R1-1)
+			// Route points fit actual room; compare mock car only while approximate (P4i R1-1)
 			if(!bApprox) { continue; }
 			const auto& Points=Around?Default->AroundCarRoutePointsCm:Default->DriverDoorRoutePointsCm;TestEqual(TEXT("Route points"),Route->Spline->GetNumberOfSplinePoints(),Points.Num());for(int32 I=0;I<Points.Num();++I) { TestTrue(TEXT("Route point cm"),Route->Spline->GetLocationAtSplinePoint(I,ESplineCoordinateSpace::Local).Equals(Points[I],.01)); }
 		}
 	}
 	TestEqual(TEXT("Two tables"),Tables,2); TestEqual(TEXT("Two routes"),Routes,2);
 	TestTrue(TEXT("Front and rear key classes"),KeyClasses.Contains(P4iClass(TEXT("BP_KeyFob_Front")))&&KeyClasses.Contains(P4iClass(TEXT("BP_KeyFob_Rear"))));
-	// ── 근사 상태와 상관없이 지킬 것 ──
-	// 부품 BP Actor 는 차 원점. 메시·축만 부품 자리로 감 (Blueprint-Guide §4.1-2, P4i D3·R1-1)
+	// ── Required regardless of approximate state ──
+	// Part BP Actor at car origin. Mesh/axis at part position (Blueprint-Guide §4.1-2, P4i D3/R1-1)
 	for(const auto& BP:P4iBlueprints())
 	{
 		const FString N(BP.Name);
@@ -299,7 +299,7 @@ bool FP4iLevel::RunTest(const FString&)
 		AActor** A=Actors.FindByPredicate([&](AActor* X){return X->GetClass()==P4iClass(N);});
 		if(A && TestNotNull(TEXT("Placed root"),(*A)->GetRootComponent())) { P4iTransform(*this,N+TEXT(" placed at car origin"),(*A)->GetRootComponent()->GetRelativeTransform(),FTransform::Identity); }
 	}
-	// 4점 정렬은 Order 1–4 가 하나씩 필요함 (P4h D2, U-18)
+	// Four-point alignment needs one each of Order 1–4 (P4h D2, U-18)
 	AActor** Core=Actors.FindByPredicate([](AActor* X){return X->GetClass()==P4iClass(TEXT("BP_Car_Core"));});
 	if(Core)
 	{

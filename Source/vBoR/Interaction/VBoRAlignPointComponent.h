@@ -11,8 +11,8 @@ class VBOR_API UVBoRAlignPointComponent : public USceneComponent
 	GENERATED_BODY()
 public:
 	UVBoRAlignPointComponent();
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="정렬 점", meta=(ClampMin="1")) int32 Order = 1;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="정렬 점") FString Label;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Alignment points", meta=(ClampMin="1")) int32 Order = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Alignment points") FString Label;
 	void ShowPoint(bool bShow);
 protected:
 	virtual void OnRegister() override;

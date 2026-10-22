@@ -20,7 +20,7 @@ void AVBoRKeyTable::OnConstruction(const FTransform& Transform)
 	Super::OnConstruction(Transform);
 	const FVector Size = TableSizeCm.ComponentMax(FVector(1));
 	const double Thickness = FMath::Clamp(static_cast<double>(TopThicknessCm), 0.1, Size.Z);
-	// 원점 Z 는 바닥 높이, 상판 윗면은 TableSizeCm.Z (근사 형상, P4a D6)
+	// Origin Z = floor height, tabletop top = TableSizeCm.Z (approximate geometry, P4a D6)
 	TopMesh->SetRelativeLocation(FVector(0,0,Size.Z - Thickness / 2)); TopMesh->SetRelativeScale3D(FVector(Size.X,Size.Y,Thickness) / 100);
 	StandMesh->SetRelativeLocation(FVector(0,0,(Size.Z - Thickness) / 2)); StandMesh->SetRelativeScale3D(FVector(6,6,Size.Z - Thickness) / 100);
 }
@@ -29,7 +29,7 @@ FTransform AVBoRKeyTable::GetKeyHomeTransform(const AVBoRKeyFob* InKey) const
 {
 	const FBox TopBounds = TopMesh->GetStaticMesh()->GetBoundingBox().TransformBy(TopMesh->GetRelativeTransform());
 	const FBox KeyBounds = InKey->KeyMesh->GetStaticMesh()->GetBoundingBox().TransformBy(FTransform(FQuat::Identity, FVector::ZeroVector, InKey->GetActorScale3D()));
-	// 키 아랫면을 상판보다 0.1 cm 띄움 (simple collision 에 물리로 올라앉게, P4a D6)
+	// Key bottom 0.1 cm above tabletop (settle on simple collision, P4a D6)
 	return FTransform(GetActorQuat(), GetActorTransform().TransformPosition(FVector(0,0,TopBounds.Max.Z - KeyBounds.Min.Z + 0.1)), InKey->GetActorScale3D());
 }
 

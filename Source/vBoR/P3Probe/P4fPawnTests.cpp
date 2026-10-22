@@ -82,7 +82,7 @@ bool FP4fDefault::RunTest(const FString&)
 	TestFalse(TEXT("No mesh overrides"), Pawn->LeftHandMesh || Pawn->RightHandMesh);
 	TestFalse(TEXT("No material overrides"), Pawn->LeftHandMaterial || Pawn->RightHandMaterial);
 	P4fCheckVisuals(*this, Pawn, 0, P4fDefaultMesh(0)); P4fCheckVisuals(*this, Pawn, 1, P4fDefaultMesh(1));
-	// Pawn Tick 은 부모 기본 그대로 (BP 자식 Event Tick 유지, P4f 리뷰 R1-1)
+	// Parent default Pawn Tick (preserve BP child Event Tick, P4f review R1-1)
 	const FActorTickFunction& BaseTick = GetDefault<AVBoRHandRigPawn>()->PrimaryActorTick;
 	TestTrue(TEXT("Actor tick settings stay as the base pawn"), Pawn->PrimaryActorTick.bCanEverTick == BaseTick.bCanEverTick
 		&& Pawn->PrimaryActorTick.bStartWithTickEnabled == BaseTick.bStartWithTickEnabled && Pawn->PrimaryActorTick.TickGroup == BaseTick.TickGroup);
@@ -106,7 +106,7 @@ bool FP4fMesh::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4fFallback, "vBoR.P4f.E4InvalidMeshFallback", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP4fFallback::RunTest(const FString&)
 {
-	// SDK 가 각 표시에서 내는 본 매핑 오류도 기대값으로 셈 (P4f E4, 플러그인 수정 없음)
+	// Expect SDK bone mapping errors from each visual too (P4f E4, no plugin changes)
 	AddExpectedError(TEXT("Bone XRHand_Palm has no valid bone name mapped to the skeleton."), EAutomationExpectedErrorFlags::Contains, 2);
 	AddExpectedMessagePlain(TEXT("Right hand mesh SkeletalCube bones do not match XRHand_* - using default hand"), ELogVerbosity::Warning, EAutomationExpectedMessageFlags::Contains, 1);
 	FP4fWorld W; AVBoRPawn* Pawn = W.World->SpawnActor<AVBoRPawn>();

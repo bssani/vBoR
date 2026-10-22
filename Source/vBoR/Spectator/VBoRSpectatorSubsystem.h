@@ -58,7 +58,7 @@ private:
 	FVBoRSpectatorLayout ScreenLayout;
 	bool bPending = false;
 	float PendingSeconds = 0, RetryCountdown = 0, RedrawCountdown = 0;
-	// 처음 한 번만 월드를 훑고, 뒤에 생긴 Actor·추가된 레벨만 더함 (CAD Actor 수만 개를 frame 마다 순회 안 하게, P5o)
+	// Scan world once, then add spawned Actors/added levels only (no per-frame scan of thousands of CAD Actors, P5o)
 	TArray<TWeakObjectPtr<AActor>> Parts;
 	bool bPartsCollected = false;
 	FDelegateHandle SpawnedHandle, LevelAddedHandle;

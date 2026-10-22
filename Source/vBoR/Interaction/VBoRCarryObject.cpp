@@ -38,15 +38,15 @@ void UVBoRCarryTransformer::BeginTransform(const TArray<FIsdkGrabPose>& Poses, c
 FTransform UVBoRCarryTransformer::UpdateTransform(const TArray<FIsdkGrabPose>& Poses, const FIsdkTargetTransform& Target)
 {
 	AVBoRCarryObject* Object = GetTypedOuter<AVBoRCarryObject>();
-	// 소유 손의 Tick 에서만 갱신함 (SDK End/Begin 순서와 복구 frame 분리, P1 D6)
-	// SDK 의 SetRelativeTransform 에 검사한 자세만 반환함 (P1 §5)
+	// Update only in owned-hand Tick (separate SDK End/Begin from recovery frame, P1 D6)
+	// Return validated pose only to SDK SetRelativeTransform (P1 §5)
 	return Object ? Object->GetActorTransform().GetRelativeTransform(Target.ParentWorldTransform) : Target.RelativeTransform;
 }
 
 FTransform UVBoRCarryTransformer::EndTransform(const FIsdkTargetTransform& Target)
 {
 	bActive = false;
-	// End 는 추적 취소·선택 변경 때도 옴. 여기서 낙하를 시작하지 않음 (P1 §5)
+	// End also follows tracking cancellation/selection changes. No drop here (P1 §5)
 	const AVBoRCarryObject* Object = GetTypedOuter<AVBoRCarryObject>();
 	return Object ? Object->GetActorTransform().GetRelativeTransform(Target.ParentWorldTransform) : Target.RelativeTransform;
 }
@@ -69,7 +69,7 @@ AVBoRCarryObject::AVBoRCarryObject()
 	Mesh->SetStaticMesh(Cube.Object);
 	LandingPreview = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("LandingPreview"));
 	LandingPreview->SetupAttachment(Mesh);
-	// 손의 이동·회전과 독립된 착지 자세를 표시함 (P1c D3)
+	// Show landing pose independently of hand motion/rotation (P1c D3)
 	LandingPreview->SetAbsolute(true, true, true);
 	LandingPreview->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	LandingPreview->SetGenerateOverlapEvents(false);
@@ -102,7 +102,7 @@ void AVBoRCarryObject::ApplyBoxSize()
 {
 	const FBox Bounds = GetMeshLocalBounds();
 	if (!Bounds.IsValid || Bounds.GetSize().GetMin() <= KINDA_SMALL_NUMBER) { return; }
-	// 같은 root scale 을 메시·simple collision·적재 판정에서 공유함 (P1b D2, cm)
+	// Share root scale across mesh/simple collision/load check (P1b D2, cm)
 	BoxSizeCm = BoxSizeCm.GetAbs().ComponentMax(FVector(1));
 	SetActorScale3D(BoxSizeCm / Bounds.GetSize());
 }
@@ -114,7 +114,7 @@ void AVBoRCarryObject::PreInitializeComponents()
 		UE_LOG(LogVBoRCarry, Warning, TEXT("Invalid LevelLiftMaxCm on '%s'; using 0 cm."), *GetName());
 		LevelLiftMaxCm = 0;
 	}
-	// 자식 설정 반영 뒤 SDK BeginPlay 전에 Palm 만 허용하고 Throwable 을 끔 (P1 D1)
+	// Palm only, Throwable off after child settings and before SDK BeginPlay (P1 D1)
 	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, true);
 	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch, false);
 	Grabbable->SetGrabCollider(Mesh);
@@ -149,7 +149,7 @@ void AVBoRCarryObject::BeginPlay()
 void AVBoRCarryObject::WarnIfOffCenterPivot(const FBox& Bounds, const FVector& Scale) const
 {
 	if (!Bounds.IsValid) { return; }
-	// 늘린 뒤 cm 거리로 판단함. 피벗 보정은 메시에서 함 (P5t D4)
+	// Measure scaled distance in cm. Correct pivot on mesh (P5t D4)
 	const double DistanceCm = (Bounds.GetCenter() * Scale).Size();
 	if (DistanceCm > 1)
 	{
@@ -170,7 +170,7 @@ FBox AVBoRCarryObject::GetCollisionBoundsInPose(const FTransform& Pose, const FT
 	const FKAggregateGeom& Geometry = Body->AggGeom;
 	FTransform Frame = Pose.GetRelativeTransform(Reference);
 	Frame.RemoveScaling();
-	// Convex 의 실제 꼭짓점으로 목표 안 여부를 잼 (외접 상자 회전으로 원통이 커지지 않게, P1 R3-2)
+	// Check actual convex vertices against target (rotated bounds must not inflate cylinder, P1 R3-2)
 	for (const FKConvexElem& Hull : Geometry.ConvexElems)
 	{
 		for (const FVector& Vertex : Hull.VertexData)
@@ -196,7 +196,7 @@ bool AVBoRCarryObject::IsPoseClear(const FTransform& Pose) const
 	++PoseClearCalls;
 #endif
 	if (!GetWorld() || Pose.ContainsNaN() || !HasSimpleCollision()) { return false; }
-	// 등록된 Mesh 의 simple collision 을 그대로 씀 (원통 외접 상자 모서리 제거, P1 R3-2)
+	// Use registered Mesh simple collision (no cylinder bounding-box corners, P1 R3-2)
 	FComponentQueryParams Params(SCENE_QUERY_STAT(VBoRCarryOverlap), this);
 	TArray<FOverlapResult> Overlaps;
 	GetWorld()->ComponentOverlapMulti(Overlaps, Mesh, Pose.GetLocation(), Pose.GetRotation(), Params);
@@ -210,7 +210,7 @@ bool AVBoRCarryObject::IsPoseClear(const FTransform& Pose) const
 		{
 			if (!Contact.bBlockingHit || Contact.GetComponent() != Overlap.GetComponent()) { continue; }
 			bContactFound = true;
-			// 바닥에 딱 닿은 자세의 수치 오차만 허용함 (기존 접촉 여유 0.05 mm, P1 R3-2)
+			// Allow rounding at exact floor contact only (existing 0.05 mm margin, P1 R3-2)
 			if (!Contact.bStartPenetrating || Contact.PenetrationDepth > 0.005) { return false; }
 		}
 		if (!bContactFound) { return false; }
@@ -223,7 +223,7 @@ bool AVBoRCarryObject::TryMoveToPose(const FTransform& Requested)
 	if (!GetWorld() || Requested.ContainsNaN()) { return false; }
 	const FTransform Current = GetActorTransform();
 	FTransform Goal = Requested;
-	// 안착 보조·양손 간격도 등록된 충돌 형상 크기를 바꾸지 않음 (P1 D6)
+	// Assisted placement/two-hand spacing never resize registered collision (P1 D6)
 	Goal.SetScale3D(Current.GetScale3D());
 	bool bRotationBlocked = false;
 	if (!Goal.GetRotation().Equals(Current.GetRotation()) &&
@@ -241,9 +241,9 @@ bool AVBoRCarryObject::TryMoveToPose(const FTransform& Requested)
 	for (const FHitResult& Hit : Hits)
 	{
 		if (!Hit.bBlockingHit) { continue; }
-		// 끝점의 얕은 접촉은 안착을 막지 않음. 최종 겹침을 별도로 확인함 (여유 0.05 mm, P1 R3-2)
+		// Shallow endpoint contact permits placement. Check final overlap separately (0.05 mm margin, P1 R3-2)
 		if (!Hit.bStartPenetrating && (1.0 - Hit.Time) * Travel.Size() <= 0.005 && IsPoseClear(Goal)) { continue; }
-		// 접촉 오차 0.05 mm 안에서 옆으로 빼거나 표면에서 멀어지는 이동 허용 (P1 R3-2)
+		// Allow sideways/away motion within 0.05 mm contact tolerance (P1 R3-2)
 		if (Hit.bStartPenetrating && FVector::DotProduct(Travel, Hit.Normal) >= 0 &&
 			(Hit.PenetrationDepth <= 0.005 || FVector::DotProduct(Travel, Hit.Normal) > KINDA_SMALL_NUMBER)) { continue; }
 		bHit = true;
@@ -291,7 +291,7 @@ void AVBoRCarryObject::BindHoldingRig(int32 Hand, UIsdkGrabberComponent* Grabber
 	HoldingRigs[Hand] = Grabber ? Grabber->GetTypedOuter<UIsdkHandRigComponent>() : nullptr;
 	if (HoldingRigs[Hand])
 	{
-		// SDK selection 이 사라져도 각 소유 손의 Palm 놓기를 읽음 (P1 D6)
+		// Read owned-hand Palm release even without SDK selection (P1 D6)
 		PalmSelectHandles[Hand] = HoldingRigs[Hand]->OnPalmSelectDelegate.AddUObject(this, &AVBoRCarryObject::HandlePalmSelect);
 		PalmReleaseHandles[Hand] = HoldingRigs[Hand]->OnPalmUnselectDelegate.AddUObject(this, &AVBoRCarryObject::HandlePalmRelease);
 	}
@@ -356,7 +356,7 @@ void AVBoRCarryObject::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 		FTransform Pose;
 		Grabber->GetPalmGrabTransform(Pose);
 		Pose.SetScale3D(FVector::OneVector);
-		// 두 번째 손이 잡는 순간 첫 손도 다시 읽음 (직전 Tick 위치로 피벗이 튀지 않게, P1 D6)
+		// Reread first hand on second-hand grab (avoid pivot jump from previous Tick, P1 D6)
 		if (Session.Hand != INDEX_NONE) { Session.Rebase(OwnedPoses, GetActorTransform()); }
 		if (!BeginCarry(Hand, Grabber, Pose)) { return; }
 	}
@@ -386,7 +386,7 @@ void AVBoRCarryObject::MoveHeldPose(const FTransform& Desired, float DeltaSecond
 	if (Desired.ContainsNaN()) { return; }
 	FTransform Request = Desired;
 	Request.SetScale3D(GetActorScale3D());
-	// 같은 요청도 남은 회전을 이어 풂 (초당 예산 안에서 요청 쪽으로 수렴, P1 R6-1)
+	// Continue remaining rotation on same request (converge within per-second budget, P1 R6-1)
 	ResolveHeldContact(Request, DeltaSeconds);
 	const double Distance = FVector::Distance(Request.GetLocation(), GetActorLocation());
 	const double Angle = FVBoRCarryMotion::AngleDeg(Request, GetActorTransform());
@@ -394,7 +394,7 @@ void AVBoRCarryObject::MoveHeldPose(const FTransform& Desired, float DeltaSecond
 		Distance >= BlockedEnterDistanceCm || Angle >= BlockedEnterAngleDeg;
 	if (bNewBlocked && !bBlocked) { ++BlockedCount; SoundPlayback[0].Queue(BlockedCue, SoundAudio[0], SoundFrame); }
 	bBlocked = bNewBlocked;
-	// 잡은 자리 오프셋을 빼고 막혀서 못 간 거리만 잼 (P1 R1-5, cm)
+	// Subtract grab offset; measure blocked distance only (P1 R1-5, cm)
 	if (bBlocked) { MaxRequestedGapCm = FMath::Max(MaxRequestedGapCm, FVector::Distance(Desired.GetLocation(), GetActorLocation())); }
 }
 
@@ -402,13 +402,13 @@ void AVBoRCarryObject::ReleaseCarry(int32 Hand, const FTransform* TrackedPoses)
 {
 	if (Hand == INDEX_NONE) { Hand = Session.Hand; }
 	if (!Session.HasHand(Hand)) { return; }
-	// Pointer/Tick 에서 두 소유 손 유효성을 확인한 뒤 들어옴 (보류 release 는 Session 에서 재차 차단, P1 D6)
+	// Both owned hands validated in Pointer/Tick (Session also blocks paused release, P1 D6)
 	const FTransform* Poses = TrackedPoses ? TrackedPoses : Session.LastHands;
 	const FTransform Object = GetActorTransform();
 	const bool bLastReleased = Session.Release(Hand, true, GetWorld()->GetTimeSeconds(), Poses, &Object);
 	if (!Session.HasHand(Hand)) { ClearHoldingRig(Hand); }
 	if (!bLastReleased) { UpdateVisual(); return; }
-	// 같은 시도의 재잡기에서도 앞선 잡기 시간을 남김 (P1 R1-6)
+	// Keep earlier hold time on regrab in same attempt (P1 R1-6)
 	CompletedMetrics.HeldSeconds += Session.HeldSeconds;
 	ClearHoldingRig();
 	bBlocked = false;
@@ -422,7 +422,7 @@ void AVBoRCarryObject::ReleaseCarry(int32 Hand, const FTransform* TrackedPoses)
 		FTransform Landing;
 		bool bLevelBlocked = false;
 		CalculateReleaseDrop(DropStart, Landing, bLevelBlocked);
-		// 검사한 끝 자세로 바로 바꿈 (중간 회전의 관통 방지, P1c D1·D2)
+		// Apply validated end pose directly (avoid intermediate rotation penetration, P1c D1/D2)
 		if (IsPoseClear(DropStart)) { SetActorTransform(DropStart, false, nullptr, ETeleportType::TeleportPhysics); }
 		LevelResult = !bLevelOnRelease ? TEXT("level off") : bLevelBlocked ? TEXT("level blocked") : TEXT("level");
 		if (bLevelBlocked) { UE_LOG(LogVBoRCarry, Log, TEXT("level blocked on '%s'; retaining tilt for vertical drop."), *GetName()); }
@@ -436,7 +436,7 @@ void AVBoRCarryObject::ReleaseCarry(int32 Hand, const FTransform* TrackedPoses)
 
 void AVBoRCarryObject::FinishPlacement()
 {
-	// 목표 밖 낙하를 성공 색·이벤트로 보이지 않게 함 (P1 R1-4)
+	// No success color/event for drops outside target (P1 R1-4)
 	bSeated = LoadTarget && LoadTarget->IsObjectInside(this);
 	if (bAssisting && !bSeated && LoadTarget)
 	{
@@ -471,7 +471,7 @@ void AVBoRCarryObject::Tick(float DeltaSeconds)
 			if (const UVBoRHandRigLeft* Rig = Cast<UVBoRHandRigLeft>(HoldingRigs[Hand])) { bHasPalmState = Rig->ReadPalmGrab(bPalmClosed); }
 			else if (const UVBoRHandRigRight* RightRig = Cast<UVBoRHandRigRight>(HoldingRigs[Hand])) { bHasPalmState = RightRig->ReadPalmGrab(bPalmClosed); }
 			if (bHasPalmState) { bPalmOpen[Hand] = !bPalmClosed; }
-			// 복구 frame 은 양손 모두 rebase 만 함 (loss 때 온 옛 release 적용 방지, P1 D6)
+			// Rebase both hands only on recovery frame (ignore stale loss-time release, P1 D6)
 			if (!bRecovering && bPalmOpen[Hand] && !Session.bPaused) { ReleaseCarry(Hand); }
 		}
 		if (bBlocked && !Session.bPaused) { BlockedSeconds += DeltaSeconds; }
@@ -495,7 +495,7 @@ void AVBoRCarryObject::Tick(float DeltaSeconds)
 		Pose.SetLocation(FVBoRCarryMotion::Drop(Pose.GetLocation(), DropSpeedCmPerSecond, DeltaSeconds));
 		if (!TryMoveToPose(Pose)) { FinishPlacement(); }
 	}
-	// 손실 보류·잡은 상태는 제외함. 레벨 바닥 대신 시험대의 물리 바닥 기준 (P1b D6, cm)
+	// Exclude paused/held states. Use bench physical floor, not level floor (P1b D6, cm)
 	if (bDestroyAtFloor && Session.Hand == INDEX_NONE && (bDropping || bReleasedOutside))
 	{
 		const FBox Bounds = GetCollisionBoundsInPose(GetActorTransform(), FTransform::Identity);
@@ -514,7 +514,7 @@ void AVBoRCarryObject::ResetToPose(const FTransform& Pose)
 {
 	for (int32 I = 0; I < 2; ++I) { SoundPlayback[I].Reset(SoundAudio[I], true); }
 	bPausedSoundActive = false;
-	// 소유 손을 먼저 지움 (ForceCancel 의 동기 callback 을 놓기로 세지 않음, P1 R reset)
+	// Clear owned hands first (ForceCancel synchronous callback is no release, P1 R reset)
 	Session = FVBoRCarrySession();
 	Session.SetRestPose(Pose);
 	CompletedMetrics = FVBoRCarryMetrics();
@@ -536,7 +536,7 @@ void AVBoRCarryObject::ResetToPose(const FTransform& Pose)
 
 FString AVBoRCarryObject::GetStateText() const
 {
-	// 잡힘·막힘 상태보다 원인을 먼저 표시함 (자식 메시 교체 시 조용한 실패 방지, P1 R4-2)
+	// Show cause before held/blocked status (avoid silent failure after child mesh replacement, P1 R4-2)
 	if (!HasSimpleCollision()) { return TEXT("No simple collision"); }
 	if (Session.Hand != INDEX_NONE)
 	{
@@ -587,7 +587,7 @@ void AVBoRCarryObject::UpdateVisual()
 		if (bPauseSound) { SoundPlayback[1].BeginHeld(PausedCue, SoundAudio[1], SoundFrame); }
 		else { SoundPlayback[1].EndHeld(PausedCue, SoundAudio[1]); }
 	}
-	// Held 상태가 같아도 그 frame 의 실제 박스 자세로 다시 계산함 (P1c E11)
+	// Recompute from actual box pose even if Held unchanged (P1c E11)
 	UpdateLandingPreview();
 	const FString State = GetStateText();
 	if (State == LastState) { return; }

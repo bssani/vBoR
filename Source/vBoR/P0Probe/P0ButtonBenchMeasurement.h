@@ -56,10 +56,10 @@ struct FP0ButtonPressMeasurement
 	{
 		if (!bHover && !bSelected) { return EP0ButtonSampleResult::Ignored; }
 		if (bAtSelect) { bHasDepthAtSelect = bValid; }
-		// 추적 손실은 측정 하나당 한 번만 셈 (반복 무효 frame 제외, P0-b R1-5)
+		// Count tracking loss once per measurement (exclude repeated invalid frames, P0-b R1-5)
 		if (!bValid) { ++TrackingCanceled; Cancel(); return EP0ButtonSampleResult::TrackingCanceled; }
 		const double SignedDepth = FVector::DotProduct(Front - Tip, Normal.GetSafeNormal()) * MmPerUnit;
-		// select 순간은 부호를 보존함 (ISDK 손끝과 원본 손끝 차이 확인, P0-b R1-4)
+		// Preserve sign at select (compare ISDK/raw fingertip difference, P0-b R1-4)
 		if (bAtSelect) { DepthAtSelectMm = SignedDepth; }
 		bHasDepth = true;
 		MaxDepthMm = FMath::Max(MaxDepthMm, FMath::Max(0.0, SignedDepth));
@@ -78,7 +78,7 @@ struct FP0ButtonAttemptTotals
 		for (int32 Index = 0; Index < Presses.Num(); ++Index)
 		{
 			Totals.TrackingCanceled += Presses[Index].TrackingCanceled;
-			// 이웃을 지나간 hover 는 단독 버튼의 놓친 시도와 나눔. 먼 버튼은 별도 hover 수로 확인 (P0-b R2-2)
+			// Separate neighbor-crossing hover from single-button miss. Count far-button hover separately (P0-b R2-2)
 			if (Index < ClusterStart) { Totals.MissedSingle += Presses[Index].Missed; }
 			else if (Index < FarIndex) { Totals.ClusterPass += Presses[Index].Missed; }
 		}
@@ -116,7 +116,7 @@ struct FP0ButtonBenchPlacement
 	}
 	static FTransform Calculate(const FTransform& Head, double ForwardCm, double BelowCm)
 	{
-		// Pitch·Roll 은 제외함 (내려다봐도 수평 정면에 고정, P0-b R1-3)
+		// Exclude Pitch/Roll (fixed horizontal forward even when looking down, P0-b R1-3)
 		const FRotator Yaw(0, Head.Rotator().Yaw, 0);
 		return FTransform(Yaw, Head.GetLocation() + Yaw.RotateVector(FVector(ForwardCm, 0, 0)) - FVector(0, 0, BelowCm));
 	}

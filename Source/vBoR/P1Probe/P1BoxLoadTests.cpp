@@ -149,7 +149,7 @@ bool FP1BoxSupplyTest::RunTest(const FString& Parameters)
 	First->SetActorLocation(Start.GetLocation() + FVector(0, 0, 40));
 	Bench->Tick(0);
 	TestEqual(TEXT("E7 old source cannot replenish again"), Bench->Boxes.Num(), 2);
-	// 기존 박스를 출고 자리에 되돌리면 다음 출고도 기다림 (P1b §3)
+	// Returned box in spawn space also delays refill (P1b §3)
 	Second->BeginCarry(1, nullptr, Second->GetActorTransform());
 	Second->SetActorLocation(Start.GetLocation() + FVector(0, 0, 80));
 	First->SetActorLocation(Start.GetLocation());
@@ -163,7 +163,7 @@ bool FP1BoxSupplyTest::RunTest(const FString& Parameters)
 	First->Tick(0);
 	TestTrue(TEXT("E9 held box below floor survives"), IsValid(First));
 	TestEqual(TEXT("E9 hand below floor keeps all boxes"), Bench->Boxes.Num(), 3);
-	// 합성 손은 실제 XR 입력이 없으므로 보류됨. 유효 복구 후 의도한 놓기만 허용함 (E9)
+	// Synthetic hand pauses without actual XR. Allow intended release after valid recovery only (E9)
 	FTransform Hands[2] = {First->GetActorTransform(), FTransform::Identity};
 	FTransform Desired;
 	First->Session.UpdateHands(true, Hands, First->GetActorTransform(), 1, First->TiltLimitDeg, Desired);

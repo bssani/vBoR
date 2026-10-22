@@ -128,7 +128,7 @@ FVBoRBuckHeadFrame AP0BuckBench::ReadHead() const
 	{
 		const auto& XR = GEngine->XRSystem;
 		Frame.TrackingOrigin = XR->GetTrackingOrigin();
-		// VALID 만으로 남은 자세를 쓰지 않음. 위치·방향 TRACKED 를 별도로 확인함 (P0-c §3-3)
+		// VALID alone may retain stale pose. Check position/orientation TRACKED separately (P0-c §3-3)
 		const bool bPoseValid = XR->GetCurrentPose(IXRTrackingSystem::HMDDeviceId, Frame.Orientation, Frame.PositionCm);
 		Frame.bTracked = bPoseValid && XR->IsTracking(IXRTrackingSystem::HMDDeviceId);
 		Frame.PlayAreaCm = UHeadMountedDisplayFunctionLibrary::GetPlayAreaBounds(EHMDTrackingOrigin::Stage);
@@ -158,7 +158,7 @@ bool AP0BuckBench::BackupPointSave(FString& Failure)
 	FVBoRBuckSavedAlignment Previous; FString LoadReason;
 	if (!FVBoRBuckAlignmentStore::Load(SavePath, Previous, LoadReason) || Previous.Version != 2) { return true; }
 	const FString Backup = FPaths::ChangeExtension(SavePath, TEXT("points-backup.json"));
-	// 복사 실패 때 원본 4점 값을 지킴 (P5u D4)
+	// Preserve original four-point save on copy failure (P5u D4)
 	if (IFileManager::Get().Copy(*Backup, *SavePath, true) != COPY_OK)
 	{ Failure = TEXT("Point alignment backup failed; previous alignment retained: ") + Backup; return false; }
 	Record(TEXT("Point alignment backed up: ") + Backup);
@@ -239,7 +239,7 @@ void AP0BuckBench::ProcessFrame(double, const FVBoRBuckHeadFrame& Frame)
 		else
 		{
 			const double Now = CaptureClock();
-			// Tick dt 에 입력 이전 시간이 포함됨. 명령 경계 이후 실제 시간만 셈 (P0-c I1)
+			// Tick dt includes pre-input time. Count actual time after command boundary only (P0-c I1)
 			const bool bComplete = Window.Sample(Now - LastCaptureSampleSeconds, Frame, MinHorizontalLength);
 			LastCaptureSampleSeconds = Now;
 			if (!Window.bActive && !bComplete) { LastCapture = Window.Reason; Record(LastCapture); }
@@ -306,7 +306,7 @@ void AP0BuckBench::HandleRecenter()
 void AP0BuckBench::MarkNeedsCheck(const FString& Reason)
 {
 	bNeedsCheck = true;
-	// M·추적 복귀로 지우지 않고 새 C 저장만 해제함 (P0-c §3-8)
+	// M/tracking recovery cannot clear; new C save only (P0-c §3-8)
 	State = TEXT("Needs check: ") + Reason;
 	Record(State);
 }
@@ -366,7 +366,7 @@ void AP0BuckBench::CreateGeometry()
 {
 	UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
 	if (!Cube) { Record(TEXT("Approximate geometry cube unavailable")); return; }
-	// 형상은 레벨의 Buck 자리 고정, 머리 기준 배치 없음 (P0-c D4, U-07)
+	// Geometry fixed at level Buck position, no head-relative placement (P0-c D4, U-07)
 	AddBox(Cube, TEXT("Cushion"), CushionTopCm - FVector(0, 0, CushionSizeCm.Z / 2), CushionSizeCm);
 	AddBox(Cube, TEXT("Back"), FVector(BackFrontXCm - BackSizeCm.X / 2, 0, CushionTopCm.Z + BackSizeCm.Z / 2), BackSizeCm);
 	AddBox(Cube, TEXT("Dashboard"), FVector(DashboardXCm, 0, DashboardCenterZCm), DashboardSizeCm);

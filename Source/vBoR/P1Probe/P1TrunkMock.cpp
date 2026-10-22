@@ -10,7 +10,7 @@ namespace
 	void SetPanel(UStaticMeshComponent* Panel, const FVector& Center, const FVector& Size)
 	{
 		Panel->SetRelativeLocation(Center);
-		Panel->SetRelativeScale3D(Size / 100.0f); // 엔진 Cube 는 한 변 100 cm (P1 §2)
+		Panel->SetRelativeScale3D(Size / 100.0f); // Engine Cube side = 100 cm (P1 §2)
 	}
 }
 

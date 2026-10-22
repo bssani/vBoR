@@ -19,14 +19,14 @@ namespace
 {
 	void ConfigurePokeRig(UIsdkHandRigComponent* Rig)
 	{
-		// 기본 RayInteraction 은 내부에서 참조하므로 제거 대신 활성 조건을 끔 (U-03, P0-b §3)
+		// Disable activation instead of removing default RayInteraction (internal references, U-03, P0-b §3)
 		Rig->GetRayInteraction()->bAutoActivate = false;
 		Rig->GetRayInteraction()->Deactivate();
 		Rig->GetRayInteraction()->RayVisualClass = nullptr;
-		// P0-b 는 poke 만 시험함 (D1)
+		// P0-b tests poke only (D1)
 		Rig->GetGrabInteraction()->bAutoActivate = false;
 		Rig->GetGrabInteraction()->Deactivate();
-		// Grabber 는 ISDK 생성자에서 이미 존재함. 잡기 재활성화 때도 원거리 차단 유지 (U-03, P0-b R2-1)
+		// Grabber already exists in ISDK constructor. Keep distance grab blocked on reenable (U-03, P0-b R2-1)
 		Rig->GetGrabber()->SetGrabDetectionTypeAllowed(EIsdkGrabDetectorType::DistanceGrab, false);
 		Rig->GetGrabber()->SetGrabDetectionTypeAllowed(EIsdkGrabDetectorType::RayGrab, false);
 	}
@@ -48,7 +48,7 @@ bool UVBoRHandRigLeft::ReadPalmGrab(bool& bOutClosed) const
 
 bool UVBoRHandRigLeft::ReadPinchGrab(bool& bOutClosed) const
 {
-	// OpenXR 의 SDK 인식기와 같은 상태를 읽음 (추적 복구 뒤 실제 놓기 확인, P5e D6)
+	// Read same state as OpenXR SDK recognizer (real release after tracking recovery, P5e D6)
 	if (!PinchGrabRecognizer) { return false; }
 	bOutClosed = PinchGrabRecognizer->IsActive(); return true;
 }
@@ -98,7 +98,7 @@ void AVBoRHandRigPawn::PreInitializeComponents()
 	for (UIsdkHandRigComponent* Rig : {static_cast<UIsdkHandRigComponent*>(LeftRig.Get()), static_cast<UIsdkHandRigComponent*>(RightRig.Get())})
 	{
 		UIsdkGrabberComponent* Grabber = Rig->GetGrabber();
-		// P1 에서만 손바닥 근접 잡기 활성. Pinch 와 원거리는 Grabber 초기화 전부터 차단 (P1 §2 D1, U-03)
+		// Near Palm grab only in P1. Block Pinch/distance before Grabber init (P1 §2 D1, U-03)
 		if (bAllowPalmGrab)
 		{
 			Grabber->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, true);
@@ -121,7 +121,7 @@ bool AVBoRHandRigPawn::ReadRawIndexTip(int32 HandIndex, FVector& OutWorldTip) co
 {
 	if (HandIndex < 0 || HandIndex > 1) { return false; }
 	FXRHandTrackingState State;
-	// XR 원본을 직접 읽음 (limiter 의 SyntheticHandVisual root 보정 제외, U-06)
+	// Read raw XR (exclude limiter SyntheticHandVisual root correction, U-06)
 	UHeadMountedDisplayFunctionLibrary::GetHandTrackingState(const_cast<AVBoRHandRigPawn*>(this),
 		EXRSpaceType::UnrealWorldSpace, HandIndex == 0 ? EControllerHand::Left : EControllerHand::Right, State);
 	const int32 TipIndex = static_cast<int32>(EHandKeypoint::IndexTip);
@@ -147,7 +147,7 @@ bool AVBoRHandRigPawn::ReadRawPalmAndTips(int32 HandIndex, FVBoRDoorHand& OutHan
 	}
 	const FQuat Palm = State.HandKeyRotations[0];
 	if (Palm.ContainsNaN() || !Palm.IsNormalized()) { return false; }
-	// OpenXR +Y 손등 → UE +Z, 손바닥은 −Z 로 추정함 (P2 §2-1, 기기 미확인)
+	// OpenXR +Y hand back → UE +Z, estimated palm −Z (P2 §2-1, device not-tested)
 	OutHand.PalmNormal = -Palm.GetUpVector();
 	OutHand.bTracked = true;
 	return true;

@@ -28,7 +28,7 @@ public:
 	AVBoRPokeButton();
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Poke Button|Sound") FVBoRSoundCue PressedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Poke Button|Sound") FVBoRSoundCue ReleasedCue;
-	// 칸 순서는 위 프로퍼티 순서와 같음 (P5s D12)
+	// Slot order = property order above (P5s D12)
 #if WITH_DEV_AUTOMATION_TESTS
 	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
 	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return SoundAudio[Slot]; }
@@ -43,7 +43,7 @@ public:
 	virtual void PreInitializeComponents() override;
 	virtual void Tick(float DeltaSeconds) override;
 	FVector GetRestFrontWorld() const;
-	// 키의 쥔 손·테이블 위 눌림을 진행기에도 보내지 않음. 미연결 버튼은 기존 동작 (P4a D3·D8)
+	// Do not forward held-hand/table key presses to runner. Unconnected buttons unchanged (P4a D3/D8)
 	FVBoRPokePressFilter PressFilter;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Poke Button")

@@ -107,13 +107,13 @@ bool FP5uOff::RunTest(const FString&)
 	FP5uCVar C(0); FP5uWorld W; TestTrue(TEXT("Head file saved"),W.Save(W.SaveValue())); W.Start();
 	TestTrue(TEXT("No saved alignment"),W.A->State == EVBoRAlignmentState::NoSavedValue);
 	TestTrue(TEXT("Pawn unchanged"),SamePose(W.Before,W.Pawn->GetActorTransform()));
-	TestTrue(TEXT("Reason prefix retained"),W.A->Reason.StartsWith(TEXT("저장값 없음")));
+	TestTrue(TEXT("Reason prefix retained"),W.A->Reason.StartsWith(TEXT("No saved value")));
 	TestTrue(TEXT("Switch in reason"),W.A->Reason.Contains(TEXT("vBoR.EyeAlignment")));
 	TestTrue(TEXT("English explains switch"),W.A->EnglishReason().Contains(TEXT("vBoR.EyeAlignment 1")));
 	auto* R = W.World->SpawnActor<AVBoRScenarioRunner>(); R->Scenario = NewObject<UVBoRScenarioAsset>(R);
 	R->Scenario->Steps.Reset(); FVBoRScenarioStep Step; Step.StepId = TEXT("01"); Step.ConfirmBy = EVBoRConfirmBy::Either; R->Scenario->Steps.Add(Step); R->InitializeFlow();
 	TestFalse(TEXT("Start blocked"),R->IsRunning());
-	TestTrue(TEXT("Start reason retained"),R->GetOperatorText().Contains(TEXT("정렬 필요")));
+	TestTrue(TEXT("Start reason retained"),R->GetOperatorText().Contains(TEXT("Alignment required")));
 	R->PressOperatorButton(EVBoROperatorButton::Ignore); R->ProcessFlow(0);
 	TestTrue(TEXT("O starts without alignment"),R->IsRunning());
 	return true;
@@ -136,7 +136,7 @@ bool FP5uOn::RunTest(const FString&)
 	TestTrue(TEXT("Eye alignment applied"),W.A->State == EVBoRAlignmentState::Applied);
 	TestTrue(TEXT("Saved eye height and yaw"),SamePose(W.Pawn->GetActorTransform(),Expected));
 	TestTrue(TEXT("Different from floor height"),FMath::Abs(Expected.GetLocation().Z-W.A->FloorWorldZCm)>1);
-	TestTrue(TEXT("Home test described"),W.A->Describe().Contains(TEXT("눈 방식(집 시험)")));
+	TestTrue(TEXT("Home test described"),W.A->Describe().Contains(TEXT("eye alignment (home test)")));
 	TestTrue(TEXT("Passenger accepted"),W.A->SwitchViewpoint(W.Car->PassengerView)); W.Fade();
 	FTransform Passenger = Expected; Passenger.AddToTranslation(W.Car->PassengerView->GetComponentLocation()-W.Car->DriverEye->GetComponentLocation());
 	TestTrue(TEXT("Passenger retains eye height"),SamePose(W.Pawn->GetActorTransform(),Passenger));
@@ -150,7 +150,7 @@ bool FP5uPointsOn::RunTest(const FString&)
 	FP5uCVar C(1); FP5uWorld W; TestTrue(TEXT("Point file saved"),W.Save(W.SaveValue(2))); W.Start();
 	TestTrue(TEXT("Points applied"),W.A->State == EVBoRAlignmentState::Applied);
 	TestTrue(TEXT("Points keep floor height"),SamePose(W.Pawn->GetActorTransform(),FTransform::Identity));
-	TestFalse(TEXT("No eye label"),W.A->Describe().Contains(TEXT("눈 방식")));
+	TestFalse(TEXT("No eye label"),W.A->Describe().Contains(TEXT("eye alignment")));
 	return true;
 }
 
@@ -253,7 +253,7 @@ bool FP5uBackup::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5uLegacyCleanup,"vBoR.P5u.E11LegacyBenchBackupCleanup",P5uFlags)
 bool FP5uLegacyCleanup::RunTest(const FString&)
 {
-	// 수정 금지인 P4h E6 가 남긴 임시 백업만 정리함 (P5u §3 감사)
+	// Clean temporary backup left by protected P4h E6 only (P5u §3 audit)
 	const FString Folder = FPaths::Combine(FPaths::ProjectSavedDir(),TEXT("Automation")); TArray<FString> Files;
 	IFileManager::Get().FindFiles(Files,*(Folder/TEXT("*-P4hBench.points-backup.json")),true,false);
 	for (const FString& File : Files) { TestTrue(TEXT("Legacy temporary backup removed"),IFileManager::Get().Delete(*(Folder/File))); }

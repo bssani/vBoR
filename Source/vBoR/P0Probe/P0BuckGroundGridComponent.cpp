@@ -28,7 +28,7 @@ namespace
 				FPrimitiveDrawInterface* PDI = Collector.GetPDI(ViewIndex);
 				for (const FP0BuckGridLine& Line : Lines)
 				{
-					// 실제 Z=0 cm 는 유지, coplanar floor 만 작은 drawing bias 로 피함 (P0-c F1)
+					// Keep actual Z=0 cm; small drawing bias for coplanar floor only (P0-c F1)
 					PDI->DrawLine(GetLocalToWorld().TransformPosition(Line.Start), GetLocalToWorld().TransformPosition(Line.End),
 						Settings.Color, SDPG_World, Settings.ThicknessPx, Settings.DepthBias, true);
 				}
@@ -43,7 +43,7 @@ namespace
 			Result.bOpaque = true;
 			return Result;
 		}
-		// 평면 전체가 floor 에 가려졌다는 query 는 생략, 각 line 의 world depth test 는 유지 (P0-c F1)
+		// Skip whole-plane floor occlusion query, keep per-line world depth test (P0-c F1)
 		virtual bool CanBeOccluded() const override { return false; }
 		virtual uint32 GetMemoryFootprint() const override { return sizeof(*this) + GetAllocatedSize() + Lines.GetAllocatedSize(); }
 	private:
@@ -89,6 +89,6 @@ FPrimitiveSceneProxy* UP0BuckGroundGridComponent::CreateSceneProxy() { return ne
 
 FBoxSphereBounds UP0BuckGroundGridComponent::CalcBounds(const FTransform& LocalToWorld) const
 {
-	// Z 1 cm 는 culling bounds 만 넓힘, line 의 기준 높이는 0 cm 고정 (P0-c F1)
+	// Z 1 cm expands culling bounds only, line reference height fixed at 0 cm (P0-c F1)
 	return FBoxSphereBounds(FBox(FVector(-Settings.HalfSizeCm, -Settings.HalfSizeCm, -1), FVector(Settings.HalfSizeCm, Settings.HalfSizeCm, 1))).TransformBy(LocalToWorld);
 }

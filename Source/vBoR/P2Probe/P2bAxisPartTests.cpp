@@ -396,7 +396,7 @@ bool FP2bP3Test::RunTest(const FString& Parameters)
 	FP2bWorld W; AP3VehicleMock* Car = W.World->SpawnActor<AP3VehicleMock>();
 	AVBoRScenarioRunner* Runner = W.World->SpawnActor<AVBoRScenarioRunner>(); Runner->Scenario = NewObject<UVBoRScenarioAsset>(Runner);
 	Runner->Scenario->Steps.Empty();
-	FVBoRScenarioStep Step; Step.StepId = TEXT("07"); Step.Instruction = FText::FromString(TEXT("손잡이")); Step.Rule = EVBoRStepRule::DoorUnlocked; Step.TargetTag = TEXT("Car.DriverDoor"); Step.ConfirmBy = EVBoRConfirmBy::None;
+	FVBoRScenarioStep Step; Step.StepId = TEXT("07"); Step.Instruction = FText::FromString(TEXT("Handle")); Step.Rule = EVBoRStepRule::DoorUnlocked; Step.TargetTag = TEXT("Car.DriverDoor"); Step.ConfirmBy = EVBoRConfirmBy::None;
 	Runner->Scenario->Steps.Add(Step); Step.StepId = TEXT("08"); Step.Rule = EVBoRStepRule::DoorOpened; Runner->Scenario->Steps.Add(Step);
 	W.Play(); Runner->bAlignmentIgnored = true; Runner->InitializeFlow(); Runner->ProcessFlow(0.1);
 	TestEqual(TEXT("E17 begins at 07"),Runner->GetStepIndex(),0);

@@ -42,12 +42,12 @@ struct FP5tWarnings : FOutputDevice
 	TArray<FString> Messages;
 	FP5tWarnings() { GLog->FlushThreadedLogs(); GLog->AddOutputDevice(this); }
 	~FP5tWarnings() { GLog->FlushThreadedLogs(); GLog->RemoveOutputDevice(this); }
-	// 비동기 로그 전달이 끝난 뒤 횟수를 읽음 (P5t E7·E8)
+	// Read count after asynchronous log delivery completes (P5t E7/E8)
 	int32 Count() { GLog->FlushThreadedLogs(); return Messages.Num(); }
 	virtual void Serialize(const TCHAR* Text, ELogVerbosity::Type Verbosity, const FName&) override
 	{
 		const FString S(Text);
-		// 예상 Warning 은 UE 가 Verbose 로 낮춰 전달함 (P5t E7·E8, AutomationTest.cpp:289-291)
+		// UE forwards expected Warning as Verbose (P5t E7/E8, AutomationTest.cpp:289-291)
 		if ((Verbosity == ELogVerbosity::Warning || Verbosity == ELogVerbosity::Verbose)
 			&& (S.StartsWith(TEXT("Carry box '")) || S.Contains(TEXT("BoxClass is empty")))) { Messages.Add(S); }
 	}

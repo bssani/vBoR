@@ -17,13 +17,13 @@ public:
 	virtual void PreInitializeComponents() override;
 	virtual void BeginPlay() override;
 
-	UPROPERTY(EditAnywhere, Category = "손 표시")
+	UPROPERTY(EditAnywhere, Category = "Hand visuals")
 	TObjectPtr<USkeletalMesh> LeftHandMesh;
-	UPROPERTY(EditAnywhere, Category = "손 표시")
+	UPROPERTY(EditAnywhere, Category = "Hand visuals")
 	TObjectPtr<USkeletalMesh> RightHandMesh;
-	UPROPERTY(EditAnywhere, Category = "손 표시")
+	UPROPERTY(EditAnywhere, Category = "Hand visuals")
 	TObjectPtr<UMaterialInterface> LeftHandMaterial;
-	UPROPERTY(EditAnywhere, Category = "손 표시")
+	UPROPERTY(EditAnywhere, Category = "Hand visuals")
 	TObjectPtr<UMaterialInterface> RightHandMaterial;
 
 private:

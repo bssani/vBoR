@@ -32,7 +32,7 @@ public:
 #endif
 };
 
-// SDK 는 선택만 관리하고 실제 각도는 휠이 계산함 (P5d D1·D4)
+// SDK manages selection only; wheel computes actual angle (P5d D1/D4)
 UCLASS()
 class VBOR_API UVBoRWheelTransformer : public UIsdkTransformer
 {
@@ -55,7 +55,7 @@ class VBOR_API AVBoRSteeringWheel : public AActor, public IVBoRSpectatorPart
 public:
 	AVBoRSteeringWheel();
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Steering wheel|Sound") FVBoRSoundCue LimitCue;
-	// 칸 순서는 위 프로퍼티 순서와 같음 (P5s D12)
+	// Slot order = property order above (P5s D12)
 #if WITH_DEV_AUTOMATION_TESTS
 	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
 	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return SoundAudio[Slot]; }
@@ -75,7 +75,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Steering wheel") TObjectPtr<UBoxComponent> GrabBox;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Steering wheel") TObjectPtr<UIsdkGrabbableComponent> Grabbable;
 	UPROPERTY(VisibleAnywhere, Category="Steering wheel") TObjectPtr<UVBoRWheelGrabComponent> GrabComponent;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Steering wheel|Input", meta=(DisplayName="메시 충돌로 잡기")) bool bGrabWithMesh = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Steering wheel|Input", meta=(DisplayName="Grab with mesh collision")) bool bGrabWithMesh = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Steering wheel") FTransform MeshRestFromRoot;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Steering wheel") FTransform MarkerRestFromPivot = FTransform(FQuat::Identity,FVector(-1.6,0,16.5),FVector(0.008,0.025,0.03));
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Steering wheel", meta=(Units="deg", ClampMin="0")) float LimitAngleDeg = 450;

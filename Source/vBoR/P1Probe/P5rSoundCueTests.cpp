@@ -264,7 +264,7 @@ bool FP5rFrameTime::RunTest(const FString& Parameters)
 	TestEqual(TEXT("one physical play per long frame"), Large.Device(ESound::Motor)->Plays, 1);
 	TestEqual(TEXT("accepted delay in long frame"), Large.Stats(ESound::OpenAccepted).RequestFrames[0], uint64(1));
 	TestEqual(TEXT("arrival in long frame"), Large.Stats(ESound::Opened).RequestFrames[0], uint64(1));
-	// 양수 최소 반복 간격도 긴 frame 요청 수로 확인함 (P5r D1)
+	// Check positive minimum repeat interval by long-frame request count too (P5r D1)
 	FSoundWorld Clamp; Clamp.EnableAll(); Clamp.Gate->WarningCue.RepeatSeconds = 0.001f;
 	Clamp.Gate->RequestOpen(); Clamp.Gate->Tick(0.2f);
 	TestEqual(TEXT("repeat clamps to 0.05 s"), Clamp.Gate->GetWarningRequests(), 5);
@@ -300,7 +300,7 @@ bool FP5rIndependent::RunTest(const FString& Parameters)
 	TestEqual(TEXT("closed slot never stopped"), F.Device(ESound::Closed)->LifecycleStops(), 0);
 	TestEqual(TEXT("accepted slot never stopped"), F.Device(ESound::CloseAccepted)->LifecycleStops(), 0);
 	TestEqual(TEXT("closed and accepted same frame"), F.Stats(ESound::Closed).RequestFrames[0], F.Stats(ESound::CloseAccepted).RequestFrames[0]);
-	// 같은 칸의 지연 예약도 이벤트마다 남음 (P5r D2)
+	// Keep delayed requests per event even in same slot (P5r D2)
 	F.Gate->OpenAcceptedCue.StartDelaySeconds = 4;
 	F.Gate->RequestOpen(); F.Gate->Tick(1); F.Gate->RequestClose(); F.Gate->Tick(1);
 	F.Gate->RequestOpen(); F.Gate->Tick(1);

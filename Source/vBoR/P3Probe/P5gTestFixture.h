@@ -4,7 +4,7 @@
 #include "../Interaction/VBoRScenarioRunner.h"
 #include "P5gTestFixture.generated.h"
 
-// 임시 world 에서는 travel 대신 요청만 관찰함 (P5g E15–E17)
+// Observe travel request only in temporary world (P5g E15–E17)
 UCLASS()
 class AP5gReloadObserver : public AVBoRScenarioRunner
 {

@@ -28,7 +28,7 @@ bool FVBoRBuckAlignment::FitPoints(const TArray<FVector>& Stage, const TArray<FV
 		{ Fit.SpanCm = FMath::Max(Fit.SpanCm, FVector::Dist2D(Stage[I],Stage[J])); }
 	}
 	if (FMath::Square(Cross) + FMath::Square(Dot) < UE_DOUBLE_SMALL_NUMBER) { return false; }
-	// +X → +Y 를 양의 Yaw 로 씀. Z 는 짚은 점 대신 바닥 기준 (P4h D3, U-17, cm)
+	// +X → +Y = positive Yaw. Floor sets Z, not touched points (P4h D3, U-17, cm)
 	const FRotator Rotation(0,FMath::RadiansToDegrees(FMath::Atan2(Cross,Dot)),0);
 	FVector T = W - Rotation.RotateVector(P); T.Z = FloorZCm;
 	Fit.Pawn = FTransform(Rotation,T);
@@ -45,7 +45,7 @@ bool FVBoRBuckAlignment::ProjectYaw(const FQuat& Orientation, double MinHorizont
 {
 	if (Orientation.ContainsNaN() || !Orientation.IsNormalized() || !FMath::IsFinite(MinHorizontalLength) || MinHorizontalLength <= 0) { return false; }
 	const FVector Forward = Orientation.GetForwardVector();
-	// 기울어진 지그도 바닥을 기울이지 않게 수평 정면만 사용함 (P0-c D5, E3)
+	// Use horizontal forward only (tilted jig must not tilt floor, P0-c D5, E3)
 	if (FMath::Square(Forward.X) + FMath::Square(Forward.Y) < FMath::Square(MinHorizontalLength)) { return false; }
 	OutYawDeg = FMath::RadiansToDegrees(FMath::Atan2(Forward.Y, Forward.X));
 	return FMath::IsFinite(OutYawDeg);
@@ -54,14 +54,14 @@ bool FVBoRBuckAlignment::ProjectYaw(const FQuat& Orientation, double MinHorizont
 FTransform FVBoRBuckAlignment::CalculatePawn(const FVBoRBuckCaptureResult& Capture, const FTransform& EyeWorld)
 {
 	const FQuat Rotation = FRotator(0, FMath::FindDeltaAngleDegrees(Capture.YawDeg, double(EyeWorld.Rotator().Yaw)), 0).Quaternion();
-	// 이전 Pawn 변환을 읽지 않음 (Stage 저장값 재적용 시 누적 방지, P0-c §3-4)
+	// Ignore previous Pawn transform (avoid repeated Stage alignment accumulation, P0-c §3-4)
 	return FTransform(Rotation, EyeWorld.GetLocation() - Rotation.RotateVector(Capture.PositionCm));
 }
 
 FTransform FVBoRBuckAlignment::CalculatePawnOnFloor(const FVBoRBuckCaptureResult& Capture, const FTransform& EyeWorld, const FTransform& BaseEyeWorld, double FloorWorldZCm)
 {
 	FTransform Pawn = CalculatePawn(Capture, EyeWorld);
-	// 저장한 사람의 앉은 눈높이를 쓰지 않음 (실제 바닥 = 가상 바닥). 다른 시점은 기준 눈과의 높이 차이만 더함 (U-17, cm)
+	// Ignore saved seated eye height (real floor = virtual floor). Other views add eye-height difference only (U-17, cm)
 	const FVector Location = Pawn.GetLocation();
 	Pawn.SetLocation(FVector(Location.X, Location.Y, FloorWorldZCm + EyeWorld.GetLocation().Z - BaseEyeWorld.GetLocation().Z));
 	return Pawn;
@@ -96,7 +96,7 @@ FVBoRBuckApplyDecision FVBoRBuckAlignment::CheckEnvironment(const FVBoRBuckSaved
 FString FVBoRBuckAlignment::DescribeTip(bool bTracked, const FVector& WorldTipCm, const FTransform& EyeWorld)
 {
 	if (!bTracked || WorldTipCm.ContainsNaN()) { return TEXT("not tracked"); }
-	// 표시 cm → mm, eye point +X 앞·+Y 오른쪽·+Z 위 (P0-c §2)
+	// Display cm → mm, eye point +X forward/+Y right/+Z up (P0-c §2)
 	const FVector TipMm = FRotator(0, EyeWorld.Rotator().Yaw, 0).UnrotateVector(WorldTipCm - EyeWorld.GetLocation()) * 10;
 	return FString::Printf(TEXT("X=%.2f Y=%.2f Z=%.2f mm"), TipMm.X, TipMm.Y, TipMm.Z);
 }
@@ -129,7 +129,7 @@ bool FVBoRBuckCaptureWindow::Sample(double DeltaSeconds, const FVBoRBuckHeadFram
 	if (!FMath::IsFinite(DeltaSeconds) || DeltaSeconds <= 0) { return false; }
 	Positions.Add(Frame.PositionCm); Yaws.Add(Yaw);
 	ElapsedSeconds += DeltaSeconds;
-	// 15 fps 와 90 fps 에서 같은 초 길이 사용 (P0-c §5)
+	// Same time window at 15 fps and 90 fps (P0-c §5)
 	if (ElapsedSeconds + UE_DOUBLE_SMALL_NUMBER >= TargetSeconds)
 	{
 		bActive = false;
@@ -155,7 +155,7 @@ bool FVBoRBuckCaptureWindow::Finish(FVBoRBuckCaptureResult& Out) const
 		Sin += FMath::Sin(FMath::DegreesToRadians(Yaws[Index]));
 		Cos += FMath::Cos(FMath::DegreesToRadians(Yaws[Index]));
 	}
-	// ±180 deg 경계의 방향을 보존함 (P0-c E4)
+	// Preserve direction across ±180 deg (P0-c E4)
 	if (FMath::Square(Sin) + FMath::Square(Cos) < UE_DOUBLE_SMALL_NUMBER) { return false; }
 	Result.PositionCm /= Positions.Num();
 	Result.YawDeg = FMath::RadiansToDegrees(FMath::Atan2(Sin, Cos));
@@ -304,7 +304,7 @@ bool FVBoRBuckAlignmentStore::Save(const FString& Path, const FVBoRBuckSavedAlig
 		!FFileHelper::SaveStringToFile(Text, *CandidatePath, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
 	{ Reason = TEXT("candidate file write failed; previous save retained"); return false; }
 	FVBoRBuckSavedAlignment Verified;
-	// IFileManager::Move 는 기존 파일부터 삭제함. 검산된 후보를 원자 교체함 (Win64, P0-c §3-7)
+	// IFileManager::Move deletes existing file first. Atomically replace with verified candidate (Win64, P0-c §3-7)
 	bool bReplaced = false;
 	uint32 ReplacementError = 0;
 	if (Load(CandidatePath, Verified, Reason))

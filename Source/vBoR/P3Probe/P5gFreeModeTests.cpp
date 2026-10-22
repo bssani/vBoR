@@ -113,12 +113,12 @@ bool FP5gCompletionTest::RunTest(const FString&)
 	TestTrue(TEXT("Last step completes into free mode"),E.Runner->IsFinished() && E.Runner->IsFreeMode());
 	TestFalse(TEXT("No running evaluation"),E.Runner->IsRunning());
 	TestEqual(TEXT("No current step"),E.Runner->GetStepIndex(),INDEX_NONE);
-	TestTrue(TEXT("Completion plus editable instruction"),E.Runner->GetPanelText().Contains(TEXT("안내 완료")) && E.Runner->GetPanelText().Contains(TEXT("Custom free mode")));
+	TestTrue(TEXT("Completion plus editable instruction"),E.Runner->GetPanelText().Contains(TEXT("Guidance complete")) && E.Runner->GetPanelText().Contains(TEXT("Custom free mode")));
 	TestTrue(TEXT("Markers hidden"),FP5gTestAccess::MarkersHidden(E.Runner));
 	TestTrue(TEXT("No step instruction"),E.Runner->GetInstructionText().IsEmpty());
 	TestFalse(TEXT("Passenger button visible"),FP5gTestAccess::Button(E.Runner,0)->IsHidden());
-	TestEqual(TEXT("Passenger label"),FP5gTestAccess::Label(E.Runner,0),FString(TEXT("동승석")));
-	TestEqual(TEXT("Rear label"),FP5gTestAccess::Label(E.Runner,1),FString(TEXT("2열")));
+	TestEqual(TEXT("Passenger label"),FP5gTestAccess::Label(E.Runner,0),FString(TEXT("Passenger seat")));
+	TestEqual(TEXT("Rear label"),FP5gTestAccess::Label(E.Runner,1),FString(TEXT("Rear seat")));
 	const auto Token = E.Runner->GetToken(); const int32 Before = E.Runner->RuleDiscards;
 	for (FKey Key : {EKeys::SpaceBar,EKeys::Left,EKeys::Right,EKeys::End}) { E.Key(Key); }
 	E.Command(EVBoRFlowCommand::Confirm,EVBoRCommandSource::Participant);
@@ -140,17 +140,17 @@ bool FP5gSeatsTest::RunTest(const FString&)
 	TestEqual(TEXT("Additional switches discarded"),E.Runner->TransitionDiscards,Before+2);
 	E.FinishSwitch();
 	TestTrue(TEXT("First passenger target retained"),E.Car->Alignment->IsAtViewpoint(E.Car->PassengerView));
-	TestEqual(TEXT("Passenger offers driver"),FP5gTestAccess::Label(E.Runner,0),FString(TEXT("운전석")));
-	TestEqual(TEXT("Passenger offers rear"),FP5gTestAccess::Label(E.Runner,1),FString(TEXT("2열")));
+	TestEqual(TEXT("Passenger offers driver"),FP5gTestAccess::Label(E.Runner,0),FString(TEXT("Driver seat")));
+	TestEqual(TEXT("Passenger offers rear"),FP5gTestAccess::Label(E.Runner,1),FString(TEXT("Rear seat")));
 	const int32 Locked = E.Runner->ConfirmLockDiscards;
 	E.Poke(1); E.Runner->ProcessFlow(1);
 	TestEqual(TEXT("Input captured during placement lock stays discarded despite long dt"),E.Runner->ConfirmLockDiscards,Locked+1);
 	TestFalse(TEXT("Locked input never starts transition"),E.Car->Alignment->IsSwitching());
 	E.Poke(1); E.Runner->ProcessFlow(0); E.FinishSwitch(); E.Ready();
 	TestTrue(TEXT("Participant rear destination"),E.Car->Alignment->IsAtViewpoint(E.Car->RearView));
-	TestTrue(TEXT("Participant request distinguished"),E.Runner->LastViewRequest.Contains(TEXT("참가자")));
-	TestEqual(TEXT("Rear offers driver"),FP5gTestAccess::Label(E.Runner,0),FString(TEXT("운전석")));
-	TestEqual(TEXT("Rear offers passenger"),FP5gTestAccess::Label(E.Runner,1),FString(TEXT("동승석")));
+	TestTrue(TEXT("Participant request distinguished"),E.Runner->LastViewRequest.Contains(TEXT("Participant")));
+	TestEqual(TEXT("Rear offers driver"),FP5gTestAccess::Label(E.Runner,0),FString(TEXT("Driver seat")));
+	TestEqual(TEXT("Rear offers passenger"),FP5gTestAccess::Label(E.Runner,1),FString(TEXT("Passenger seat")));
 	E.Poke(0); E.Runner->ProcessFlow(0); E.FinishSwitch();
 	TestTrue(TEXT("Participant returns to base"),E.Car->Alignment->IsBaseViewpoint());
 	return true;
@@ -161,15 +161,15 @@ bool FP5gOperatorTest::RunTest(const FString&)
 {
 	FP5gWorld E; E.Key(EKeys::End);
 	TestTrue(TEXT("End enters free mode without completion"),E.Runner->IsFreeMode() && !E.Runner->IsFinished());
-	TestFalse(TEXT("End panel never claims completed"),E.Runner->GetPanelText().Contains(TEXT("안내 완료")));
-	TestTrue(TEXT("End record contains origin and summary"),E.Runner->LastRecord.Contains(TEXT("05")) && E.Runner->LastRecord.Contains(TEXT("요약")));
+	TestFalse(TEXT("End panel never claims completed"),E.Runner->GetPanelText().Contains(TEXT("Guidance complete")));
+	TestTrue(TEXT("End record contains origin and summary"),E.Runner->LastRecord.Contains(TEXT("05")) && E.Runner->LastRecord.Contains(TEXT("summary")));
 	TestEqual(TEXT("End counted separately"),E.Runner->EndCount,1); TestEqual(TEXT("Skip unchanged"),E.Runner->SkipCount,0);
 	const FString Text = E.Runner->GetOperatorText();
-	for (const TCHAR* Word : {TEXT("자유모드"),TEXT("1"),TEXT("2"),TEXT("Home"),TEXT("R"),TEXT("F6")}) { TestTrue(TEXT("Operator keys advertised"),Text.Contains(Word)); }
+	for (const TCHAR* Word : {TEXT("Free mode"),TEXT("1"),TEXT("2"),TEXT("Home"),TEXT("R"),TEXT("F6")}) { TestTrue(TEXT("Operator keys advertised"),Text.Contains(Word)); }
 	E.Key(EKeys::One); E.FinishSwitch(); TestTrue(TEXT("Operator passenger"),E.Car->Alignment->IsAtViewpoint(E.Car->PassengerView));
 	E.Key(EKeys::Two); E.FinishSwitch(); TestTrue(TEXT("Operator rear"),E.Car->Alignment->IsAtViewpoint(E.Car->RearView));
 	E.Key(EKeys::Home); E.FinishSwitch(); TestTrue(TEXT("Operator base"),E.Car->Alignment->IsBaseViewpoint());
-	TestTrue(TEXT("Operator source retained"),E.Runner->LastViewRequest.Contains(TEXT("진행자")));
+	TestTrue(TEXT("Operator source retained"),E.Runner->LastViewRequest.Contains(TEXT("Operator")));
 	E.Key(EKeys::Two); E.FinishSwitch();
 	auto& Door = const_cast<FVBoRDoorMotion&>(E.Car->Door->GetMotion()); Door.AngleDeg = 55; Door.bLocked = false;
 	E.Key(EKeys::R); E.FinishSwitch();
@@ -177,7 +177,7 @@ bool FP5gOperatorTest::RunTest(const FString&)
 	TestEqual(TEXT("First step restored"),E.Runner->GetStepIndex(),0); TestEqual(TEXT("Retry counted"),E.Runner->RetryCount,1);
 	TestTrue(TEXT("Door reset unchanged"),Door.bLocked && Door.AngleDeg == 0);
 	TestTrue(TEXT("Seat action hidden during evaluation"),FP5gTestAccess::Button(E.Runner,1)->IsHidden());
-	TestEqual(TEXT("Evaluation label restored"),FP5gTestAccess::Label(E.Runner,0),FString(TEXT("확인")));
+	TestEqual(TEXT("Evaluation label restored"),FP5gTestAccess::Label(E.Runner,0),FString(TEXT("Confirm")));
 	return true;
 }
 
@@ -189,7 +189,7 @@ bool FP5gGuardsTest::RunTest(const FString&)
 	E.Key(EKeys::O); E.Command(EVBoRFlowCommand::Passenger,EVBoRCommandSource::Participant); E.Command(EVBoRFlowCommand::Rear,EVBoRCommandSource::Participant);
 	TestEqual(TEXT("Evaluation participant seat permissions unchanged"),E.Runner->PermissionDiscards,2);
 	E.Car->Alignment->State = EVBoRAlignmentState::Applied;
-	// 유효 저장값을 다시 공급해 실제 전환을 시작함 (P5g E9)
+	// Supply valid save again to start real transition (P5g E9)
 	FVBoRBuckSavedAlignment Saved; Saved.SavedAt = TEXT("test"); Saved.TrackingOrigin = 3; Saved.PlayAreaCm = FVector2D(300,400);
 	E.Car->Alignment->InitializeAlignment(E.Pawn,&Saved,3,Saved.PlayAreaCm);
 	E.Key(EKeys::One); E.Key(EKeys::End);
@@ -217,7 +217,7 @@ bool FP5gReloadTest::RunTest(const FString&)
 	TestTrue(TEXT("Reload fades to black using alignment duration"),E.Controller->PlayerCameraManager->FadeColor == FLinearColor::Black &&
 		E.Controller->PlayerCameraManager->FadeAlpha == FVector2D(0,1) && E.Controller->PlayerCameraManager->FadeTime == E.Car->Alignment->FadeSeconds);
 	TestEqual(TEXT("Request frame dt never counts toward new fade"),E.Runner->ReloadRequests,0);
-	TestTrue(TEXT("Reload recorded"),E.Runner->LastRecord.Contains(TEXT("레벨")));
+	TestTrue(TEXT("Reload recorded"),E.Runner->LastRecord.Contains(TEXT("level")));
 	TestTrue(TEXT("Buttons hidden during reload"),FP5gTestAccess::Button(E.Runner,0)->IsHidden() && FP5gTestAccess::Button(E.Runner,1)->IsHidden());
 	const int32 Discards = E.Runner->TransitionDiscards;
 	E.Command(EVBoRFlowCommand::Passenger,EVBoRCommandSource::Participant);

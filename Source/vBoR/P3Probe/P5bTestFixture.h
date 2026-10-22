@@ -5,7 +5,7 @@
 #include "Components/AudioComponent.h"
 #include "P5bTestFixture.generated.h"
 
-// 실제 소리 대신 Play 요청을 셈 (청각 확인은 Quest, P5b E3)
+// Count Play requests instead of actual audio (listen on Quest, P5b E3)
 UCLASS()
 class UP5bAudioObserver : public UAudioComponent
 {

@@ -17,7 +17,7 @@ AVBoRPawn::AVBoRPawn()
 void AVBoRPawn::PreRegisterAllComponents()
 {
 	Super::PreRegisterAllComponents();
-	// BP 복제 때 남은 CDO 부모 대신 자기 리그에 붙임 (중첩 ISDK 표시의 등록 오류 방지, P4f D5)
+	// Attach to own rig, not stale CDO parent after BP duplication (avoid nested ISDK visual registration error, P4f D5)
 	for (int32 Hand = 0; Hand < 2; ++Hand)
 	{
 		auto* Rig = GetHandRig(Hand);
@@ -27,7 +27,7 @@ void AVBoRPawn::PreRegisterAllComponents()
 
 void AVBoRPawn::PreInitializeComponents()
 {
-	// 리그 초기화 전에 두 표시를 함께 바꿈 (poke limiter 전환 때 모양 유지, P4f D2)
+	// Replace both visuals before rig init (same appearance across poke limiter switch, P4f D2)
 	for (int32 Hand = 0; Hand < 2; ++Hand)
 	{
 		USkeletalMesh* Mesh = Hand == 0 ? LeftHandMesh.Get() : RightHandMesh.Get();
@@ -48,7 +48,7 @@ void AVBoRPawn::PreInitializeComponents()
 		}
 	}
 	Super::PreInitializeComponents();
-	// P3 의 기존 Pinch 허용 순서 유지 (부모가 먼저 Pinch 를 끔, P4f D1)
+	// Keep P3 Pinch enable order (parent disables Pinch first, P4f D1)
 	if (bAllowPalmGrab)
 	{
 		for (int32 Hand = 0; Hand < 2; ++Hand) { GetHandRig(Hand)->GetGrabber()->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch, true); }
@@ -58,7 +58,7 @@ void AVBoRPawn::PreInitializeComponents()
 void AVBoRPawn::BeginPlay()
 {
 	Super::BeginPlay();
-	// 손 표시 BeginPlay 에서 매핑이 Valid 나 Invalid 로 끝남 (IsdkHandMeshComponent.cpp:161-164·205-224). Actor Tick 안 씀 (BP 자식 Event Tick 유지, P4f 리뷰 R1-1)
+	// Visual BeginPlay ends mapping as Valid/Invalid (IsdkHandMeshComponent.cpp:161-164/205-224). No Actor Tick (preserve BP Event Tick, P4f review R1-1)
 	CheckHandMeshMappings();
 }
 
@@ -81,7 +81,7 @@ void AVBoRPawn::CheckHandMeshMappings()
 				Visual->EmptyOverrideMaterials();
 				Visual->ClearMappingState();
 			}
-			// 실패한 손만 한 번 복구함 (반대 손 설정·보임 유지, P4f D3)
+			// Restore failed hand once only (preserve other hand settings/visibility, P4f D3)
 			bHandMeshFallback[Hand] = true;
 			UE_LOG(LogVBoRPawn, Warning, TEXT("%s: %s hand mesh %s bones do not match XRHand_* - using default hand"),
 				*GetName(), Hand == 0 ? TEXT("Left") : TEXT("Right"), *Mesh->GetName());

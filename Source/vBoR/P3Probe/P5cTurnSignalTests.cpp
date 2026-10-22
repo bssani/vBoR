@@ -47,7 +47,7 @@ namespace
 	void P5cMove(AVBoRAxisPart* Part, double Angle, bool bTracked = true) { FP5cTestAccess::Move(Part,P5cPose(Part,Angle),bTracked); }
 	void P5cSetUpper(AVBoRAxisPart* Part)
 	{
-		// 시작 걸림은 가운데로 둠 (상단에서 시작하면 차선 변경 기준도 바뀜, P5c D3·E6·E7)
+		// Start detent at center (upper start changes lane-change reference, P5c D3/E6/E7)
 		P5cBegin(Part); P5cMove(Part,20); Part->Tick(0.01f); FP5cTestAccess::Release(Part); Part->Tick(1);
 	}
 	UP5cEventObserver* P5cObserve(AVBoRAxisPart* Part)

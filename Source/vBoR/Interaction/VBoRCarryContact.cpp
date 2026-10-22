@@ -8,11 +8,11 @@ void AVBoRCarryObject::ResolveHeldContact(const FTransform& Requested, float Del
 	if (!GetWorld() || !IsPoseClear(Resolved)) { return; }
 	constexpr double SkinCm = 0.005;
 	FComponentQueryParams Params(SCENE_QUERY_STAT(VBoRCarryContact), this);
-	// 무효 시간·속도는 예산 0 으로 둠 (frame 속도와 무관한 밀어냄, P1 R6-1, cm/s × s)
+	// Invalid time/speed gives zero budget (frame-rate-independent push-out, P1 R6-1, cm/s × s)
 	const double FrameSeconds = FMath::IsFinite(DeltaSeconds) ? FMath::Max(0.0f, DeltaSeconds) : 0.0;
 	const double PushRate = FMath::IsFinite(MaxRotationPushCmPerSecond) ? FMath::Max(0.0f, MaxRotationPushCmPerSecond) : 0.0;
 	double PushBudgetCm = PushRate * FrameSeconds;
-	// 이동으로 접촉을 벗어나면 같은 요청 안에서 회전을 다시 풂 (lift+tilt 가 한 frame 늦지 않게, P1 D7)
+	// Retry rotation after translation clears contact (no one-frame lift+tilt lag, P1 D7)
 	for (int32 Stage = 0; Stage < 2; ++Stage)
 	{
 		const FTransform Current = Resolved;
@@ -37,8 +37,8 @@ void AVBoRCarryObject::ResolveHeldContact(const FTransform& Requested, float Del
 			return true;
 		};
 
-		// ── 1) 요청 회전이 새로 만든 겹침만 밀어냄 ──
-		// initial penetration 은 접촉점 하나가 없음. Normal·깊이로 면 제약을 합침 (P1 D7, cm)
+		// ── 1) Push out overlaps introduced by requested rotation only ──
+		// Initial penetration has no single contact point. Combine plane constraints by Normal/depth (P1 D7, cm)
 		auto RotationPose = [&](double Fraction, FTransform& Candidate)
 		{
 			Candidate = Current;
@@ -65,7 +65,7 @@ void AVBoRCarryObject::ResolveHeldContact(const FTransform& Requested, float Del
 			}
 			return IsPoseClear(Candidate) && CanTranslateFromResolved(Candidate);
 		};
-		// 작은 각도 구간마다 확인함 (끝점만 비어 있는 큰 회전의 통과 방지, P1 D7)
+		// Check small angular steps (avoid passing through on clear endpoints alone, P1 D7)
 		const double Angle = FMath::RadiansToDegrees(Current.GetRotation().AngularDistance(Rotation));
 		const int32 Steps = FMath::Clamp(FMath::CeilToInt(Angle / 5.0), 1, 36);
 		double Accepted = 0;
@@ -83,10 +83,10 @@ void AVBoRCarryObject::ResolveHeldContact(const FTransform& Requested, float Del
 			}
 			break;
 		}
-		// 두 번째 회전도 같은 frame 의 남은 예산만 씀 (밀어냄 상한이 두 배가 되지 않게, P1 D7, cm)
+		// Second rotation uses remaining frame budget (no doubled push-out cap, P1 D7, cm)
 		PushBudgetCm = FMath::Max(0.0, PushBudgetCm - FVector::Distance(Current.GetLocation(), Resolved.GetLocation()));
 
-		// ── 2) 이동 sweep 뒤 남은 이동을 면·두 면 교선으로 투영 ──
+		// ── 2) Project remaining sweep motion onto plane/two-plane intersection ──
 		const FVector TranslationStart = Resolved.GetLocation();
 		FVector Remaining = Requested.GetLocation() - Resolved.GetLocation();
 		FVector PreviousNormal = FVector::ZeroVector;

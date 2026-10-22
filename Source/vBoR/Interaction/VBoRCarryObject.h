@@ -40,7 +40,7 @@ struct FVBoRCarryMetrics
 	EVBoRCarryOutcome Outcome = EVBoRCarryOutcome::None;
 };
 
-// protected 정책을 C++ 에서 고정하기 위한 얇은 자식 (P1 §5)
+// Thin child to lock protected policy in C++ (P1 §5)
 UCLASS()
 class VBOR_API UVBoRCarryGrabTransformer : public UIsdkGrabTransformerComponent
 {
@@ -74,7 +74,7 @@ public:
 	AVBoRCarryObject();
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Carry|Sound") FVBoRSoundCue BlockedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Carry|Sound") FVBoRHeldSoundCue PausedCue;
-	// 칸 순서는 위 프로퍼티 순서와 같음 (P5s D12)
+	// Slot order = property order above (P5s D12)
 #if WITH_DEV_AUTOMATION_TESTS
 	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
 	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return SoundAudio[Slot]; }

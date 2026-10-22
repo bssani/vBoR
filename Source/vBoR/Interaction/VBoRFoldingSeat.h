@@ -25,7 +25,7 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Seat folding") TObjectPtr<USceneComponent> HingePivot;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Seat folding") TObjectPtr<UStaticMeshComponent> SeatMesh;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Seat folding", meta=(Units="cm")) FVector HingeLocationCm = FVector(0,0,48);
-	// 차 원점 피벗의 CAD 도 선 상태의 자리를 보존함 (P4e D1, U-09)
+	// Preserve upright CAD position with car-origin pivot (P4e D1, U-09)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Seat folding") FTransform MeshRestFromRoot = FTransform(FQuat::Identity, FVector(0,0,78), FVector(0.08,1.7,0.6));
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Seat folding", meta=(Units="deg", ClampMin="1", ClampMax="170")) float FoldAngleDeg = 80;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Seat folding", meta=(Units="deg/s", ClampMin="0.1")) float SpeedDegPerSecond = 45;

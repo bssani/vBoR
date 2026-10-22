@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 
-// + 는 피벗 +Z 양의 회전 (앞 → 오른쪽). 손 위치·기울임은 버림 (P5f D2·R1-1, deg)
+// + = positive pivot +Z rotation (front → right). Ignore hand position/tilt (P5f D2/R1-1, deg)
 struct FVBoRKnobMotion
 {
 	double AngleDeg = 0, RecoveryDiscardDeg = 0;

@@ -38,7 +38,7 @@ namespace
 	{
 		UGameViewportClient* Client = World ? World->GetGameViewport() : nullptr;
 		FSceneViewport* Viewport = Client ? Client->GetGameViewport() : nullptr;
-		// VR 의 GetSizeXY 는 눈 렌더 크기일 수 있어 실제 창의 client 크기 사용 (P5h D3)
+		// VR GetSizeXY may be eye render size; use actual window client size (P5h D3)
 		const TSharedPtr<SWindow> Window = Viewport ? Viewport->FindWindow() : nullptr;
 		if (!Window) { return FIntPoint::ZeroValue; }
 		const FVector2D Size = Window->GetClientSizeInScreen();
@@ -54,7 +54,7 @@ bool UVBoRSpectatorSubsystem::DoesSupportWorldType(EWorldType::Type WorldType) c
 void UVBoRSpectatorSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 {
 	Super::OnWorldBeginPlay(InWorld);
-	// nullrhi 에서는 renderer·Slate·target 을 만들지 않음 (P5h E1)
+	// No renderer/Slate/target in nullrhi (P5h E1)
 	bPending = FApp::CanEverRender();
 	PendingSeconds = RetryCountdown = 0;
 }
@@ -92,15 +92,15 @@ void UVBoRSpectatorSubsystem::CollectParts()
 	++PartScans;
 #endif
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It) { AddPart(*It); }
-	// UE 5.6 부터 spawn 알림은 FinishSpawning 뒤에 옴 (Deferred spawn 도 이름·상태 정해진 뒤, LevelActor.cpp:51-55)
+	// UE 5.6 spawn notification follows FinishSpawning (deferred names/state ready too, LevelActor.cpp:51-55)
 	SpawnedHandle = GetWorld()->AddOnActorSpawnedHandler(FOnActorSpawned::FDelegate::CreateUObject(this,&UVBoRSpectatorSubsystem::AddPart));
-	// 서브레벨·스트리밍으로 나중에 들어온 부품도 받음 (spawn 알림은 안 옴)
+	// Include later sublevel/streamed parts too (no spawn notification)
 	LevelAddedHandle = FWorldDelegates::LevelAddedToWorld.AddUObject(this,&UVBoRSpectatorSubsystem::HandleLevelAdded);
 }
 
 void UVBoRSpectatorSubsystem::HandleLevelAdded(ULevel* Level, UWorld* World)
 {
-	// 전역 알림이라 다른 월드 레벨은 무시함
+	// Global notification: ignore other-world levels
 	if (!Level || World != GetWorld()) { return; }
 	for (AActor* Actor : Level->Actors) { AddPart(Actor); }
 }
@@ -108,7 +108,7 @@ void UVBoRSpectatorSubsystem::HandleLevelAdded(ULevel* Level, UWorld* World)
 void UVBoRSpectatorSubsystem::SampleParts(double NowSeconds)
 {
 	if (!bPartsCollected) { CollectParts(); }
-	// 지운 Actor 는 뺌. 순서 유지 (같은 frame 에 잡은 이름 순서가 흔들리지 않게)
+	// Remove deleted Actors, preserve order (stable same-frame grabbed-name order)
 	Parts.RemoveAll([](const TWeakObjectPtr<AActor>& Part) { return !Part.IsValid(); });
 	TArray<FString> ActiveNames;
 	for (const TWeakObjectPtr<AActor>& Actor : Parts)
@@ -130,13 +130,13 @@ void UVBoRSpectatorSubsystem::Tick(float DeltaTime)
 			RetryCountdown = 0.5f;
 			TryStart();
 		}
-		// HMD 가 없는 평면 실행도 경고 없이 끝남 (P5h D1·E1)
+		// Flat run without HMD also ends without warning (P5h D1/E1)
 		if (bPending && PendingSeconds >= 30) { bPending = false; }
 	}
 	if (!RenderTarget) { return; }
 	ISpectatorScreenController* Screen = SpectatorScreen();
 	if (!Screen || !Runner.IsValid()) { Stop(); return; }
-	// 그리기 간격과 무관하게 1 frame 버튼도 수집함 (P5h E10)
+	// Collect one-frame buttons regardless of draw interval (P5h E10)
 	SampleParts(GetWorld()->GetRealTimeSeconds());
 	CurrentBanner = VBoRSpectator::Banner(*Runner.Get(),{ReadyLabel,MissionLabel,FreeLabel,CompletedMission,ExploreMission,UnknownMission});
 	RedrawCountdown -= DeltaTime;
@@ -151,7 +151,7 @@ void UVBoRSpectatorSubsystem::Tick(float DeltaTime)
 		if (RenderTarget->SizeX != ScreenLayout.PanelPixels.X || RenderTarget->SizeY != ScreenLayout.PanelPixels.Y)
 		{ RenderTarget->ResizeTarget(ScreenLayout.PanelPixels.X,ScreenLayout.PanelPixels.Y); }
 	}
-	// target 은 칸의 px, Slate 배치는 1080 기준으로 유지 (P5k D2)
+	// Target in panel px, Slate layout remains 1080-based (P5k D2)
 	WidgetRenderer->DrawWidget(RenderTarget,SlateWidget.ToSharedRef(),ScreenLayout.DrawScale,FVector2D(ScreenLayout.PanelPixels),Interval);
 }
 
@@ -204,7 +204,7 @@ TSharedRef<SWidget> UVBoRSpectatorSubsystem::MakeWidget()
 				SNew(STextBlock).Text_Lambda([this] { return CurrentBanner.Label; })
 				.Font_Lambda([this] { return FCoreStyle::GetDefaultFontStyle("Bold",LabelFontSize); })
 				.ColorAndOpacity_Lambda([this] { return FSlateColor(AccentColor); })
-				// 명시한 폭으로 첫 prepass 부터 줄바꿈 높이를 계산함 (P5k D3·Q1)
+				// Explicit width for wrapped height from first prepass (P5k D3/Q1)
 				.WrapTextAt_Lambda([this] { return FMath::Max(1.0,ScreenLayout.DesignSize().X-66); })
 			]
 			+ SVerticalBox::Slot().FillHeight(1).Padding(0,24,0,0)
@@ -266,7 +266,7 @@ void UVBoRSpectatorSubsystem::Stop()
 			Screen->SetSpectatorScreenMode(ESpectatorScreenMode::SingleEyeCroppedToFill);
 		}
 	}
-	// 렌더 스레드가 쓰는 Slate 자원은 지연 정리함 (P5h D1)
+	// Defer release of render-thread Slate resources (P5h D1)
 	if (WidgetRenderer) { BeginCleanup(WidgetRenderer); WidgetRenderer = nullptr; }
 	SlateWidget.Reset(); RenderTarget = nullptr; Runner.Reset();
 	bPending = false;

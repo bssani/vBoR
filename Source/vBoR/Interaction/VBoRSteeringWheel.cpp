@@ -46,7 +46,7 @@ AVBoRSteeringWheel::AVBoRSteeringWheel()
 	WheelMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WheelMesh")); WheelMesh->SetupAttachment(AxisPivot);
 	WheelMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision); WheelMesh->SetSimulatePhysics(false);
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cylinder(TEXT("/Engine/BasicShapes/Cylinder.Cylinder")); WheelMesh->SetStaticMesh(Cylinder.Object);
-	// 원기둥 +Z 를 축 +X 로 놓음 (근사 원판 지름 36 cm·두께 3 cm, P5d D8)
+	// Cylinder +Z aligned to axis +X (approximate disc diameter 36 cm/thickness 3 cm, P5d D8)
 	MeshRestFromRoot = FTransform(FRotator(90,0,0),FVector::ZeroVector,FVector(0.36,0.36,0.03));
 	TopMarker = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("TwelveOClock")); TopMarker->SetupAttachment(AxisPivot);
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube")); TopMarker->SetStaticMesh(Cube.Object);
@@ -80,7 +80,7 @@ void AVBoRSteeringWheel::OnConstruction(const FTransform& Transform)
 void AVBoRSteeringWheel::PreInitializeComponents()
 {
 	RestPivot = AxisPivot->GetRelativeTransform();
-	// 레벨에 저장된 Actor 도 실행 때 검사함 (construction 재실행에 기대지 않음, P5d R1-1)
+	// Validate saved Actors at runtime (no construction rerun dependency, P5d R1-1)
 	bGrabValid = WheelMesh->GetStaticMesh() && FMath::IsFinite(LimitAngleDeg) && LimitAngleDeg > 0 &&
 		FMath::IsFinite(MinGrabRadiusCm) && FMath::IsFinite(MaxGrabRadiusCm) && MinGrabRadiusCm >= 0 && MaxGrabRadiusCm >= MinGrabRadiusCm &&
 		FMath::IsFinite(MinAxisDistanceCm) && MinAxisDistanceCm > 0 && FMath::IsFinite(MinPairDistanceCm) && MinPairDistanceCm > 0;
@@ -152,7 +152,7 @@ void AVBoRSteeringWheel::HandlePointer(const FIsdkInteractionPointerEvent& Event
 	{
 		FTransform Pose; const bool WasPaused = bPaused;
 		if (!ReadHand(Hand,Pose)) { bPaused = true; return; }
-		// 놓기 전 마지막 자세도 반영함. 알림은 Tick 까지 보관함 (P5d E14)
+		// Include final pre-release pose. Queue notifications until Tick (P5d E14)
 		AdvanceMotion();
 		if (!WasPaused && !bPaused) { EndHold(Hand); }
 	}
@@ -176,7 +176,7 @@ void AVBoRSteeringWheel::AdvanceMotion()
 		if (Segment.Size() >= MinPairDistanceCm) { Direction = Segment; Mode = 2+First; Valid = true; }
 	}
 	Direction = Direction.GetSafeNormal();
-	// +X 를 바라보는 운전자 기준 +Z → +Y 가 시계 방향임 (P5d D2, deg)
+	// Driver facing +X: +Z → +Y is clockwise (P5d D2, deg)
 	const double Delta = FMath::RadiansToDegrees(FMath::Atan2(LastDirection.Z*Direction.Y-LastDirection.Y*Direction.Z,FVector::DotProduct(LastDirection,Direction)));
 	if (bPaused)
 	{
@@ -184,7 +184,7 @@ void AVBoRSteeringWheel::AdvanceMotion()
 		UE_LOG(LogSteeringWheel, Log, TEXT("%s recovery discarded %.3f deg | not-tested"),*GetName(),RecoveryDiscardDeg);
 	}
 	if (!bPaused && bBasisValid && Valid && Mode == LastMode && FMath::Abs(Delta) <= 90.0+1.e-6) { ApplyAngle(Delta); }
-	// 축 근처·계산 방식 변경·추적 복구 frame 은 기준만 갱신함 (P5d D3·D4·D6)
+	// Rebase only near axis/on method change/tracking recovery frame (P5d D3/D4/D6)
 	LastDirection = Direction; LastMode = Mode; bBasisValid = Valid; bPaused = false;
 }
 
@@ -206,7 +206,7 @@ void AVBoRSteeringWheel::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	++SoundFrame; AdvanceSounds(DeltaSeconds);
 	if (!FMath::IsFinite(DeltaSeconds) || DeltaSeconds <= 0) { return; }
-	// 한 손의 손실도 먼저 확인함 (다른 손의 놓기가 보류를 지우지 않게, P5d D6)
+	// Check either hand's loss first (other hand release must not clear pause, P5d D6)
 	AdvanceMotion();
 	const TArray<int32> Hands = HandOrder;
 	for (int32 Hand : Hands)
@@ -217,7 +217,7 @@ void AVBoRSteeringWheel::Tick(float DeltaSeconds)
 	if (bCancelPending)
 	{
 		bCancelPending = false; bCancelling = true;
-		// SDK 는 전체 선택만 취소함. 유효 손의 소유·기준은 유지함 (P5d D4·D5)
+		// SDK cancels all selection only. Keep valid-hand ownership/reference (P5d D4/D5)
 		GrabComponent->CancelSelection(); bCancelling = false;
 	}
 	UpdateVisual();

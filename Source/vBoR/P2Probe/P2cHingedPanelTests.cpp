@@ -47,7 +47,7 @@ namespace
 	};
 	void ConfigureLid(AVBoRHingedPanel* Panel)
 	{
-		// +Y 를 윗면으로 둠. +Z 는 차 -Y 축 (열림 +deg 가 위로, P2c D3)
+		// +Y top, +Z car -Y (positive opening deg points up, P2c D3)
 		Panel->HingePivot->SetRelativeTransform(FTransform(FQuat(FVector::XAxisVector, PI / 2), FVector(-45, 0, 70)));
 		Panel->MeshRestFromRoot = FTransform(FQuat::Identity, FVector(-27.5, 0, 70), FVector(0.35, 0.24, 0.03));
 		Panel->MaxAngleDeg = 100;
@@ -210,7 +210,7 @@ bool FP2cOpenDoorHandle::RunTest(const FString& Parameters)
 	FP2cWorld W; AP2bTrackedDoor* Door = W.World->SpawnActor<AP2bTrackedDoor>(); AP2bTrackedPart* Part = W.World->SpawnActor<AP2bTrackedPart>(); W.Play(); Door->SetAxisHandle(0, Part);
 	FVBoRDoorMotion& Motion = FP2cTestAccess::Motion(Door); Motion.bLocked = false; Motion.AngleDeg = 30; FP2cTestAccess::Apply(Door);
 	Door->Hands[0] = HandAt(FVector(100, 9, 60));
-	// 문을 따라 돈 손잡이의 쉬는 축 좌표로 입력함 (로컬 15/25 deg 유지, P2e §3·Q1)
+	// Input in handle rest-axis coordinates after door rotation (keep local 15/25 deg, P2e §3/Q1)
 	const FTransform HandleFrame = Part->AxisPivot->GetComponentTransform();
 	FP2cTestAccess::Begin(Part, Pose(HandleFrame.TransformPosition(FVector(0, 10, 0)))); FP2cTestAccess::Move(Part, Pose(HandleFrame.TransformPosition(FQuat(FVector::XAxisVector, FMath::DegreesToRadians(15.0)).RotateVector(FVector(0, 10, 0)))));
 	Part->Tick(0.01f);

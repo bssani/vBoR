@@ -154,7 +154,7 @@ bool FP2fSurface::RunTest(const FString& Parameters)
 		Part->MeshRestFromRoot = FTransform(FQuat::Identity, FVector(0,0,80), FVector(0.4));
 		Part->OnConstruction(Part->GetActorTransform());
 		auto* Grabber = P2fGrabber(W.World); W.Play(); Grabber->Activate(true);
-		// 반지름 20 cm 구의 bounds 모서리. 손바닥 구 4 cm 도 표면에 안 닿음 (P2f E3)
+		// 20 cm radius sphere bounds corner. 4 cm palm sphere also misses surface (P2f E3)
 		P2fMove(Grabber, FVector(18,18,98));
 		TestEqual(TEXT("Box corner hover only with default box"), P2fHover(Grabber, Part->Grabbable), !bMesh);
 		P2fMove(Grabber, FVector(20,0,80));
@@ -228,7 +228,7 @@ bool FP2fComplex::RunTest(const FString& Parameters)
 {
 	FP2fWorld W; auto* Part = W.World->SpawnActor<AP2bTrackedPart>(); Part->bGrabWithMesh = true;
 	Part->MeshRestFromRoot = FTransform(FQuat::Identity, FVector(0,0,80), FVector(0.2));
-	// 원본 asset 을 건드리지 않고 삼각형만 쓰는 충돌을 만듦 (P2f E6)
+	// Triangle-only collision without changing source asset (P2f E6)
 	auto* Mesh = DuplicateObject<UStaticMesh>(Part->PartMesh->GetStaticMesh(), W.World);
 	auto* Body = NewObject<UBodySetup>(Mesh); Body->CollisionTraceFlag = CTF_UseComplexAsSimple; Mesh->SetBodySetup(Body);
 	Body->CreatePhysicsMeshes(); Part->PartMesh->SetStaticMesh(Mesh); Part->OnConstruction(Part->GetActorTransform());

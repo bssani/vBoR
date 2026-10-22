@@ -22,7 +22,7 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Vehicle power|Sound") FVBoRSoundCue PowerOnCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Vehicle power|Sound") FVBoRSoundCue PowerOffCue;
-	// 칸 순서는 위 프로퍼티 순서와 같음 (P5s D12)
+	// Slot order = property order above (P5s D12)
 #if WITH_DEV_AUTOMATION_TESTS
 	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
 	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return SoundAudio[Slot]; }
@@ -34,7 +34,7 @@ public:
 	UFUNCTION(BlueprintPure, Category="Vehicle power") bool IsPowerOn() const { return bPowerOn; }
 	UPROPERTY(BlueprintAssignable, Category="Vehicle power") FVBoRPowerChanged OnPowerChanged;
 	bool IsAvailable() const { return bAvailable; }
-	// 시작 때만 찾고 호출자가 보관함 (frame 마다 순회하지 않게, P5q D1·D5)
+	// Find once at startup; caller caches (no per-frame scan, P5q D1/D5)
 	static UVBoRVehiclePowerComponent* FindUnique(UWorld* World, int32* Count = nullptr);
 protected:
 	virtual void BeginPlay() override;

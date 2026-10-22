@@ -75,7 +75,7 @@ namespace
 			Runner->Scenario = NewObject<UVBoRScenarioAsset>(Runner);
 			for (auto& Step : Runner->Scenario->Steps)
 			{ Step.Rule = EVBoRStepRule::Confirm; Step.ConfirmBy = EVBoRConfirmBy::Either; Step.TargetTag = NAME_None; Step.MarkerTag = NAME_None; Step.bRequireBaseViewpoint = false; }
-			// 3번째가 08인 14단계 시험 시나리오 (P5h E3)
+			// 14-step test scenario, third step 08 (P5h E3)
 			Swap(Runner->Scenario->Steps[2],Runner->Scenario->Steps[3]);
 			Play();
 			FVBoRBuckSavedAlignment Saved; Saved.SavedAt = TEXT("2026-10-16T00:00:00Z"); Saved.TrackingOrigin = 3;
@@ -154,7 +154,7 @@ bool FP5hReady::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5hEnglish,"vBoR.P5h.E4EnglishFallbacks",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP5hEnglish::RunTest(const FString&)
 {
-	FVBoRScenarioStep Step; Step.StepId = TEXT("08"); Step.Instruction = FText::FromString(TEXT("한국어는 TV에 쓰지 않음"));
+	FVBoRScenarioStep Step; Step.StepId = TEXT("08"); Step.Instruction = FText::FromString(TEXT("Participant instruction excluded from TV"));
 	const FText Unknown = FVBoRSpectatorLabels().Unknown;
 	TestEqual(TEXT("Empty newly serialized field falls back"),VBoRSpectator::MissionText(Step,Unknown).ToString(),FString(TEXT("Open the door.")));
 	Step.SpectatorText = FText::FromString(TEXT("Custom mission"));
@@ -272,11 +272,11 @@ bool FP5oParts::RunTest(const FString&)
 	W.Play();
 	auto* S = W.World->GetSubsystem<UVBoRSpectatorSubsystem>();
 	if (!TestNotNull(TEXT("Game world subsystem"),S)) { return false; }
-	// E3: 첫 수집 한 번만 월드를 훑음. 부품 아닌 Actor 는 목록에 없음
+	// E3: World scan on first collection only. Non-part Actors excluded
 	for (int32 I = 0; I < 5; ++I) { S->SampleParts(I * 0.016); }
 	TestEqual(TEXT("World scanned once"),FP5hTestAccess::Scans(S),1);
 	TestEqual(TEXT("Only spectator parts kept"),FP5hTestAccess::PartCount(S),1);
-	// E4: 첫 수집 뒤 spawn 한 부품도 바로 이름이 나옴. 지운 부품은 빠짐
+	// E4: Parts spawned after first collection appear immediately. Deleted parts removed
 	auto* Late = W.World->SpawnActor<AVBoRPokeButton>(); Late->SpectatorName = FText::FromString(TEXT("Late"));
 	auto* LateState = NewObject<UP5hPokeState>(Late); Late->Poke = LateState;
 	LateState->SetState(EIsdkInteractableState::Select); S->SampleParts(0.1);
@@ -285,7 +285,7 @@ bool FP5oParts::RunTest(const FString&)
 	Late->Destroy(); S->SampleParts(0.2);
 	TestEqual(TEXT("Destroyed part dropped"),FP5hTestAccess::PartCount(S),1);
 	S->SampleParts(1.5); TestTrue(TEXT("Destroyed part name expires"),FP5hTestAccess::Line(S).IsEmpty());
-	// E5: 추가된 레벨의 부품을 받음. 다른 월드 알림은 무시함
+	// E5: Collect added-level parts. Ignore other-world notifications
 	FP5hTestAccess::Forget(S,Early);
 	FP5hTestAccess::LevelAdded(S,W.World->PersistentLevel,nullptr);
 	TestEqual(TEXT("Other world level ignored"),FP5hTestAccess::PartCount(S),0);
@@ -439,7 +439,7 @@ bool FP5hBandFit::RunTest(const FString&)
 	PartNames.Sort([&](const FString& A, const FString& B) { return Measure->Measure(A,PartFont).X > Measure->Measure(B,PartFont).X; });
 	if (!TestTrue(TEXT("Mock provides at least two named parts"),PartNames.Num() >= 2)) { return false; }
 	const int32 DefaultCount = Missions.Num();
-	// 공백 없는 단어는 기본 Slate 에서 한 줄이라 명시적 개행으로 높이 초과 확인 (P5k E4)
+	// Unbroken word stays one Slate line; explicit newlines test height overflow (P5k E4)
 	FString TallMission;
 	for (int32 Line = 0; Line < 100; ++Line) { TallMission += TEXT("Long mission line.\n"); }
 	Missions.Add(FText::FromString(TallMission));
@@ -488,7 +488,7 @@ bool FP5hConfig::RunTest(const FString&)
 		TestTrue(*FString::Printf(TEXT("Config property %s"),*Name.ToString()),Property && Property->HasAnyPropertyFlags(CPF_Config));
 	}
 	auto* Defaults = GetMutableDefault<UVBoRSpectatorSubsystem>();
-	// ini 를 쓰지 않고 CDO 상속만 확인함. 월드 정리 뒤 원래 값 복구 (P5h R1-1·P5k E8)
+	// CDO inheritance only, no ini writes. Restore after world cleanup (P5h R1-1/P5k E8)
 	TGuardValue<float> Aspect(Defaults->EyeAspect,1.5f), Panel(Defaults->MinPanelWidth,0.5f);
 	TGuardValue<int32> Heading(Defaults->HeadingFontSize,18), Progress(Defaults->ProgressFontSize,23);
 	TGuardValue<FLinearColor> Secondary(Defaults->SecondaryTextColor,FLinearColor::Red),

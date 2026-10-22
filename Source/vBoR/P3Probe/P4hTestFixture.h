@@ -3,7 +3,7 @@
 #include "../Interaction/VBoRVehicleAlignmentComponent.h"
 #include "P4hTestFixture.generated.h"
 
-// 실제 손 추적과 사용자 저장 파일을 건드리지 않게 함 (P4h E3–E13)
+// Leave real hand tracking/user save untouched (P4h E3–E13)
 UCLASS()
 class UP4hTestAlignment : public UVBoRVehicleAlignmentComponent
 {

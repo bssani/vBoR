@@ -86,7 +86,7 @@ namespace
 		FString Path;
 		FP5iWorld(bool bSave = true)
 		{
-			// 파일의 version 1 을 쓰는 시험만 켬 (P5u §3 개정 2, Q1)
+			// Enable only tests using file version 1 (P5u §3 revision 2, Q1)
 			EyeAlignment->Set(1, ECVF_SetByCode);
 			GEngine->XRSystem = Head;
 			GEngine->CreateNewWorldContext(EWorldType::Game).SetCurrentWorld(World);
@@ -113,7 +113,7 @@ namespace
 		~FP5iWorld()
 		{
 			World->EndPlay(EEndPlayReason::Quit); GEngine->DestroyWorldContext(World); World->DestroyWorld(false); GEngine->XRSystem = OriginalXR; IFileManager::Get().Delete(*Path);
-			// world 정리 뒤 복구함 (D6 의 끄는 감지가 정리 중 돌지 않게, P5u Q1)
+			// Restore after world cleanup (no D6 disable detection during cleanup, P5u Q1)
 			EyeAlignment->Set(OriginalEyeAlignment, ECVF_SetByCode);
 		}
 		void Ready() { Runner->ProcessFlow(0); Runner->ProcessFlow(1); }
@@ -297,8 +297,8 @@ bool FP4cReapplyStart::RunTest(const FString&)
 		{
 			if (Category != TEXT("LogP3Flow")) { return; }
 			const FString Line(Text);
-			Starts += Line.Contains(TEXT("시작 위치 |")) ? 1 : 0;
-			Fallbacks += Line.Contains(TEXT("시작 표시를 거치지 않음")) ? 1 : 0;
+			Starts += Line.Contains(TEXT("Start position |")) ? 1 : 0;
+			Fallbacks += Line.Contains(TEXT("start marker not visited")) ? 1 : 0;
 		}
 	};
 	for (bool bVisitStart : {true,false})
@@ -314,7 +314,7 @@ bool FP4cReapplyStart::RunTest(const FString&)
 		TestTrue(TEXT("E8 A arms start record"),FP5iTestAccess::StartPending(W.Runner));
 		if (bVisitStart)
 		{
-			// 시작 표시 위 합성 머리로 기록 조건을 통과함 (P4c R1-1, cm)
+			// Synthetic head over start marker passes recording gates (P4c R1-1, cm)
 			const FTransform Start(FRotator::ZeroRotator,W.Car->GetActorTransform().TransformPosition(FVector(485,0,160.5)));
 			W.Head->LocalHead = Start.GetRelativeTransform(W.Pawn->GetActorTransform());
 			W.Runner->ProcessFlow(0); W.Runner->ProcessFlow(0);
@@ -353,7 +353,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE19,"vBoR.P5i.E19ReapplyUsesSetupNotHead",F
 bool FP5iE19::RunTest(const FString&)
 {
 	FP5iWorld W; W.Head->LocalHead.AddToTranslation(FVector(30,0,0));
-	// 메모리의 이전 값과 다르게 파일을 갱신해 실제 재읽기도 확인함 (P5i D8, cm)
+	// Save different value from memory (verify actual reread too, P5i D8, cm)
 	W.Saved.Capture.PositionCm.X += 12; FString Reason; TestTrue(TEXT("Changed setup saved"),FVBoRBuckAlignmentStore::Save(W.Path,W.Saved,Reason));
 	W.Button(B::Reapply); W.FinishSwitch();
 	TestTrue(TEXT("Pawn comes only from saved setup and eye"),W.Pawn->GetActorTransform().Equals(FVBoRBuckAlignment::CalculatePawn(W.Saved.Capture,W.Car->DriverEye->GetComponentTransform()),0.001));
@@ -405,7 +405,7 @@ bool FP5iE23::RunTest(const FString&)
 		const float LabelWidth = Measure->Measure(S.Label,FCoreStyle::GetDefaultFontStyle("Regular",10.5f)).X;
 		TestTrue(S.Label,LabelWidth + BadgeWidth + 8 + 28 + (S.Button == B::Confirm ? 44 : 28) <= Width);
 	}
-	// 실제 위젯의 상태 줄이 긴 이유를 한 줄 말줄임으로 처리하는지 확인함 (P5i E23)
+	// Check real widget ellipsizes long reason to one line (P5i E23)
 	W.Alignment->State = EVBoRAlignmentState::NeedsCheck; W.Alignment->Reason = FString::ChrN(400,TEXT('W'));
 	Widget->Tick(FGeometry(),0,0);
 	Widget->SlatePrepass(1); int32 EllipsisCount = 0;
@@ -426,7 +426,7 @@ bool FP5iE24::RunTest(const FString&)
 	{ bool bFound = false; for (const auto& Binding : W.Runner->InputComponent->KeyBindings) { bFound |= Binding.Chord.Key == Key; } TestTrue(TEXT("Alphabet key bound"),bFound); }
 	for (FKey Key : {EKeys::F1,EKeys::F5})
 	{ for (const auto& Binding : W.Runner->InputComponent->KeyBindings) { TestFalse(TEXT("Old key absent"),Binding.Chord.Key == Key); } }
-	W.Free(); TestTrue(TEXT("R restart shown"),W.Runner->GetOperatorText().Contains(TEXT("R 처음부터"))); TestFalse(TEXT("F5 absent"),W.Runner->GetOperatorText().Contains(TEXT("F5"))); return true;
+	W.Free(); TestTrue(TEXT("R restart shown"),W.Runner->GetOperatorText().Contains(TEXT("R Restart"))); TestFalse(TEXT("F5 absent"),W.Runner->GetOperatorText().Contains(TEXT("F5"))); return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iR1Close,"vBoR.P5i.R1ExternalWindowClose",Flags)
@@ -564,7 +564,7 @@ bool FP3cE2::RunTest(const FString&)
 	TestTrue(TEXT("Fade from black to clear"),Camera->FadeAlpha == FVector2D(1,0));
 	TestEqual(TEXT("Fade duration"),Camera->FadeTime,W.Alignment->FadeSeconds);
 	TestFalse(TEXT("Home shift does not start a seat transition"),W.Alignment->IsSwitching());
-	TestTrue(TEXT("Movement recorded"),W.Runner->LastRecord.Contains(TEXT("집 시험 옮기기 +X 100 cm")));
+	TestTrue(TEXT("Movement recorded"),W.Runner->LastRecord.Contains(TEXT("Home shift +X 100 cm")));
 	W.Alignment->OnPawnMoved.Remove(Handle); return true;
 }
 
@@ -615,9 +615,9 @@ bool FP3cE5::RunTest(const FString&)
 		for (const FKey Key : {EKeys::NumPadEight,EKeys::NumPadFive})
 		{
 			TestTrue(TEXT("Focused blocked key handled"),W.Runner->HandleOperatorKey(Key));
-			TestTrue(TEXT("Rejection recorded"),W.Runner->LastRecord.StartsWith(TEXT("집 시험 옮기기 버림")));
+			TestTrue(TEXT("Rejection recorded"),W.Runner->LastRecord.StartsWith(TEXT("Home shift discarded")));
 			FP5iTestAccess::Key(W.Runner,Key);
-			TestTrue(TEXT("Blocked game key recorded"),W.Runner->LastRecord.StartsWith(TEXT("집 시험 옮기기 버림")));
+			TestTrue(TEXT("Blocked game key recorded"),W.Runner->LastRecord.StartsWith(TEXT("Home shift discarded")));
 		}
 		TestTrue(TEXT("No motion during blackout"),W.Pawn->GetActorTransform().Equals(Before,0.001));
 		TestTrue(TEXT("Offset retained during blackout"),W.Alignment->GetHomeShiftCm() == Offset);
@@ -696,7 +696,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5oSeatViews,"vBoR.P5o.E1E2SeatViewsFoundAtSta
 bool FP5oSeatViews::RunTest(const FString&)
 {
 	FP5iWorld W;
-	// E1: 시작 검사에서 동승석·2열 한 번씩만 찾음. 진행자 창·자유모드 패널은 frame 마다 찾지 않음
+	// E1: Find passenger/rear once at startup. No per-frame lookup in operator/free-mode panel
 	TestEqual(TEXT("Start check scans each seat once"),FP5iTestAccess::Scans(W.Runner),2);
 	W.Free(); FP5iTestAccess::ResetScans(W.Runner);
 	for (int32 I = 0; I < 5; ++I) { W.Ready(); W.Runner->GetOperatorSnapshot(); }
@@ -704,7 +704,7 @@ bool FP5oSeatViews::RunTest(const FString&)
 	TestTrue(TEXT("Passenger available"),W.Runner->EvaluateOperatorButton(B::Passenger).bAccepted);
 	TestTrue(TEXT("Rear available"),W.Runner->EvaluateOperatorButton(B::Rear).bAccepted);
 	TestTrue(TEXT("Free seat buttons shown"),FP5iTestAccess::SeatButtonsShown(W.Runner));
-	// E2: Play 중 더한 같은 태그는 다음 시작 검사까지 안 봄. 지운 시점은 바로 없음
+	// E2: Runtime duplicate tag ignored until next startup validation. Deleted viewpoint immediately missing
 	auto* Extra = NewObject<UVBoRViewpointComponent>(W.Car); W.Car->AddInstanceComponent(Extra);
 	Extra->ComponentTags.Add(TEXT("Car.RearView")); Extra->RegisterComponent();
 	TestTrue(TEXT("Rear kept until the next start check"),W.Runner->EvaluateOperatorButton(B::Rear).bAccepted);

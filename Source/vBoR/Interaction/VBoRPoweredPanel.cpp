@@ -109,7 +109,7 @@ void AVBoRPoweredPanel::Request(bool bOpen)
 		UE_LOG(LogPoweredPanel, Log, TEXT("%s ignored %s in %s"), *GetName(), bOpen ? TEXT("open") : TEXT("close"), *GetStateText());
 		return;
 	}
-	// 첫 입력이 대기 상태를 예약함. 소리·이벤트·이동은 다음 Tick 에서만 처리됨 (P4b D3·E11)
+	// First input queues pending state. Sound/events/motion next Tick only (P4b D3/E11)
 	bPendingCommand = true;
 }
 
@@ -119,7 +119,7 @@ void AVBoRPoweredPanel::ResetPanel(bool bClearCounts)
 	Motion.State = bStartOpen ? EVBoRPoweredState::Open : EVBoRPoweredState::Closed;
 	Motion.AngleDeg = bStartOpen ? FMath::Clamp(OpenAngleDeg, 1.0f, 170.0f) : 0;
 	bPendingCommand = false;
-	// B 는 다음 시도에도 누적을 이어감 (P4b R1-1)
+	// B keeps totals across attempts (P4b R1-1)
 	if (bClearCounts) { ObstructionCount = 0; }
 	for (int32 I = 0; I < SoundAudio.Num(); ++I) { SoundPlayback[I].Reset(SoundAudio[I], bClearCounts); }
 	ApplyAngle();
@@ -128,7 +128,7 @@ void AVBoRPoweredPanel::ResetPanel(bool bClearCounts)
 
 void AVBoRPoweredPanel::ApplyAngle()
 {
-	// +Y 축 양의 회전: 닫힌 판 아래쪽이 트렁크 바깥 -X 로 올라감 (P4b D8, deg)
+	// Positive +Y rotation lifts closed panel bottom toward trunk outside -X (P4b D8, deg)
 	HingePivot->SetRelativeRotation(FQuat(FVector::YAxisVector, FMath::DegreesToRadians(Motion.AngleDeg)));
 }
 
@@ -147,7 +147,7 @@ AVBoRCarryObject* AVBoRPoweredPanel::FindObstruction(float FromAngle, float ToAn
 	const FVector Center = Mid.TransformPosition(Bounds.GetCenter());
 	const FVector Pivot = GetActorTransform().TransformPosition(HingeLocationCm);
 	const double Radius = FVector::Distance(Center, Pivot) + (Bounds.GetExtent() * Scale).Size();
-	// 1 deg 이하 구간 전체를 덮는 보수적 여유 cm. 끝점이 비어 있는 큰 Tick 도 관통하지 않음 (P4b D5·E9)
+	// Conservative cm margin covers entire <=1 deg interval (no penetration on large Tick with clear endpoints, P4b D5/E9)
 	const double MarginCm = Radius * FMath::DegreesToRadians(FMath::Abs(ToAngle - FromAngle) * 0.5) + 0.001;
 	const FCollisionShape Shape = FCollisionShape::MakeBox(Bounds.GetExtent() * Scale + FVector(MarginCm));
 	TArray<FOverlapResult> Hits;
@@ -262,7 +262,7 @@ void AVBoRPoweredPanel::Tick(float DeltaSeconds)
 				PublishState();
 				QueueSound(EVBoRPoweredSound::Obstructed);
 				OnObstructed.Broadcast(this, Box);
-				// 움직임이 버린 frame 나머지는 순간 소리 예약에만 적용함 (기존 끼임 동작 유지, P5r §3)
+				// Unused motion-frame time advances one-shot queue only (preserve pinch behavior, P5r §3)
 				AdvanceSounds(FMath::Max(0.0, Remaining - Used), false);
 				return;
 			}

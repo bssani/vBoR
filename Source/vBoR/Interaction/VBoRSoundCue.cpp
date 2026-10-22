@@ -9,7 +9,7 @@ void FVBoRSoundPlayback::Play(const FVBoRSoundCue& Cue, UAudioComponent* Audio, 
 #if WITH_DEV_AUTOMATION_TESTS
 	for (int32 I = 0; I < Count; ++I) { RequestFrames.Add(Frame); }
 #endif
-	// Advance 의 긴 frame 만 합침. 지연 0 이벤트는 호출마다 재생함 (P5s D2)
+	// Coalesce long Advance frames only. Zero-delay events play on every call (P5s D2)
 	if (!Audio || (bCoalesce && LastPlayFrame == Frame)) { return; }
 	if (bCoalesce) { LastPlayFrame = Frame; }
 	Audio->SetSound(Cue.Sound);
@@ -37,7 +37,7 @@ void FVBoRSoundPlayback::BeginHeld(const FVBoRHeldSoundCue& Cue, UAudioComponent
 
 void FVBoRSoundPlayback::Advance(const FVBoRSoundCue& Cue, UAudioComponent* Audio, double Seconds, uint64 Frame)
 {
-	// NaN 이면 예약이 영영 안 끝나므로 0 으로 봄 (일부 부품은 유한성 검사 전에 부름, P5s 리뷰 참고 1)
+	// Treat NaN as 0 (queue otherwise never ends; some parts call before finite check, P5s review note 1)
 	Seconds = FMath::IsFinite(Seconds) ? FMath::Max(0.0, Seconds) : 0.0;
 	int32 Due = 0;
 	for (int32 I = Pending.Num() - 1; I >= 0; --I)
