@@ -51,11 +51,13 @@ private:
 	bool bHavePrevious[2] = {false, false};
 	bool bContactNear[2] = {false, false};
 	int32 ContactFace[2] = {INDEX_NONE, INDEX_NONE};
+	int32 PushSide[2] = {INDEX_NONE, INDEX_NONE}; // Keep accepted face through withdrawal (P5w D1)
 	EVBoRDoorIgnore LastIgnored[2] = {EVBoRDoorIgnore::Count, EVBoRDoorIgnore::Count};
 	double PreviousAngleDeg = 0;
 	FVector LastGrabPoint = FVector::ZeroVector;
 	double GrabReferenceBearingDeg = 0, GrabReferenceAngleDeg = 0;
 	void RebaseGrab(const FVector& Point);
+	bool HasLeftPushSide(const FVBoRDoorHand& Input, int32 Face) const;
 	bool FindPush(int32 Hand, const FVBoRDoorHand& Input, int32 Face, double& OutAngle, EVBoRDoorIgnore& OutReason);
 	void RecordIgnore(int32 Hand, EVBoRDoorIgnore Reason);
 	void MoveTo(double Desired, double DeltaSeconds, bool bPushing);
