@@ -309,7 +309,6 @@ bool FP2fMoving::RunTest(const FString& Parameters)
 	Part->bGrabWithMesh = true; Part->MeshRestFromRoot = FTransform(FQuat::Identity, FVector(80,0,80), FVector(0.1));
 	Part->OnConstruction(Part->GetActorTransform());
 	auto* Door = W.World->SpawnActor<AP2bTrackedDoor>(); Door->SetActorLocation(FVector(400,0,0));
-	Door->bUseOutsideGrabArea = Door->bUseInsideGrabArea = false;
 	auto* Handle = W.World->SpawnActor<AP2bTrackedPart>();
 	Handle->bGrabWithMesh = true; Handle->DoorHandleSide = EVBoRDoorHandleSide::Outside;
 	Handle->SetActorLocation(Door->GetActorLocation());

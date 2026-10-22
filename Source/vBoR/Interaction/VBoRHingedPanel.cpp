@@ -6,10 +6,6 @@
 #include "Components/AudioComponent.h"
 #include "Engine/StaticMesh.h"
 #include "EngineUtils.h"
-#include "Interaction/IsdkGrabbableComponent.h"
-#include "Interaction/IsdkGrabberComponent.h"
-#include "Interaction/Pointable/IsdkInteractionPointerEvent.h"
-#include "IsdkFunctionLibrary.h"
 #include "IsdkContentAssetPaths.h"
 #include "OculusXRInputFunctionLibrary.h"
 #include "Kismet/GameplayStatics.h"
@@ -18,25 +14,6 @@
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogAxisDoor, Log, All);
-
-UVBoRDoorGrabTransformer::UVBoRDoorGrabTransformer() { ConfigureDoor(); }
-void UVBoRDoorGrabTransformer::ConfigureDoor()
-{
-	bIsThrowable = false;
-	MultiGrabBehavior = EIsdkMultiGrabBehavior::MultiGrab;
-}
-
-FTransform UVBoRDoorTransformer::UpdateTransform(const TArray<FIsdkGrabPose>& Poses, const FIsdkTargetTransform& Target)
-{
-	const AVBoRHingedPanel* Door = GetTypedOuter<AVBoRHingedPanel>();
-	return Door ? Door->HingePivot->GetComponentTransform().GetRelativeTransform(Target.ParentWorldTransform) : Target.RelativeTransform;
-}
-
-FTransform UVBoRDoorTransformer::EndTransform(const FIsdkTargetTransform& Target)
-{
-	bActive = false;
-	return UpdateTransform({}, Target);
-}
 
 AVBoRHingedPanel::AVBoRHingedPanel()
 {
@@ -58,36 +35,6 @@ AVBoRHingedPanel::AVBoRHingedPanel()
 	PushFaceBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	PushFaceBox->SetGenerateOverlapEvents(false);
 	PushFaceBox->SetHiddenInGame(true);
-	OutsideHandle = CreateDefaultSubobject<UBoxComponent>(TEXT("OutsideHandle"));
-	InsideHandle = CreateDefaultSubobject<UBoxComponent>(TEXT("InsideHandle"));
-	for (UBoxComponent* Handle : {OutsideHandle.Get(), InsideHandle.Get()})
-	{
-		Handle->SetupAttachment(HingePivot);
-		Handle->SetBoxExtent(FVector(9, 4, 4));
-		Handle->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-		Handle->SetCollisionResponseToAllChannels(ECR_Ignore);
-		// Palm detector overlap only (handle detection, P2 E20)
-		Handle->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Overlap);
-		Handle->SetGenerateOverlapEvents(true);
-	}
-	OutsideHandle->SetRelativeLocation(FVector(110, 9, 52.5));
-	InsideHandle->SetRelativeLocation(FVector(110, -9, 52.5));
-	OutsideHandleMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("OutsideHandleMesh"));
-	InsideHandleMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("InsideHandleMesh"));
-	OutsideHandleMesh->SetupAttachment(OutsideHandle); InsideHandleMesh->SetupAttachment(InsideHandle);
-	for (UStaticMeshComponent* Visual : {OutsideHandleMesh.Get(), InsideHandleMesh.Get()})
-	{
-		Visual->SetStaticMesh(Cube.Object);
-		Visual->SetRelativeScale3D(FVector(0.18, 0.04, 0.04));
-		Visual->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	}
-	OutsideGrab = CreateDefaultSubobject<UIsdkGrabbableComponent>(TEXT("OutsideGrab"));
-	OutsideGrab->SetupAttachment(OutsideHandle);
-	InsideGrab = CreateDefaultSubobject<UIsdkGrabbableComponent>(TEXT("InsideGrab"));
-	InsideGrab->SetupAttachment(InsideHandle);
-	OutsideTransformer = CreateDefaultSubobject<UVBoRDoorGrabTransformer>(TEXT("OutsideTransformer"));
-	InsideTransformer = CreateDefaultSubobject<UVBoRDoorGrabTransformer>(TEXT("InsideTransformer"));
-	DoorTransformer = CreateDefaultSubobject<UVBoRDoorTransformer>(TEXT("HingeOnlyTransformer"));
 	StateAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("LockAudio"));
 	StateAudio->SetupAttachment(HingePivot);
 	StateAudio->bAutoActivate = false;
@@ -129,7 +76,6 @@ void AVBoRHingedPanel::SyncSettings()
 		Motion.QueryFace = [this](const FVector& Point, int32 Face, double& Y) { return QueryMeshFace(Point, Face, Y); };
 	}
 	else { Motion.QueryFace = nullptr; }
-	UpdateGrabAreas();
 }
 
 void AVBoRHingedPanel::OnConstruction(const FTransform& Transform)
@@ -337,27 +283,7 @@ void AVBoRHingedPanel::ApplyAxisHandle(int32 Handle, AVBoRAxisPart* Part)
 		else { Part = nullptr; }
 	}
 	if (Handle == 0) { OutsideAxisHandle = Part; } else { InsideAxisHandle = Part; }
-	UpdateGrabAreas();
 	if (Part) { Part->ConnectDoor(this, Handle); }
-}
-
-bool AVBoRHingedPanel::IsGrabAreaEnabled(int32 Handle) const
-{
-	return Handle == 0 ? bUseOutsideGrabArea && !OutsideAxisHandle : bUseInsideGrabArea && !InsideAxisHandle;
-}
-
-void AVBoRHingedPanel::UpdateGrabAreas()
-{
-	for (int32 I = 0; I < 2; ++I)
-	{
-		const bool bEnabled = IsGrabAreaEnabled(I);
-		UBoxComponent* Box = I == 0 ? OutsideHandle.Get() : InsideHandle.Get();
-		UIsdkGrabbableComponent* Grab = I == 0 ? OutsideGrab.Get() : InsideGrab.Get();
-		Box->SetCollisionEnabled(bEnabled ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
-		Box->SetGenerateOverlapEvents(bEnabled);
-		Box->SetVisibility(bEnabled, true);
-		Grab->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, bEnabled);
-	}
 }
 
 bool AVBoRHingedPanel::Unlock()
@@ -398,22 +324,7 @@ void AVBoRHingedPanel::PreInitializeComponents()
 {
 	ConfigurePushCollision();
 	SyncSettings();
-	HandleVisualRestCm[0] = OutsideHandleMesh->GetRelativeLocation();
-	HandleVisualRestCm[1] = InsideHandleMesh->GetRelativeLocation();
 	ClosedHingeRotation = HingePivot->GetRelativeRotation().Quaternion();
-	for (int32 I = 0; I < 2; ++I)
-	{
-		UIsdkGrabbableComponent* Grab = I == 0 ? OutsideGrab.Get() : InsideGrab.Get();
-		UVBoRDoorGrabTransformer* Transformer = I == 0 ? OutsideTransformer.Get() : InsideTransformer.Get();
-		Grab->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, IsGrabAreaEnabled(I));
-		Grab->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch, false);
-		Grab->SetGrabCollider(I == 0 ? OutsideHandle.Get() : InsideHandle.Get());
-		Transformer->ConfigureDoor();
-		Transformer->SetSingleGrabTransformerObject(DoorTransformer);
-		Transformer->SetMultiGrabTransformerObject(DoorTransformer);
-		Transformer->SetTransformTarget(HingePivot);
-		Grab->SetGrabTransformer(Transformer);
-	}
 	Super::PreInitializeComponents();
 }
 
@@ -422,17 +333,15 @@ void AVBoRHingedPanel::BeginPlay()
 	Super::BeginPlay();
 	UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, IsdkContentAssetPaths::Materials::GrabbableDefault);
 	StateOverlay = Material ? UMaterialInstanceDynamic::Create(Material, this) : nullptr;
-	OutsideGrab->GetInteractionPointerEventDelegate().AddUniqueDynamic(this, &AVBoRHingedPanel::HandleOutsidePointer);
-	InsideGrab->GetInteractionPointerEventDelegate().AddUniqueDynamic(this, &AVBoRHingedPanel::HandleInsidePointer);
 	const FSetupAssessment Setup = EvaluateSetup();
 	bMeshPushReady = Setup.bMeshTraceable;
 	SyncSettings();
 	for (const FString& Problem : Setup.Problems) { UE_LOG(LogAxisDoor, Warning, TEXT("%s P2e setup: %s"), *GetName(), *Problem); }
 	for (const FString& Notice : Setup.Notices) { UE_LOG(LogAxisDoor, Log, TEXT("%s: %s"), *GetName(), *Notice); }
 	ApplyAxisHandle(0, Setup.Handles[0]); ApplyAxisHandle(1, Setup.Handles[1]);
-	if (bUseLatch && !bUseOutsideGrabArea && !bUseInsideGrabArea && !OutsideAxisHandle && !InsideAxisHandle)
+	if (bUseLatch && !OutsideAxisHandle && !InsideAxisHandle)
 	{
-		UE_LOG(LogAxisDoor, Warning, TEXT("%s: Latched panel has no opening handle or grab area. %s"), *GetName(),
+		UE_LOG(LogAxisDoor, Warning, TEXT("%s: Latched panel has no opening handle. %s"), *GetName(),
 			bAllowPalmOpening ? TEXT("Ignore button Unlock.") : TEXT("Cannot open after button Unlock (palm opening disabled)."));
 	}
 	ApplyState(Motion.AngleDeg, Motion.Metrics.Unlocks, Motion.Metrics.Latches);
@@ -465,40 +374,6 @@ bool AVBoRHingedPanel::ReadPalmClosed(int32 Hand, bool& bClosed) const
 	return Hand == 0 ? HandPawn->LeftRig->ReadPalmGrab(bClosed) : HandPawn->RightRig->ReadPalmGrab(bClosed);
 }
 
-void AVBoRHingedPanel::HandleOutsidePointer(const FIsdkInteractionPointerEvent& Event) { HandlePointer(0, Event); }
-void AVBoRHingedPanel::HandleInsidePointer(const FIsdkInteractionPointerEvent& Event) { HandlePointer(1, Event); }
-
-void AVBoRHingedPanel::HandlePointer(int32 Handle, const FIsdkInteractionPointerEvent& Event)
-{
-	if (!IsGrabAreaEnabled(Handle)) { return; }
-	UIsdkGrabberComponent* Grabber = Cast<UIsdkGrabberComponent>(Event.Interactor);
-	EIsdkHandedness Handedness;
-	if (!Grabber || !UIsdkFunctionLibrary::GetHandednessFromInteractor(Grabber, Handedness)) { return; }
-	const int32 Hand = Handedness == EIsdkHandedness::Left ? 0 : 1;
-	if (Event.Type == EIsdkPointerEventType::Hover)
-	{
-		if (!Hovering[Handle].Contains(Grabber)) { Hovering[Handle].Add(Grabber); ++Motion.Metrics.Attempts[Hand][Handle]; }
-	}
-	else if (Event.Type == EIsdkPointerEventType::Unhover) { Hovering[Handle].Remove(Grabber); }
-	else if (Event.Type == EIsdkPointerEventType::Select)
-	{
-		if (bNeedsPalmOpen[Hand] || Motion.GrabHand == Hand) { return; }
-		const int32 Unlocks = Motion.Metrics.Unlocks;
-		FVBoRDoorHand Input;
-		ReadHand(Hand, Input);
-		// Prevent closed-hand reselection after cancellation/latch (P2 D4)
-		bNeedsPalmOpen[Hand] = true;
-		if (Motion.BeginGrab(Hand, Handle, Input)) { HoldingGrabber = Grabber; }
-		ApplyState(Motion.AngleDeg, Unlocks, Motion.Metrics.Latches);
-	}
-	else if ((Event.Type == EIsdkPointerEventType::Unselect || Event.Type == EIsdkPointerEventType::Cancel) &&
-		HoldingGrabber == Grabber && Motion.GrabHand == Hand && Motion.GrabHandle == Handle)
-	{
-		FVBoRDoorHand Input;
-		if (Motion.ReleaseGrab(ReadHand(Hand, Input))) { HoldingGrabber = nullptr; UpdateHandleVisuals(); }
-	}
-}
-
 void AVBoRHingedPanel::EndAxisHold(const TCHAR* Reason, bool bLatch)
 {
 	if (!HoldingAxisPart) { return; }
@@ -516,33 +391,12 @@ void AVBoRHingedPanel::CancelSelections(const TCHAR* Reason)
 	{
 		if (Part) { Part->EndDoorHold(true); }
 	}
-	HoldingGrabber = nullptr;
-	// Reset may come from event; queue SDK cancellation in Tick (P2b R1-3)
-	bCancelPending = true;
-	Hovering[0].Reset(); Hovering[1].Reset();
-	UpdateHandleVisuals();
-}
-
-void AVBoRHingedPanel::UpdateHandleVisuals()
-{
-	for (int32 I = 0; I < 2; ++I)
-	{
-		UStaticMeshComponent* Visual = I == 0 ? OutsideHandleMesh.Get() : InsideHandleMesh.Get();
-		const bool bPressed = Motion.GrabHand != INDEX_NONE && Motion.GrabHandle == I && !HoldingAxisPart && IsGrabAreaEnabled(I);
-		// Move visual relative to rest only (no SDK selection jitter from box motion/offset accumulation, P2d R1 D8)
-		Visual->SetRelativeLocation(HandleVisualRestCm[I] + (bPressed ? HandleVisualPressOffsetCm : FVector::ZeroVector));
-	}
 }
 
 void AVBoRHingedPanel::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	++SoundFrame; AdvanceSounds(DeltaSeconds);
-	if (bCancelPending)
-	{
-		bCancelPending = false;
-		OutsideTransformer->ForceCancel(); InsideTransformer->ForceCancel();
-	}
 	SyncSettings();
 	FVBoRDoorHand Hands[2];
 	ReadHand(0, Hands[0]); ReadHand(1, Hands[1]);
@@ -564,7 +418,7 @@ void AVBoRHingedPanel::Tick(float DeltaSeconds)
 		if (Hands[H].bTracked && ReadPalmClosed(H, bClosed) && !bClosed && !bRecovering && !Motion.bPaused)
 		{
 			bNeedsPalmOpen[H] = false;
-			if (Motion.GrabHand == H && Motion.ReleaseGrab(true)) { HoldingGrabber = nullptr; EndAxisHold(TEXT("palm open"), false); }
+			if (Motion.GrabHand == H && Motion.ReleaseGrab(true)) { EndAxisHold(TEXT("palm open"), false); }
 		}
 	}
 	if (HoldingAxisPart && Motion.GrabHand == INDEX_NONE && Motion.Metrics.Latches == Latches)
@@ -577,7 +431,6 @@ void AVBoRHingedPanel::Tick(float DeltaSeconds)
 void AVBoRHingedPanel::ApplyState(double BeforeAngle, int32 BeforeUnlocks, int32 BeforeLatches)
 {
 	HingePivot->SetRelativeRotation(ClosedHingeRotation * FQuat(FVector::UpVector, FMath::DegreesToRadians(Motion.AngleDeg)));
-	UpdateHandleVisuals();
 	if (Motion.Metrics.Unlocks != BeforeUnlocks) { SoundPlayback[0].Queue(UnlockedCue, SoundAudio[0], SoundFrame); NotifyUnlocked(); }
 	if (Motion.Metrics.Latches != BeforeLatches) { CancelSelections(TEXT("latch")); SoundPlayback[1].Queue(LatchedCue, SoundAudio[1], SoundFrame); NotifyLocked(); }
 	if (Motion.AngleDeg != BeforeAngle) { OnAngleChanged.Broadcast(static_cast<float>(Motion.AngleDeg)); }
@@ -633,8 +486,6 @@ void AVBoRHingedPanel::EndPlay(const EEndPlayReason::Type Reason)
 {
 	for (int32 I = 0; I < 2; ++I) { SoundPlayback[I].Reset(SoundAudio[I], false); }
 	EndAxisHold(TEXT("end play"), false);
-	OutsideGrab->GetInteractionPointerEventDelegate().RemoveDynamic(this, &AVBoRHingedPanel::HandleOutsidePointer);
-	InsideGrab->GetInteractionPointerEventDelegate().RemoveDynamic(this, &AVBoRHingedPanel::HandleInsidePointer);
 	DoorMesh->SetOverlayMaterial(nullptr);
 	Super::EndPlay(Reason);
 }

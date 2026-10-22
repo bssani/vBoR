@@ -74,6 +74,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Placeholder", meta=(Units="cm")) FVector ConsoleLidPivotCm = FVector(-45,0,70);
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<AVBoRAxisPart> OutsideAxisHandle;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<AVBoRAxisPart> InsideAxisHandle;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Placeholder|Approximate console", meta=(Units="cm")) FVector ConsoleHandlePivotCm = FVector(-9,0,70);
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<AVBoRAxisPart> ConsoleHandle;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<AVBoRHingedPanel> ConsoleLid;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Placeholder|Approximate glovebox", meta=(Units="cm")) FVector GloveboxHingeCm = FVector(38,37,50);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Placeholder|Approximate glovebox", meta=(Units="cm", ClampMin="1")) FVector GloveboxSizeCm = FVector(3,40,28);

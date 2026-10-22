@@ -150,7 +150,7 @@ bool FP2eBadChild::RunTest(const FString& Parameters)
 	TestEqual(TEXT("One child placement problem"), FP2eTestAccess::Problems(Panel).Num(), 1); P2eCheckButton(*this, Panel); W.Play(); Logs.Flush();
 	TestNull(TEXT("Invalid child is not linked"), Panel->OutsideAxisHandle.Get()); TestNull(TEXT("Part unlinked"), FP2eTestAccess::Linked(Part));
 	TestTrue(TEXT("Child stays with original component"), Part->GetRootComponent()->GetAttachParent() == Child && Part->GetActorTransform().Equals(Before));
-	TestEqual(TEXT("Fallback grab area stays enabled"), Panel->OutsideHandle->GetCollisionEnabled(), ECollisionEnabled::QueryOnly);
+	TestNull(TEXT("No outside handle connected"), Panel->OutsideAxisHandle.Get());
 	TestEqual(TEXT("E20 one warning"), Logs.Warnings.Num(), 1);
 	return true;
 }
@@ -197,7 +197,7 @@ bool FP2eAmbiguous::RunTest(const FString& Parameters)
 	AVBoRAxisPart* Inside = P2eHandle(W.World, EVBoRDoorHandleSide::Inside, Panel->DoorMesh);
 	P2eCheckButton(*this, Panel); TestEqual(TEXT("One ambiguity problem"), FP2eTestAccess::Problems(Panel).Num(), 1); W.Play(); Logs.Flush();
 	TestNull(TEXT("Ambiguous side stays empty"), Panel->OutsideAxisHandle.Get()); TestTrue(TEXT("Other side still links"), Panel->InsideAxisHandle == Inside);
-	TestEqual(TEXT("Ambiguous side retains grab area"), Panel->OutsideHandle->GetCollisionEnabled(), ECollisionEnabled::QueryOnly);
+	TestNull(TEXT("Ambiguous side has no handle"), Panel->OutsideAxisHandle.Get());
 	TestEqual(TEXT("E20 one ambiguity warning"), Logs.Warnings.Num(), 1);
 	return true;
 }
@@ -221,7 +221,7 @@ bool FP2eShared::RunTest(const FString& Parameters)
 		TestEqual(TEXT("Current claims after first attachment"), FP2eTestAccess::Problems(Second).Num(), Order == 0 ? 0 : 1);
 		Second->DispatchBeginPlay(); W.World->GetWorldSettings()->NotifyBeginPlay(); Logs.Flush();
 		TestNull(TEXT("Second panel does not connect"), Second->OutsideAxisHandle.Get());
-		TestEqual(TEXT("Second panel retains fallback grab area"), Second->OutsideHandle->GetCollisionEnabled(), ECollisionEnabled::QueryOnly);
+		TestNull(TEXT("Second panel has no handle"), Second->OutsideAxisHandle.Get());
 		TestEqual(TEXT("Only still-visible claims cause a second warning"), Logs.Warnings.Num(), Order == 0 ? 1 : 2);
 		TestTrue(TEXT("No historical claims on either panel"), FP2eTestAccess::Problems(A).IsEmpty() && FP2eTestAccess::Problems(B).IsEmpty());
 		Second->SetAxisHandle(0, Part); Logs.Flush();
@@ -248,15 +248,29 @@ bool FP2eNone::RunTest(const FString& Parameters)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2eMock, "vBoR.P2e.Assembly.E12MockUnchanged", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP2eMock::RunTest(const FString& Parameters)
 {
-	FP2eWorld W; FP2eLogs Logs; AP3VehicleMock* Car = W.World->SpawnActor<AP3VehicleMock>(); W.Play(); Logs.Flush();
-	TestEqual(TEXT("No new mock warning"), Logs.Warnings.Num(), 0); TestEqual(TEXT("One glovebox attachment"), Logs.Attachments.Num(), 1);
-	TestTrue(TEXT("Only glovebox handle attachment is logged"), Logs.Attachments.Num() == 1 && Logs.Attachments[0].Contains(FString::Printf(TEXT("handle=%s to HingePivot"), *Car->GloveboxHandle->GetName())));
+	FP2eWorld W; FP2eLogs Logs;
+	const FTransform CarWorld(FRotator(0,37,0), FVector(123,-256,42));
+	AP3VehicleMock* Car = W.World->SpawnActor<AP3VehicleMock>(AP3VehicleMock::StaticClass(), CarWorld); W.Play(); Logs.Flush();
+	TestEqual(TEXT("No new mock warning"), Logs.Warnings.Num(), 0); TestEqual(TEXT("Glovebox and console attachments"), Logs.Attachments.Num(), 2);
+	for (AVBoRAxisPart* Handle : {Car->GloveboxHandle.Get(), Car->ConsoleHandle.Get()})
+	{
+		const FString Name = FString::Printf(TEXT("handle=%s to HingePivot"), *Handle->GetName());
+		TestEqual(TEXT("One attachment per handle"), Logs.Attachments.FilterByPredicate([&](const FString& Line) { return Line.Contains(Name); }).Num(), 1);
+	}
 	TestTrue(TEXT("Door handles retain actor origin"), Car->OutsideAxisHandle->GetActorTransform().Equals(Car->GetActorTransform(), 0.001) && Car->InsideAxisHandle->GetActorTransform().Equals(Car->GetActorTransform(), 0.001));
 	TestTrue(TEXT("Door handles keep hinge parent"), Car->OutsideAxisHandle->GetRootComponent()->GetAttachParent() == Car->Door->HingePivot && Car->InsideAxisHandle->GetRootComponent()->GetAttachParent() == Car->Door->HingePivot);
 	TestTrue(TEXT("Door explicit links remain"), Car->Door->OutsideAxisHandle == Car->OutsideAxisHandle && Car->Door->InsideAxisHandle == Car->InsideAxisHandle);
+	for (AVBoRAxisPart* Handle : {Car->OutsideAxisHandle.Get(), Car->InsideAxisHandle.Get()})
+	{
+		// Nonzero car yaw exposes deferred/final door pose mismatch (P5x Q2, cm)
+		TestTrue(TEXT("Door handle mesh keeps world rest pose"), Handle->PartMesh->GetComponentTransform().Equals(Handle->MeshRestFromRoot * CarWorld, 0.001));
+		const FVector Pivot = Handle == Car->OutsideAxisHandle ? Car->OutsideHandlePivotCm : Car->InsideHandlePivotCm;
+		TestTrue(TEXT("Door handle axis keeps world position"), Handle->AxisPivot->GetComponentLocation().Equals(CarWorld.TransformPosition(Pivot), 0.001));
+	}
 	TestTrue(TEXT("Glovebox handle link remains"), Car->Glovebox->OutsideAxisHandle == Car->GloveboxHandle);
 	TestTrue(TEXT("Glovebox handle keeps hinge parent and actor origin"), Car->GloveboxHandle->GetRootComponent()->GetAttachParent() == Car->Glovebox->HingePivot && Car->GloveboxHandle->GetActorTransform().Equals(Car->GetActorTransform(), 0.001));
-	TestNull(TEXT("Console keeps grab area"), Car->ConsoleLid->OutsideAxisHandle.Get());
+	TestTrue(TEXT("Console handle link remains"), Car->ConsoleLid->OutsideAxisHandle == Car->ConsoleHandle);
+	TestTrue(TEXT("Console handle keeps hinge parent and actor origin"), Car->ConsoleHandle->GetRootComponent()->GetAttachParent() == Car->ConsoleLid->HingePivot && Car->ConsoleHandle->GetActorTransform().Equals(Car->GetActorTransform(), 0.001));
 	for (AVBoRHingedPanel* Panel : {static_cast<AVBoRHingedPanel*>(Car->Door.Get()), Car->Glovebox.Get(), Car->ConsoleLid.Get()})
 	{
 		TestFalse(TEXT("Box option remains off"), Panel->bUsePushFaceBox); TestTrue(TEXT("Mock setup clean"), FP2eTestAccess::Problems(Panel).IsEmpty());
