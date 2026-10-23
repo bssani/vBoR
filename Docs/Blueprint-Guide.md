@@ -351,8 +351,31 @@ L_Main
 | 13 | 도달 버튼 누름 | `Car.ReachButton` | `AVBoRPokeButton` |
 | 14·15 | 좌석 시점 | `Car.PassengerView`·`Car.RearView` | `UVBoRViewpointComponent` |
 
-- 태그가 없거나 종류가 다르면 흐름이 시작되지 않는다. Output Log와 VR 진행자 정보(`I`)에 `시작 차단:` 아래 `<단계>: 태그 <이름> 종류 불일치 또는 없음`으로 보인다(`VBoRScenarioRunner.cpp:240`·`:295`).
+- 태그가 없거나 종류가 다르면 흐름이 시작되지 않는다. Output Log에 `Start blocked:` 아래 `<단계>: tag <이름> type mismatch or missing`으로 보인다(`Interaction/VBoRScenarioRunner.cpp:251`·`:310`). VR 안의 진행자 줄은 P5z부터 없다.
 - 시나리오 에셋은 하나만 쓴다. 근사 차와 실제 차가 같은 태그를 쓰므로 복사하지 않는다.
+
+### 7.1 안내판 자리 — `Car/Guidance`의 표식 (P5z, VR 전)
+
+- **안내판은 단계마다 정한 자리에만 뜬다.** 사람을 따라다니지 않는다. 확인·시점 버튼은 안내판 바로 밑에 붙는다.
+- 자리는 레벨의 **위치 표식**(`AVBoRPanelAnchor`)이 정한다. L_Main의 Outliner `Car/Guidance`에 5개가 있다. 처음 자리는 임시 값이다 — **원하는 곳으로 옮긴다.**
+
+| 표식(Actor Tags) | 단계 |
+|---|---|
+| `PanelAnchor_Outside` (`Guide.Outside`) | 01·02·03·07·08·19·20 |
+| `PanelAnchor_Trunk` (`Guide.Trunk`) | 04·05·06·16 |
+| `PanelAnchor_Driver` (`Guide.Driver`) | 09·10·11·12·13·18 |
+| `PanelAnchor_Passenger` (`Guide.Passenger`) | 14 |
+| `PanelAnchor_Rear` (`Guide.Rear`) | 15 |
+
+- **옮기는 법:** 표식을 선택해 이동·회전한다. 에디터에서만 보이는 얇은 판이 안내판 크기(50×32 cm)이고, 그 밑 작은 상자 두 개가 버튼 자리다. **노란 화살표(+X)가 참가자 쪽을 보게** 돌린다. 기울여도 된다(안내판·버튼이 같이 기운다).
+  - 버튼은 손으로 누르므로 **손이 닿는 자리**에 둔다. 13번 도달 버튼과 헷갈리지 않게 떨어뜨린다.
+- **단계와 표식 연결:** `DA_Main_Scenario` → 단계 → `PanelTag`에 표식의 Actor Tag를 쓴다. 표식을 더 만들 때는 `AVBoRPanelAnchor`를 놓고(또는 아무 Actor·컴포넌트에) 새 태그를 달아 그 단계에 쓴다.
+  - `PanelTag`가 빈 단계는 **직전 자리에 그대로** 뜬다. 첫 단계는 반드시 태그가 있어야 한다.
+  - 태그를 못 찾거나 같은 태그가 둘 이상이면 흐름이 시작되지 않는다(Output Log `Start blocked:` 아래 `panel tag … type mismatch or missing`).
+  - 모든 단계의 `PanelTag`를 비우면 예전처럼 머리 앞에 뜬다(근사 차 시험 시나리오가 이 방식).
+- **안내판에는 안내문만** 나온다(단계 번호·상태 줄 없음). 참가자가 할 일은 버튼 이름표가 알려 준다.
+- **자유모드에서는 안내판과 버튼이 안 뜬다.** 좌석은 진행자 키 `1`(동승석)·`2`(2열)·`Home`(운전석)으로만 바꾼다. 자유모드에 들어간 것은 진행자가 말로 알린다.
+- 근사 차(`Development/P3/L_P3_Flow`)도 같은 태그의 표식 5개를 스스로 만든다. 자리는 `AP3VehicleMock`의 `Placeholder|Approximate guidance` 값이다.
 
 ## 8. 손 메시 바꾸기 — `BP_vBoRPawn`
 
@@ -367,7 +390,7 @@ L_Main
    - `Template Mismatch during attachment`(ensure)가 없을 것. P4f에서 네이티브 부모의 BP 자식이 이것을 냈다. 정렬 점(`UVBoRAlignPointComponent`)도 같은 구조라 처음 한 번은 꼭 본다(P4h 리뷰 참고 2).
    - `P2e setup:` 경고가 없을 것(손잡이 연결).
    - 메시로 잡기·밀기를 켠 부품에서 `grab mesh …`·`DoorMesh has no traceable collision` 경고가 없을 것(§4.3).
-3. **흐름 시작 막힘이 없을 것:** Output Log(또는 VR 진행자 정보 `I`)에 `시작 차단:`이 없어야 한다(§7). "정렬 컴포넌트 1개 필요"면 `BP_Car_Core` 말고 정렬 컴포넌트를 또 넣었거나 `BP_Car_Core`를 지운 것이다(§2-3).
+3. **흐름 시작 막힘이 없을 것:** Output Log에 `Start blocked:`가 없어야 한다(§7). "Need 1 alignment component"면 `BP_Car_Core` 말고 정렬 컴포넌트를 또 넣었거나 `BP_Car_Core`를 지운 것이다(§2-3).
 4. **진행자 창**(툴바 `Operator`):
    - **4점 정렬:** 실물 좌석 점 4개를 `P`로 짚고 → 차이(cm)·높이 차이 확인 → `S` 저장 → 표시를 다시 짚어 거리 확인 → `A`로 시작(P4h). 높이 경고가 뜨면 실물 좌석 높이를 확인한다(U-17).
    - **좌석 전환:** `1`·`2`로 동승석·2열에 가서 SgRP 차이만큼 옮겨졌는지, `Home`으로 돌아오는지 본다.
