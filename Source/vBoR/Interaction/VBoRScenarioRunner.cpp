@@ -111,7 +111,6 @@ namespace
 AVBoRScenarioRunner::AVBoRScenarioRunner()
 {
 	ButtonDistanceCm = 45; ButtonBelowCm = 30; ConfirmLockSeconds = 0.6; SeatedPanelSeconds = 1.0;
-	FreeModeInstruction = FText::FromString(TEXT("Free mode — Explore and operate the vehicle. Use the buttons below to change seats."));
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("FlowOrigin")));
 	PrimaryActorTick.bCanEverTick = true; PrimaryActorTick.TickGroup = TG_PostUpdateWork;
 	Panel = CreateDefaultSubobject<UWidgetComponent>(TEXT("KoreanGuidance")); Panel->SetupAttachment(RootComponent);
@@ -211,6 +210,7 @@ bool AVBoRScenarioRunner::InitializeFlow()
 	UnbindKeys(); bStartHeadPending = false;
 	bInitialized = true; bRunning = false; bFinished = false; ValidationProblems.Reset(); Targets.Reset(); Markers.Reset();
 	Routes.Reset(); FloorRouteNotice.Reset(); StartMarker = nullptr;
+	PanelAnchors.Reset(); bFixedPanelMode = false; bFixedPanelPlaced = false;
 	for (TActorIterator<AVBoRFloorRoute> It(GetWorld()); It; ++It) { It->SetRouteVisible(false); }
 	bFreeMode = false; bReloadPending = false; bReloadRequested = false; ReloadRemaining = 0;
 	for (const auto& Entry : ButtonCounts)
@@ -228,7 +228,12 @@ bool AVBoRScenarioRunner::InitializeFlow()
 	// Seat viewpoints never spawn/change during Play. Cache here for operator panel/free mode (P5o)
 	SeatViews[0] = ScanSeatView(TEXT("Car.PassengerView")); SeatViews[1] = ScanSeatView(TEXT("Car.RearView"));
 	if (!Scenario || Scenario->Steps.IsEmpty()) { ValidationProblems += TEXT("No scenario steps\n"); }
-	else for (const FVBoRScenarioStep& Step : Scenario->Steps)
+	else
+	{
+		bFixedPanelMode = Scenario->Steps.ContainsByPredicate([](const FVBoRScenarioStep& Step) { return !Step.PanelTag.IsNone(); });
+		if (bFixedPanelMode && Scenario->Steps[0].PanelTag.IsNone()) { ValidationProblems += TEXT("first step needs a panel tag in fixed mode\n"); }
+	}
+	if (Scenario) for (const FVBoRScenarioStep& Step : Scenario->Steps)
 	{
 		UObject* Raw = FindP3Tag(GetWorld(), Step.TargetTag, ValidationProblems);
 		UObject* Target = nullptr;
@@ -250,6 +255,10 @@ bool AVBoRScenarioRunner::InitializeFlow()
 		UObject* Marker = FindP3Tag(GetWorld(), Step.MarkerTag, ValidationProblems);
 		USceneComponent* Scene = P3Scene(Marker); Markers.Add(Scene);
 		if (!Step.MarkerTag.IsNone() && !Scene) { ValidationProblems += FString::Printf(TEXT("%s: marker tag type mismatch\n"), *Step.StepId.ToString()); }
+		FString PanelProblems;
+		USceneComponent* Anchor = P3Scene(FindP3Tag(GetWorld(), Step.PanelTag, PanelProblems)); PanelAnchors.Add(Anchor);
+		if (!Step.PanelTag.IsNone() && (!Anchor || !PanelProblems.IsEmpty()))
+		{ ValidationProblems += FString::Printf(TEXT("%s: panel tag %s type mismatch or missing | %s\n"), *Step.StepId.ToString(), *Step.PanelTag.ToString(), *PanelProblems); }
 		FString RouteProblems;
 		AVBoRFloorRoute* Route = Cast<AVBoRFloorRoute>(FindP3Tag(GetWorld(), Step.RouteTag, RouteProblems)); Routes.Add(Route);
 		if (!Step.RouteTag.IsNone())
@@ -582,6 +591,26 @@ bool AVBoRScenarioRunner::HandleHomeShiftKey(FKey Key, bool bRepeat)
 
 void AVBoRScenarioRunner::PlacePanel()
 {
+	if (bFixedPanelMode)
+	{
+		USceneComponent* Anchor = bRunning && PanelAnchors.IsValidIndex(StepIndex) ? PanelAnchors[StepIndex].Get() : nullptr;
+		if (Anchor && (!bFixedPanelPlaced || !Panel->GetComponentLocation().Equals(Anchor->GetComponentLocation()) || !Panel->GetComponentQuat().Equals(Anchor->GetComponentQuat())))
+		{
+			const FTransform Pose(Anchor->GetComponentQuat(),Anchor->GetComponentLocation());
+			Panel->SetWorldLocationAndRotation(Pose.GetLocation(),Pose.GetRotation());
+			for (int32 I = 0; I < 2; ++I)
+			{
+				AVBoRPokeButton* Button = I == 0 ? ConfirmButton.Get() : ActionButton.Get(); if (!Button) { continue; }
+				const FVector Local(0,I == 0 ? -12 : 12,-PanelSizeCm.Y/2-PanelButtonGapCm);
+				// Local +Z press face toward anchor +X; preserve tilt (P5z D4)
+				Button->SetActorLocationAndRotation(Pose.TransformPosition(Local),Pose.GetRotation()*FRotator(-90,0,0).Quaternion());
+				ButtonLabels[I]->SetWorldLocationAndRotation(Pose.TransformPosition(Local+FVector(0,0,7)),Pose.GetRotation());
+			}
+			bFixedPanelPlaced = true; ConfirmLockRemaining = FMath::Max(0.0f,ConfirmLockSeconds);
+			Record(TEXT("Panel repositioned — confirmation lock"));
+		}
+		bPanelPlacementPending = !bFixedPanelPlaced; RefreshPanel(); return;
+	}
 	bPanelPlacementPending = true;
 	FTransform Head; const bool bTracked = Alignment && Alignment->ReadWorldHead(Head);
 	if (bTracked) { PlacePanelAtHead(Head); }
@@ -590,11 +619,12 @@ void AVBoRScenarioRunner::PlacePanel()
 
 void AVBoRScenarioRunner::HandlePawnMoved()
 {
-	bPawnMovedBeforeFlow = true; PlacePanel();
+	if (!bFixedPanelMode) { bPawnMovedBeforeFlow = true; PlacePanel(); }
 }
 
 void AVBoRScenarioRunner::PlacePanelAtHead(const FTransform& Head, bool bAtRouteArrival)
 {
+	if (bFixedPanelMode) { return; }
 	float Yaw = Head.Rotator().Yaw;
 	if (Alignment && ((Seat && Seat->IsHeadInside()) || !Alignment->IsBaseViewpoint()))
 	{ if (const USceneComponent* Eye = Alignment->GetCurrentEye()) { Yaw = Eye->GetComponentRotation().Yaw; } }
@@ -625,10 +655,10 @@ void AVBoRScenarioRunner::SampleHead(bool bTracked, const FTransform& Head, doub
 {
 	// Reenable after seat exit only (no following head turns/tracking recovery, R1-7)
 	if (Seat && Seat->IsHeadTracked() && !Seat->IsHeadInside()) { bSeatedPanelPlaced = false; }
-	if (Seat && Seat->IsHeadTracked() && Seat->IsHeadInside() && Seat->DwellSeconds >= SeatedPanelSeconds && !bSeatedPanelPlaced)
+	if (!bFixedPanelMode && Seat && Seat->IsHeadTracked() && Seat->IsHeadInside() && Seat->DwellSeconds >= SeatedPanelSeconds && !bSeatedPanelPlaced)
 	{ bSeatedPanelPlaced = true; bPanelPlacementPending = true; }
 	if (!bTracked) { return; }
-	if (bPanelPlacementPending) { PlacePanelAtHead(Head); }
+	if (!bFixedPanelMode && bPanelPlacementPending) { PlacePanelAtHead(Head); }
 	const FVector StartOffset = StartMarker ? Head.GetLocation() - StartMarker->GetComponentLocation() : FVector::ZeroVector;
 	if (bStartHeadPending && bRunning && (!StartMarker || (StepIndex == 0 && StartOffset.SizeSquared2D() <= 50 * 50 && StartOffset.Z >= 100)) && RecordHead(TEXT("Start position"), true, Head)) { bStartHeadPending = false; }
 	const auto* Step = CurrentStep();
@@ -645,19 +675,7 @@ FText AVBoRScenarioRunner::GetInstructionText() const { return CurrentStep() ? C
 
 FString AVBoRScenarioRunner::GetPanelText() const
 {
-	if (bFreeMode) { return (bFinished ? FString(TEXT("Guidance complete\n")) : FString()) + FreeModeInstruction.ToString(); }
-	if (bFinished) { return TEXT("Guidance complete"); }
-	if (!bRunning) { return TEXT("Preparing"); }
-	if (const auto* Step = CurrentStep())
-	{
-		FString Text = FString::Printf(TEXT("%s\n%s · %d/%d\n"), *Step->Instruction.ToString(), *Step->StepId.ToString(), StepIndex + 1, Scenario->Steps.Num());
-		if (Step->bRequireBaseViewpoint && Alignment && !Alignment->IsBaseViewpoint()) { Text += TEXT("Return to the driver seat"); }
-		else if (bPanelPlacementPending || (Alignment && Alignment->IsSwitching()) || ConfirmLockRemaining > 0) { Text += TEXT("Please wait"); }
-		else if (RuleSatisfied() && NeedsConfirmation()) { Text += Step->ConfirmBy == EVBoRConfirmBy::Operator ? TEXT("Please wait") : TEXT("Press confirm"); }
-		else { Text += TEXT("Follow the instructions"); }
-		return Text;
-	}
-	return FString();
+	return bRunning && CurrentStep() ? CurrentStep()->Instruction.ToString() : FString();
 }
 
 FString AVBoRScenarioRunner::GetOperatorText() const
@@ -702,49 +720,19 @@ void AVBoRScenarioRunner::RefreshPanel()
 	if (PanelText) { PanelText->SetText(FText::FromString(GetPanelText())); }
 	const FString Operator = GetOperatorText();
 	if (OperatorText) { OperatorText->SetText(FText::FromString(Operator)); }
-	OperatorPanel->SetDrawSize(FVector2D(1000, bOperatorInfo ? 700 : 120));
-	// Operator line also in front of wheel/backrest (below text, between view/button names, R1-4/R1-7)
-	// Toward car center when seated, right when standing. Keep 2 cm panel gap (P3b D8)
-	double Side = 1;
-	if (bOperatorInfo && Alignment && ((Seat && Seat->IsHeadInside()) || !Alignment->IsBaseViewpoint()))
-	{
-		const FVector TowardCenter = Alignment->GetOwner()->GetActorLocation() - Panel->GetComponentLocation();
-		Side = FVector::DotProduct(-Panel->GetRightVector(), TowardCenter) >= 0 ? 1 : -1;
-	}
-	const FVector OperatorOffset = bOperatorInfo ? -Panel->GetRightVector() * Side * (PanelSizeCm.X * 0.5 + 25 + 2)
-		: -Panel->GetForwardVector() * (ButtonDistanceCm - 5 - PanelDistanceCm) - FVector(0, 0, PanelSizeCm.Y * 0.5 - 1);
-	OperatorPanel->SetWorldLocationAndRotation(Panel->GetComponentLocation() + OperatorOffset, Panel->GetComponentRotation());
-	Panel->SetHiddenInGame(bPanelPlacementPending); OperatorPanel->SetHiddenInGame(bPanelPlacementPending || Operator.IsEmpty());
+	Panel->SetHiddenInGame(bPanelPlacementPending || GetPanelText().IsEmpty());
+	OperatorPanel->SetHiddenInGame(true);
 	SetP3ButtonVisible(ConfirmButton, CanParticipantConfirm());
 	const auto* Step = CurrentStep();
 	const bool bAway = Alignment && !Alignment->IsBaseViewpoint();
 	const bool bNeedsView = Step && Step->Rule == EVBoRStepRule::Viewpoint && !RuleSatisfied();
 	PanelAction = bNeedsView ? EVBoRFlowCommand::Viewpoint : EVBoRFlowCommand::ReturnBase;
 	SetP3ButtonVisible(ActionButton, !bPanelPlacementPending && bRunning && Alignment && !Alignment->IsSwitching() && (bAway || bNeedsView));
-	TArray<FString> SeatLabels;
-	if (bFreeMode)
-	{
-		TArray<EVBoRFlowCommand> Seats;
-		if (bAway) { Seats.Add(EVBoRFlowCommand::ReturnBase); SeatLabels.Add(TEXT("Driver seat")); }
-		for (const auto Action : {EVBoRFlowCommand::Passenger, EVBoRFlowCommand::Rear})
-		{
-			// Use startup viewpoint cache (called every frame, P5o)
-			auto* View = CommandViewpoint(Action);
-			if (View && (!Alignment || !Alignment->IsAtViewpoint(View)))
-			{ Seats.Add(Action); SeatLabels.Add(Action == EVBoRFlowCommand::Passenger ? TEXT("Passenger seat") : TEXT("Rear seat")); }
-		}
-		const bool bVisible = !bPanelPlacementPending && !bReloadPending && Alignment && !Alignment->IsSwitching() && Seats.Num() == 2;
-		for (int32 I = 0; I < 2; ++I)
-		{
-			if (Seats.IsValidIndex(I)) { FreeSeatActions[I] = Seats[I]; }
-			SetP3ButtonVisible(I == 0 ? ConfirmButton.Get() : ActionButton.Get(), bVisible);
-		}
-	}
 	for (int32 I = 0; I < 2; ++I)
 	{
 		AVBoRPokeButton* Button = I == 0 ? ConfirmButton.Get() : ActionButton.Get();
 		ButtonLabels[I]->SetHiddenInGame(!Button || Button->IsHidden());
-		if (ButtonLabelTexts.IsValidIndex(I)) { ButtonLabelTexts[I]->SetText(FText::FromString(bFreeMode && SeatLabels.IsValidIndex(I) ? SeatLabels[I] : I == 0 ? FString(TEXT("Confirm")) : ActionLabel())); }
+		if (ButtonLabelTexts.IsValidIndex(I)) { ButtonLabelTexts[I]->SetText(FText::FromString(I == 0 ? FString(TEXT("Confirm")) : ActionLabel())); }
 	}
 }
 
@@ -850,8 +838,8 @@ void AVBoRScenarioRunner::UnbindKeys()
 }
 void AVBoRScenarioRunner::HandleKeyUnlock(AVBoRKeyFob* Key) { if (FIntPoint* Counts = KeyCounts.Find(Key)) { ++Counts->X; } }
 void AVBoRScenarioRunner::HandleKeyLock(AVBoRKeyFob* Key) { if (FIntPoint* Counts = KeyCounts.Find(Key)) { ++Counts->Y; } }
-void AVBoRScenarioRunner::HandleConfirmPoke(const FIsdkInteractionPointerEvent&) { QueueLive(bFreeMode ? FreeSeatActions[0] : EVBoRFlowCommand::Confirm, EVBoRCommandSource::Participant); }
-void AVBoRScenarioRunner::HandleActionPoke(const FIsdkInteractionPointerEvent&) { QueueLive(bFreeMode ? FreeSeatActions[1] : PanelAction, EVBoRCommandSource::Participant); }
+void AVBoRScenarioRunner::HandleConfirmPoke(const FIsdkInteractionPointerEvent&) { if (!bFreeMode) { QueueLive(EVBoRFlowCommand::Confirm, EVBoRCommandSource::Participant); } }
+void AVBoRScenarioRunner::HandleActionPoke(const FIsdkInteractionPointerEvent&) { if (!bFreeMode) { QueueLive(PanelAction, EVBoRCommandSource::Participant); } }
 void AVBoRScenarioRunner::HandleTargetPoke(const FIsdkInteractionPointerEvent& Event)
 {
 	if (UObject* Object = Event.Interactable.GetObject())

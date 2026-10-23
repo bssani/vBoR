@@ -23,6 +23,7 @@ struct VBOR_API FVBoRScenarioStep
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="Who confirms after rule is satisfied. Observation always needs confirmation")) EVBoRConfirmBy ConfirmBy = EVBoRConfirmBy::Either;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="Return to driver reference viewpoint before completion")) bool bRequireBaseViewpoint = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="Target tag for floor ring and arrow. Optional")) FName MarkerTag;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="Panel anchor tag. Optional")) FName PanelTag;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="Current step floor route Actor tag. Optional (P3b D2)")) FName RouteTag;
 };
 

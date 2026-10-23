@@ -44,11 +44,11 @@ public:
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float PanelDistanceCm = 70;
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float PanelBelowCm = 0;
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) FVector2D PanelSizeCm = FVector2D(50, 32);
+	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float PanelButtonGapCm = 8;
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float ButtonDistanceCm;
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float ButtonBelowCm;
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="s", ClampMin="0")) float ConfirmLockSeconds;
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="s", ClampMin="0.01")) float SeatedPanelSeconds;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Guidance") FText FreeModeInstruction;
 	bool InitializeFlow();
 	void QueueCommand(const FVBoRFlowCommand& Command);
 	void ProcessFlow(double DeltaSeconds);
@@ -92,6 +92,7 @@ private:
 	friend struct FP4cTestAccess;
 	friend struct FP4eTestAccess;
 	friend struct FP5qTestAccess;
+	friend struct FP5zTestAccess;
 	TWeakObjectPtr<UVBoRVehiclePowerComponent> VehiclePower;
 	UPROPERTY() TObjectPtr<UVBoRVehicleAlignmentComponent> Alignment;
 	UPROPERTY() TObjectPtr<UVBoRApproachZoneComponent> Approach;
@@ -104,6 +105,7 @@ private:
 	UPROPERTY() TArray<TObjectPtr<UStaticMeshComponent>> MarkerRing;
 	UPROPERTY() TArray<TObjectPtr<UObject>> Targets;
 	UPROPERTY() TArray<TObjectPtr<USceneComponent>> Markers;
+	UPROPERTY() TArray<TObjectPtr<USceneComponent>> PanelAnchors;
 	UPROPERTY() TArray<TObjectPtr<AVBoRFloorRoute>> Routes;
 	UPROPERTY() TObjectPtr<USceneComponent> StartMarker;
 	double RouteDwellSeconds = 0;
@@ -131,6 +133,7 @@ private:
 	double StepElapsed = 0;
 	double ConfirmLockRemaining = 0, HeadLogElapsed = 0;
 	bool bOperatorInfo = false, bPanelPlacementPending = true, bSeatedPanelPlaced = false;
+	bool bFixedPanelMode = false, bFixedPanelPlaced = false;
 	bool bStartHeadPending = false, bSeatHeadRecorded = false;
 	bool bPawnMovedBeforeFlow = false;
 	bool bReapplyPending = false, bPointSavePending = false;
@@ -151,7 +154,6 @@ private:
 #endif
 	void RecordDecision(const FVBoRFlowCommand& Command, const FVBoRCommandDecision& Decision);
 	EVBoRFlowCommand PanelAction = EVBoRFlowCommand::ReturnBase;
-	EVBoRFlowCommand FreeSeatActions[2] = {EVBoRFlowCommand::Passenger, EVBoRFlowCommand::Rear};
 	const FVBoRScenarioStep* CurrentStep() const;
 	bool RuleSatisfied() const;
 	bool NeedsConfirmation() const;

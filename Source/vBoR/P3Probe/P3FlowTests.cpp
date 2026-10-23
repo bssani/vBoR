@@ -358,7 +358,8 @@ bool FP3ExitTest::RunTest(const FString&)
 	auto Step=P3Step(TEXT("18"),EVBoRStepRule::DoorOpened,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None); Step.bRequireBaseViewpoint=true;
 	E.Steps({Step,P3Step(TEXT("19"))}); E.Runner->ProcessFlow(0);
 	TestEqual(TEXT("E12 open door alone insufficient while away"),E.Runner->GetStepIndex(),0);
-	TestTrue(TEXT("E12 return instruction visible"),E.Runner->GetPanelText().Contains(TEXT("Return to the driver seat")));
+	TestEqual(TEXT("E12 instruction only"),E.Runner->GetPanelText(),Step.Instruction.ToString());
+	TestEqual(TEXT("E12 return button label"),FP3FlowTestAccess::LabelText(E.Runner,1)->GetText().ToString(),FString(TEXT("Return to driver seat")));
 	TestFalse(TEXT("E12 action button visible"),FP3FlowTestAccess::Action(E.Runner)->IsHidden());
 	E.Command(EVBoRFlowCommand::Next); TestEqual(TEXT("E12 skip also requires base viewpoint"),E.Runner->GetStepIndex(),0);
 	P3Poke(FP3FlowTestAccess::Action(E.Runner)); E.Runner->ProcessFlow(0); E.FinishSwitch(); E.Runner->ProcessFlow(0);
@@ -403,14 +404,14 @@ bool FP3DataTest::RunTest(const FString&)
 {
 	FP3World E; auto First=P3Step(TEXT("19")); First.Instruction=FText::FromString(TEXT("Text edit check — Look around the interior."));
 	E.Steps({First,P3Step(TEXT("02")),P3Step(TEXT("12"))});
-	TestTrue(TEXT("E19 actual Slate Participant text follows asset"),FP3FlowTestAccess::Slate(E.Runner).ToString().Contains(First.Instruction.ToString()));
+	TestEqual(TEXT("E19 actual Slate contains only instruction"),FP3FlowTestAccess::Slate(E.Runner).ToString(),First.Instruction.ToString());
 	TestTrue(TEXT("E19 instruction exact"),E.Runner->GetInstructionText().EqualTo(First.Instruction));
 	const FVector FixedPanel=E.Runner->Panel->GetComponentLocation(); E.Pawn->SetActorLocation(FVector(400,0,0)); E.Runner->ProcessFlow(0);
 	TestTrue(TEXT("Panel remains fixed during step"),E.Runner->Panel->GetComponentLocation().Equals(FixedPanel));
-	E.Command(EVBoRFlowCommand::Confirm); TestTrue(TEXT("E16 edited order followed"),E.Runner->GetPanelText().Contains(TEXT("02 · 2/3")));
+	E.Command(EVBoRFlowCommand::Confirm); TestEqual(TEXT("E16 edited order followed"),E.Runner->GetStepIndex(),1); TestEqual(TEXT("E16 no step number line"),E.Runner->GetPanelText(),E.Runner->GetInstructionText().ToString());
 	E.Command(EVBoRFlowCommand::Confirm); E.Command(EVBoRFlowCommand::Confirm); TestTrue(TEXT("E18 final finished"),E.Runner->IsFinished());
 	const auto Token=E.Runner->GetToken(); E.Command(EVBoRFlowCommand::Confirm); TestEqual(TEXT("E18 no post-end advancement"),E.Runner->GetToken().Generation,Token.Generation);
-	TestTrue(TEXT("E18 final participant text"),FP3FlowTestAccess::Slate(E.Runner).ToString().Contains(TEXT("Guidance complete")));
+	TestTrue(TEXT("E18 final participant panel hidden"),FP3FlowTestAccess::Slate(E.Runner).IsEmpty() && E.Runner->Panel->bHiddenInGame);
 	return true;
 }
 
@@ -483,7 +484,7 @@ bool FP3PanelTextTest::RunTest(const FString&)
 {
 	FP3World E; E.Steps({P3Step(TEXT("12"))}); E.Ready();
 	const FString Text = E.Runner->GetPanelText();
-	TestTrue(TEXT("Participant instruction present"), Text.Contains(TEXT("Check the vehicle.")));
+	TestEqual(TEXT("Participant instruction only"), Text,FString(TEXT("Check the vehicle.")));
 	for (const TCHAR* Word : {TEXT("discarded"), TEXT("Skip"), TEXT("Alignment"), TEXT("generation"), TEXT("Approximate geometry")})
 	{ TestFalse(TEXT("No operator diagnostics on participant panel"), Text.Contains(Word)); }
 	TestTrue(TEXT("Step key always visible"), E.Runner->GetOperatorText().Contains(TEXT("Space")));
@@ -494,15 +495,15 @@ bool FP3PanelTextTest::RunTest(const FString&)
 	FP3FlowTestAccess::Toggle(E.Runner); TestTrue(TEXT("F1 reveals diagnostics"), E.Runner->GetOperatorText().Contains(TEXT("discarded")));
 	FP3FlowTestAccess::Toggle(E.Runner); TestFalse(TEXT("Second F1 hides diagnostics"), E.Runner->GetOperatorText().Contains(TEXT("discarded")));
 	E.Steps({P3Step(TEXT("09"), EVBoRStepRule::Confirm, TEXT(""), EVBoRConfirmBy::Operator)}); E.Ready();
-	TestTrue(TEXT("Participant waits without operator wording"), E.Runner->GetPanelText().Contains(TEXT("Please wait")) && !E.Runner->GetPanelText().Contains(TEXT("Operator")));
+	TestEqual(TEXT("Participant instruction without state line"), E.Runner->GetPanelText(),E.Runner->GetInstructionText().ToString());
 	TestTrue(TEXT("Operator wait line shown with F1 off"), E.Runner->GetOperatorText().Contains(TEXT("Operator confirm pending — Space")));
-	TestFalse(TEXT("Operator wait component visible with F1 off"), FP3FlowTestAccess::OperatorPanel(E.Runner)->bHiddenInGame);
+	TestTrue(TEXT("VR operator plate hidden"), FP3FlowTestAccess::OperatorPanel(E.Runner)->bHiddenInGame);
 	E.Steps({P3Step(TEXT("13"), EVBoRStepRule::ButtonPressed, TEXT("Car.ReachButton"), EVBoRConfirmBy::None)});
 	TestTrue(TEXT("No-confirm rule wait shows skip key"), E.Runner->GetOperatorText().Contains(TEXT("→ Skip")));
 	E.Command(EVBoRFlowCommand::Passenger); E.FinishSwitch(); E.Runner->ProcessFlow(0);
 	TestTrue(TEXT("Away viewpoint shows Home"), E.Runner->GetOperatorText().Contains(TEXT("Home to driver seat")));
 	E.Car->Alignment->InitializeAlignment(E.Pawn, nullptr, 3, E.Saved.PlayAreaCm); E.Steps({P3Step(TEXT("12"))});
-	TestTrue(TEXT("Preparation text separated from always-visible start failure"), E.Runner->GetPanelText() == TEXT("Preparing") && E.Runner->GetOperatorText().Contains(TEXT("Alignment required")));
+	TestTrue(TEXT("Preparation text separated from always-visible start failure"), E.Runner->GetPanelText().IsEmpty() && E.Runner->Panel->bHiddenInGame && E.Runner->GetOperatorText().Contains(TEXT("Alignment required")));
 	return true;
 }
 
@@ -613,12 +614,13 @@ bool FP3RepositionTest::RunTest(const FString&)
 		FTransform Head; E.Car->Alignment->ReadWorldHead(Head);
 		TestTrue(TEXT("Placed at moved head while still fading"), E.Car->Alignment->IsSwitching() && E.Runner->Panel->GetComponentLocation().Equals(Head.GetLocation() + FVector(70, 0, 0), 0.01));
 		E.Car->Alignment->AdvanceSwitch(E.Car->Alignment->FadeSeconds);
-		for (const FVector Target : {E.Runner->Panel->GetComponentLocation(), FP3FlowTestAccess::Confirm(E.Runner)->GetActorLocation(), FP3FlowTestAccess::Action(E.Runner)->GetActorLocation(), FP3FlowTestAccess::OperatorPanel(E.Runner)->GetComponentLocation()})
+		for (const FVector Target : {E.Runner->Panel->GetComponentLocation(), FP3FlowTestAccess::Confirm(E.Runner)->GetActorLocation(), FP3FlowTestAccess::Action(E.Runner)->GetActorLocation()})
 		{
 			for (const auto& Plate : FP3FlowTestAccess::Plates(E.Car))
 			{ TestFalse(FString::Printf(TEXT("Eye segment clear of %s"), *Plate->GetName()), FMath::LineBoxIntersection(Plate->Bounds.GetBox(), Head.GetLocation(), Target, Target - Head.GetLocation())); }
 		}
 	}
+	TestTrue(TEXT("VR operator plate hidden after viewpoint changes"),FP3FlowTestAccess::OperatorPanel(E.Runner)->bHiddenInGame);
 	// Same placement/occlusion rules on step start (E22)
 	for (USceneComponent* View : {static_cast<USceneComponent*>(E.Car->DriverEye.Get()), static_cast<USceneComponent*>(E.Car->PassengerView.Get()), static_cast<USceneComponent*>(E.Car->RearView.Get())})
 	{
@@ -860,18 +862,10 @@ bool FP3bOperatorPlateTest::RunTest(const FString&)
 		{
 			if (bInfo) { FP3FlowTestAccess::Toggle(E.Runner); }
 			E.Runner->ProcessFlow(0); auto* Plate=FP3FlowTestAccess::OperatorPanel(E.Runner);
-			const FVector2D Size=Plate->GetDrawSize(); const FBox LocalBox(FVector(-0.1,-Size.X/2,-Size.Y/2),FVector(0.1,Size.X/2,Size.Y/2));
-			const FTransform Transform=Plate->GetComponentTransform(); const FVector LocalEye=Transform.InverseTransformPosition(Eye);
-			for (const FVector Target : {E.Runner->Panel->GetComponentLocation(),FP3FlowTestAccess::Confirm(E.Runner)->GetActorLocation(),FP3FlowTestAccess::Action(E.Runner)->GetActorLocation(),FP3FlowTestAccess::Label(E.Runner,0)->GetComponentLocation(),FP3FlowTestAccess::Label(E.Runner,1)->GetComponentLocation()})
-			{
-				const FVector LocalTarget=Transform.InverseTransformPosition(Target);
-				TestFalse(TEXT("Eye segment to guidance/buttons/names misses info rectangle"),FMath::LineBoxIntersection(LocalBox,LocalEye,LocalTarget,LocalTarget-LocalEye));
-			}
-			for (const auto& CarPlate : FP3FlowTestAccess::Plates(E.Car))
-			{ const FVector Target=Plate->GetComponentLocation(); TestFalse(TEXT("Info plate center visible past car plates"),FMath::LineBoxIntersection(CarPlate->Bounds.GetBox(),Eye,Target,Target-Eye)); }
+			TestTrue(TEXT("VR operator plate stays hidden"),Plate->bHiddenInGame);
+			TestFalse(TEXT("Guidance remains visible"),E.Runner->Panel->bHiddenInGame);
 			if (bInfo)
 			{
-				TestTrue(TEXT("Info beside guidance at same distance and height with gap"),FMath::IsNearlyEqual(Plate->GetComponentLocation().X,E.Runner->Panel->GetComponentLocation().X,0.01) && FMath::IsNearlyEqual(Plate->GetComponentLocation().Z,E.Runner->Panel->GetComponentLocation().Z,0.01) && FMath::Abs(Plate->GetComponentLocation().Y-E.Runner->Panel->GetComponentLocation().Y)>=52-0.01);
 				FP3FlowTestAccess::Toggle(E.Runner);
 			}
 		}

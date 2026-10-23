@@ -703,7 +703,7 @@ bool FP5oSeatViews::RunTest(const FString&)
 	TestEqual(TEXT("Free-mode frames and snapshots do not scan"),FP5iTestAccess::Scans(W.Runner),0);
 	TestTrue(TEXT("Passenger available"),W.Runner->EvaluateOperatorButton(B::Passenger).bAccepted);
 	TestTrue(TEXT("Rear available"),W.Runner->EvaluateOperatorButton(B::Rear).bAccepted);
-	TestTrue(TEXT("Free seat buttons shown"),FP5iTestAccess::SeatButtonsShown(W.Runner));
+	TestFalse(TEXT("Free seat buttons hidden"),FP5iTestAccess::SeatButtonsShown(W.Runner));
 	// E2: Runtime duplicate tag ignored until next startup validation. Deleted viewpoint immediately missing
 	auto* Extra = NewObject<UVBoRViewpointComponent>(W.Car); W.Car->AddInstanceComponent(Extra);
 	Extra->ComponentTags.Add(TEXT("Car.RearView")); Extra->RegisterComponent();
