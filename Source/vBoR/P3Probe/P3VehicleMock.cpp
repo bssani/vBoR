@@ -1,4 +1,5 @@
 #include "P3VehicleMock.h"
+#include "../Interaction/VBoRPanelAnchor.h"
 #include "../Interaction/VBoRAlignPointComponent.h"
 #include "../P1Probe/P1TrunkMock.h"
 #include "../Interaction/VBoRPoweredPanel.h"
@@ -113,6 +114,15 @@ void AP3VehicleMock::OnConstruction(const FTransform& Transform)
 void AP3VehicleMock::BeginPlay()
 {
 	Super::BeginPlay();
+	const FName AnchorTags[] = {TEXT("Guide.Outside"),TEXT("Guide.Trunk"),TEXT("Guide.Driver"),TEXT("Guide.Passenger"),TEXT("Guide.Rear")};
+	for (int32 I = 0; I < 5; ++I)
+	{
+		if (!PanelAnchorPositionsCm.IsValidIndex(I) || !PanelAnchorYawDeg.IsValidIndex(I)) { continue; }
+		const FTransform Pose = FTransform(FRotator(0,PanelAnchorYawDeg[I],0),PanelAnchorPositionsCm[I])*GetActorTransform();
+		auto* Anchor = GetWorld()->SpawnActorDeferred<AVBoRPanelAnchor>(AVBoRPanelAnchor::StaticClass(),Pose,this);
+		Anchor->Tags.Add(AnchorTags[I]); Anchor->FinishSpawning(Pose);
+		Anchor->AttachToActor(this,FAttachmentTransformRules::KeepWorldTransform); PanelAnchors.Add(Anchor);
+	}
 	MockLabel->SetSlateWidget(SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Regular", 32)).ColorAndOpacity(FLinearColor::Yellow).Text(FText::FromString(TEXT("Start position / Approximate geometry, placeholder values"))));
 	FrontKeyTable = CreateKeyTable(FrontKeyTableCm, TEXT("Car.FrontKey"), TEXT("Car.FrontKey.Unlock"), TEXT("Car.FrontKey.Lock"));
 	RearKeyTable = CreateKeyTable(RearKeyTableCm, TEXT("Car.RearKey"), TEXT("Car.RearKey.Unlock"), TEXT("Car.RearKey.Lock"));
@@ -319,6 +329,7 @@ void AP3VehicleMock::PlaceReachButton()
 
 void AP3VehicleMock::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	for (AVBoRPanelAnchor* Anchor : PanelAnchors) { if (Anchor) { Anchor->Destroy(); } } PanelAnchors.Reset();
 	if (RearSeat) { RearSeat->Destroy(); }
 	if (RearCushion) { RearCushion->DestroyComponent(); }
 	if (BoxStand) { BoxStand->Destroy(); }

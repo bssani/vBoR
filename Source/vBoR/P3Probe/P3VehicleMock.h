@@ -27,6 +27,7 @@ class AVBoRPoweredPanel;
 class AVBoRLoadTarget;
 class AVBoRBoxStand;
 class AVBoRFoldingSeat;
+class AVBoRPanelAnchor;
 
 UCLASS(Blueprintable)
 class VBOR_API AP3VehicleMock : public AActor
@@ -57,6 +58,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<AVBoRFloorRoute> DriverDoorRoute;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Placeholder", meta=(ToolTip="Car-relative route point (approximate geometry, placeholder values, cm)")) TArray<FVector> AroundCarRoutePointsCm = {FVector(360,40,0), FVector(300,170,0), FVector(-150,175,0), FVector(-270,160,0), FVector(-330,0,0)};
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<AVBoRFloorRoute> AroundCarRoute;
+	// Outside, trunk, driver, passenger, rear; car-local cm/Yaw (P5z D9)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Placeholder|Approximate guidance", EditFixedSize, meta=(ToolTip="Car-local panel anchor positions, cm")) TArray<FVector> PanelAnchorPositionsCm = {FVector(95,-160,155),FVector(-335,0,155),FVector(40,-37,100),FVector(40,37,100),FVector(-40,-37,103)};
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Placeholder|Approximate guidance", EditFixedSize, meta=(ToolTip="Car-local panel anchor Yaw, deg")) TArray<float> PanelAnchorYawDeg = {-90,180,180,180,180};
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TArray<TObjectPtr<AVBoRPanelAnchor>> PanelAnchors;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Placeholder", meta=(Units="cm")) FVector RearBoxStandCm = FVector(-340,140,0);
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<AP1TrunkMock> Trunk;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<AVBoRPoweredPanel> Liftgate;

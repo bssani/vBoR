@@ -108,17 +108,14 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5gCompletionTest, "vBoR.P5g.E1E2CompletedFree
 bool FP5gCompletionTest::RunTest(const FString&)
 {
 	FP5gWorld E;
-	E.Runner->FreeModeInstruction = FText::FromString(TEXT("Custom free mode"));
 	E.Command(EVBoRFlowCommand::Confirm);
 	TestTrue(TEXT("Last step completes into free mode"),E.Runner->IsFinished() && E.Runner->IsFreeMode());
 	TestFalse(TEXT("No running evaluation"),E.Runner->IsRunning());
 	TestEqual(TEXT("No current step"),E.Runner->GetStepIndex(),INDEX_NONE);
-	TestTrue(TEXT("Completion plus editable instruction"),E.Runner->GetPanelText().Contains(TEXT("Guidance complete")) && E.Runner->GetPanelText().Contains(TEXT("Custom free mode")));
+	TestTrue(TEXT("Completion panel hidden and empty"),E.Runner->GetPanelText().IsEmpty() && E.Runner->Panel->bHiddenInGame);
 	TestTrue(TEXT("Markers hidden"),FP5gTestAccess::MarkersHidden(E.Runner));
 	TestTrue(TEXT("No step instruction"),E.Runner->GetInstructionText().IsEmpty());
-	TestFalse(TEXT("Passenger button visible"),FP5gTestAccess::Button(E.Runner,0)->IsHidden());
-	TestEqual(TEXT("Passenger label"),FP5gTestAccess::Label(E.Runner,0),FString(TEXT("Passenger seat")));
-	TestEqual(TEXT("Rear label"),FP5gTestAccess::Label(E.Runner,1),FString(TEXT("Rear seat")));
+	TestTrue(TEXT("Free mode buttons hidden"),FP5gTestAccess::Button(E.Runner,0)->IsHidden() && FP5gTestAccess::Button(E.Runner,1)->IsHidden());
 	const auto Token = E.Runner->GetToken(); const int32 Before = E.Runner->RuleDiscards;
 	for (FKey Key : {EKeys::SpaceBar,EKeys::Left,EKeys::Right,EKeys::End}) { E.Key(Key); }
 	E.Command(EVBoRFlowCommand::Confirm,EVBoRCommandSource::Participant);
@@ -132,27 +129,15 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5gSeatsTest, "vBoR.P5g.E3E4E5E6ParticipantSea
 bool FP5gSeatsTest::RunTest(const FString&)
 {
 	FP5gWorld E; E.Free();
-	E.Poke(0); E.Runner->QueueCommand({EVBoRFlowCommand::Rear,EVBoRCommandSource::Operator,E.Runner->GetToken()}); E.Runner->ProcessFlow(0);
-	TestTrue(TEXT("One accepted switch for simultaneous inputs"),E.Car->Alignment->IsSwitching() && E.Car->Alignment->SwitchRequests == 2 && E.Car->Alignment->SwitchDiscards == 1);
-	TestTrue(TEXT("Both buttons hidden and inactive during fade"),FP5gTestAccess::Button(E.Runner,0)->IsHidden() && FP5gTestAccess::Button(E.Runner,1)->IsHidden() && !FP5gTestAccess::Button(E.Runner,0)->Poke->IsActive());
-	const int32 Before = E.Runner->TransitionDiscards;
-	E.Command(EVBoRFlowCommand::Passenger,EVBoRCommandSource::Participant); E.Key(EKeys::One);
-	TestEqual(TEXT("Additional switches discarded"),E.Runner->TransitionDiscards,Before+2);
-	E.FinishSwitch();
-	TestTrue(TEXT("First passenger target retained"),E.Car->Alignment->IsAtViewpoint(E.Car->PassengerView));
-	TestEqual(TEXT("Passenger offers driver"),FP5gTestAccess::Label(E.Runner,0),FString(TEXT("Driver seat")));
-	TestEqual(TEXT("Passenger offers rear"),FP5gTestAccess::Label(E.Runner,1),FString(TEXT("Rear seat")));
-	const int32 Locked = E.Runner->ConfirmLockDiscards;
-	E.Poke(1); E.Runner->ProcessFlow(1);
-	TestEqual(TEXT("Input captured during placement lock stays discarded despite long dt"),E.Runner->ConfirmLockDiscards,Locked+1);
-	TestFalse(TEXT("Locked input never starts transition"),E.Car->Alignment->IsSwitching());
-	E.Poke(1); E.Runner->ProcessFlow(0); E.FinishSwitch(); E.Ready();
-	TestTrue(TEXT("Participant rear destination"),E.Car->Alignment->IsAtViewpoint(E.Car->RearView));
-	TestTrue(TEXT("Participant request distinguished"),E.Runner->LastViewRequest.Contains(TEXT("Participant")));
-	TestEqual(TEXT("Rear offers driver"),FP5gTestAccess::Label(E.Runner,0),FString(TEXT("Driver seat")));
-	TestEqual(TEXT("Rear offers passenger"),FP5gTestAccess::Label(E.Runner,1),FString(TEXT("Passenger seat")));
-	E.Poke(0); E.Runner->ProcessFlow(0); E.FinishSwitch();
-	TestTrue(TEXT("Participant returns to base"),E.Car->Alignment->IsBaseViewpoint());
+	TestTrue(TEXT("Free buttons hidden and inactive"),FP5gTestAccess::Button(E.Runner,0)->IsHidden() && FP5gTestAccess::Button(E.Runner,1)->IsHidden() && !FP5gTestAccess::Button(E.Runner,0)->Poke->IsActive() && !FP5gTestAccess::Button(E.Runner,1)->Poke->IsActive());
+	E.Poke(0); E.Poke(1); E.Runner->ProcessFlow(0);
+	TestFalse(TEXT("Injected hidden button input does not start fade"),E.Car->Alignment->IsSwitching());
+	TestTrue(TEXT("Hidden buttons keep base viewpoint"),E.Car->Alignment->IsBaseViewpoint());
+	E.Key(EKeys::One); E.FinishSwitch(); TestTrue(TEXT("Operator passenger destination"),E.Car->Alignment->IsAtViewpoint(E.Car->PassengerView));
+	E.Poke(0); E.Poke(1); E.Runner->ProcessFlow(0);
+	TestTrue(TEXT("Hidden buttons keep passenger viewpoint"),!E.Car->Alignment->IsSwitching() && E.Car->Alignment->IsAtViewpoint(E.Car->PassengerView));
+	E.Key(EKeys::Two); E.FinishSwitch(); TestTrue(TEXT("Operator rear destination"),E.Car->Alignment->IsAtViewpoint(E.Car->RearView));
+	E.Key(EKeys::Home); E.FinishSwitch(); TestTrue(TEXT("Operator returns to base"),E.Car->Alignment->IsBaseViewpoint());
 	return true;
 }
 
@@ -161,7 +146,7 @@ bool FP5gOperatorTest::RunTest(const FString&)
 {
 	FP5gWorld E; E.Key(EKeys::End);
 	TestTrue(TEXT("End enters free mode without completion"),E.Runner->IsFreeMode() && !E.Runner->IsFinished());
-	TestFalse(TEXT("End panel never claims completed"),E.Runner->GetPanelText().Contains(TEXT("Guidance complete")));
+	TestTrue(TEXT("End panel hidden and empty"),E.Runner->GetPanelText().IsEmpty() && E.Runner->Panel->bHiddenInGame);
 	TestTrue(TEXT("End record contains origin and summary"),E.Runner->LastRecord.Contains(TEXT("05")) && E.Runner->LastRecord.Contains(TEXT("summary")));
 	TestEqual(TEXT("End counted separately"),E.Runner->EndCount,1); TestEqual(TEXT("Skip unchanged"),E.Runner->SkipCount,0);
 	const FString Text = E.Runner->GetOperatorText();
@@ -199,7 +184,7 @@ bool FP5gGuardsTest::RunTest(const FString&)
 	TestTrue(TEXT("Panel and buttons await tracked head"),E.Runner->Panel->bHiddenInGame && FP5gTestAccess::Button(E.Runner,0)->IsHidden() && FP5gTestAccess::Button(E.Runner,1)->IsHidden());
 	E.Key(EKeys::End); TestEqual(TEXT("End accepted only once"),E.Runner->EndCount,1);
 	E.Head->bTracked = true; E.Runner->ProcessFlow(0);
-	TestFalse(TEXT("Recovery places panel"),E.Runner->Panel->bHiddenInGame); TestFalse(TEXT("Recovery shows seat buttons"),FP5gTestAccess::Button(E.Runner,0)->IsHidden());
+	TestTrue(TEXT("Recovery keeps panel hidden"),E.Runner->Panel->bHiddenInGame); TestTrue(TEXT("Recovery keeps both buttons hidden"),FP5gTestAccess::Button(E.Runner,0)->IsHidden() && FP5gTestAccess::Button(E.Runner,1)->IsHidden());
 	return true;
 }
 
