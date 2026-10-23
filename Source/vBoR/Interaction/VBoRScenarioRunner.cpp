@@ -361,7 +361,7 @@ void AVBoRScenarioRunner::EnterStep(int32 Index, bool bNewAttempt)
 	if (Alignment) { Alignment->FlowStarted(); }
 	if (StepIndex == 0 && Index != 0) { RecordStartFallback(); }
 	OperatorCompletedSteps = FMath::Max(0, Index);
-	StepIndex = Index; ++Generation; StepElapsed = 0; ConfirmLockRemaining = bFixedPanelMode ? 0 : FMath::Max(0.0f, ConfirmLockSeconds); bSeatHeadRecorded = false;
+	StepIndex = Index; ++Generation; StepElapsed = 0; ConfirmLockRemaining = FMath::Max(0.0f, ConfirmLockSeconds); bSeatHeadRecorded = false;
 	// Keep attempt start record on previous-step return (P4c D3)
 	if (bNewAttempt) { bStartHeadPending = true; }
 	if (!CurrentStep())

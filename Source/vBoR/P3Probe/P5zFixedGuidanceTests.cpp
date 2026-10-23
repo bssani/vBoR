@@ -151,10 +151,10 @@ bool FP5zStepsTest::RunTest(const FString&)
 	TestTrue(TEXT("Different anchor moves"),E.Runner->Panel->GetComponentLocation().Equals(E.Anchor(TEXT("Guide.Trunk"))->GetActorLocation(),0.01));
 	TestTrue(TEXT("Different anchor locks"),FP5zTestAccess::Lock(E.Runner)>0); TestEqual(TEXT("One new placement record"),Records.Count(),2);
 	const FTransform Pose = E.Runner->Panel->GetComponentTransform(); E.Command(EVBoRFlowCommand::Next);
-	TestEqual(TEXT("Same anchor does not lock"),FP5zTestAccess::Lock(E.Runner),0.0);
+	TestTrue(TEXT("Same anchor keeps step-start lock"),FMath::IsNearlyEqual(FP5zTestAccess::Lock(E.Runner),static_cast<double>(E.Runner->ConfirmLockSeconds))); TestEqual(TEXT("Same anchor adds no placement record"),Records.Count(),2);
 	E.Command(EVBoRFlowCommand::Next);
 	TestTrue(TEXT("Empty tag retains position/rotation"),E.Runner->Panel->GetComponentTransform().Equals(Pose,0.0001));
-	TestEqual(TEXT("Empty tag does not lock"),FP5zTestAccess::Lock(E.Runner),0.0); TestEqual(TEXT("No redundant placement record"),Records.Count(),2);
+	TestTrue(TEXT("Empty tag keeps step-start lock"),FMath::IsNearlyEqual(FP5zTestAccess::Lock(E.Runner),static_cast<double>(E.Runner->ConfirmLockSeconds))); TestEqual(TEXT("No redundant placement record"),Records.Count(),2);
 	return true;
 }
 
