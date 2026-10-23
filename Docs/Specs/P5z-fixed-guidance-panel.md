@@ -71,7 +71,10 @@
 | `vBoR.P5g.E3E4E5E6ParticipantSeats` | `:143-153` | 참가자 좌석 버튼 시험 → **자유모드에서 두 버튼이 숨고 눌러도 좌석이 안 바뀜**, 진행자 키 1·2·Home으로는 바뀜(지금 키 시험이 있으면 그대로) |
 | `vBoR.P5g.E7E8E10E13OperatorAndRestart` | `:164`, `:180` | 안내판 글 확인 → 자유모드 숨김. 버튼 확인 → 숨김 |
 | `vBoR.P5i.E18ReapplyRefusedAwayOrDuringFade` | `P5iOperatorPanelTests.cpp:347` | 안내판 글 확인을 안내문만으로 |
+| `vBoR.P5g.E9E11E12GuardsAndTracking` (개정 1, Q1) | `P5gFreeModeTests.cpp:199`, `:202` | `:199` 추적 전 숨김 확인은 그대로(설명만 "자유모드는 늘 숨김"에 맞춰도 됨). `:202` "Recovery places panel"·"Recovery shows seat buttons" → 추적 복구 뒤에도 안내판·두 버튼 **숨김**. End 거부·참가자 권한·End 1회 집계 단언은 그대로 |
+| `vBoR.P5o.E1E2SeatViewsFoundAtStart` (개정 1) | `P5iOperatorPanelTests.cpp:706`, `:713`, 도우미 `:47` | `:706` "Free seat buttons shown" → 자유모드에서 좌석 버튼 숨김. `:713` "need both seats"는 늘 숨김이라 뜻이 없어진다 — 지우거나 "숨김 유지"로 바꾼다. 좌석 시점 찾기 횟수·`EvaluateOperatorButton` 단언은 그대로. 도우미 `SeatButtonsShown`은 남겨도 되고 지워도 된다 |
 
+- **감사가 빠뜨린 것(개정 1):** 처음 스크립트는 안내판 글·자리·버튼 접근자·진행자 줄만 찾고 **숨김·표시 단언**(`IsHidden`, `bHiddenInGame`)을 찾지 않아 P5g E9(Codex Q1)와 P5o E1E2를 놓쳤다. 다시 감사한 범위: 모든 시험의 `IsHidden`·`bHiddenInGame`·`IsVisible` 단언 중 런너 안내판·버튼·이름표·진행자 줄·좌석을 보는 것 28곳. 위 두 줄 외에는 바뀌지 않는다 — 평가 중 버튼(`P3FlowTests.cpp:261`·`:460`·`:467`·`:524-529`·`:940`·`:946`), 머리 앞 모드 자리(`:605`·`:607`), 바닥 경로·정렬점(`:716`·`:743`·`:776`·`:778`, P4h `:257`·`:306`), 자유모드·암전·다시 불러오기 중 숨김(P5g `:137`·`:179`·`:221` — 늘 숨김이라 그대로 통과).
 - 이 표 밖의 시험이 바뀌면 고치지 말고 질문에 적고 멈춘다. 특히 머리 앞 모드 자리 시험(`R1ConfirmTimeLock`, `R1EventPanelRepositionAndOcclusion`의 안내판·버튼 부분, `P3b.E5E6ArrivalAndLock`, `P3b.E11ViewpointFacing`, P4d·P4e·P5i의 다시 놓기)은 바뀌면 안 된다.
 - 지운 단언은 보고 ③에 시험 이름과 함께 적는다.
 
@@ -117,3 +120,4 @@
 | 날짜 | 내용 |
 |---|---|
 | 2026-10-24 | 처음 작성 |
+| 2026-10-24 | 개정 1 — Codex Q1 답. §3 표에 P5g E9E11E12·P5o E1E2 추가(자유모드 버튼 표시 단언), 숨김·표시 단언 다시 감사 |
