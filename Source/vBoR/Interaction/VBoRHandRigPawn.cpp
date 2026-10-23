@@ -14,6 +14,7 @@
 #include "HandPoseDetection/IsdkHandPalmGrabRecognizer.h"
 #include "HandPoseDetection/IsdkHandFingerPinchGrabRecognizer.h"
 #include "StructTypesNonGenerated.h"
+#include "UObject/UnrealType.h"
 
 namespace
 {
@@ -29,6 +30,26 @@ namespace
 		// Grabber already exists in ISDK constructor. Keep distance grab blocked on reenable (U-03, P0-b R2-1)
 		Rig->GetGrabber()->SetGrabDetectionTypeAllowed(EIsdkGrabDetectorType::DistanceGrab, false);
 		Rig->GetGrabber()->SetGrabDetectionTypeAllowed(EIsdkGrabDetectorType::RayGrab, false);
+	}
+
+	void OwnGrabRecognizers(UIsdkHandRigComponent* Rig)
+	{
+		for (const TCHAR* Name : {TEXT("PalmGrabRecognizer"), TEXT("PinchGrabRecognizer")})
+		{
+			auto* Property = FindFProperty<FObjectPropertyBase>(Rig->GetClass(), Name);
+			UObject* Shared = Property->GetObjectPropertyValue_InContainer(Rig);
+			if (!Shared || (Shared->GetOuter() == Rig && !Shared->IsTemplate())) { continue; }
+			// Copy settings only; CDO may retain old visual/delegates/native state (P5y D1/D2)
+			UObject* Owned = NewObject<UObject>(Rig, Shared->GetClass());
+			for (TFieldIterator<FProperty> It(Shared->GetClass()); It; ++It)
+			{
+				if (It->HasAnyPropertyFlags(CPF_Edit) && !It->HasAnyPropertyFlags(CPF_EditConst))
+				{
+					It->CopyCompleteValue_InContainer(Owned, Shared);
+				}
+			}
+			Property->SetObjectPropertyValue_InContainer(Rig, Owned);
+		}
 	}
 }
 
@@ -91,6 +112,13 @@ AVBoRHandRigPawn::AVBoRHandRigPawn()
 	RightRig = CreateDefaultSubobject<UVBoRHandRigRight>(TEXT("RightHandRig"));
 	LeftRig->SetupAttachment(LeftMotion);
 	RightRig->SetupAttachment(RightMotion);
+}
+
+void AVBoRHandRigPawn::PreRegisterAllComponents()
+{
+	Super::PreRegisterAllComponents();
+	// Before SDK component init/BeginPlay; native instances keep their objects (P5y D2)
+	for (int32 Hand = 0; Hand < 2; ++Hand) { OwnGrabRecognizers(GetHandRig(Hand)); }
 }
 
 void AVBoRHandRigPawn::PreInitializeComponents()

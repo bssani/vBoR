@@ -36,6 +36,7 @@ class VBOR_API AVBoRHandRigPawn : public APawn
 	GENERATED_BODY()
 public:
 	AVBoRHandRigPawn();
+	virtual void PreRegisterAllComponents() override;
 	virtual void PreInitializeComponents() override;
 	UIsdkHandRigComponent* GetHandRig(int32 HandIndex) const;
 	bool ReadRawIndexTip(int32 HandIndex, FVector& OutWorldTip) const;
