@@ -69,6 +69,7 @@ bool FVBoRDoorMotion::ReleaseGrab(bool bTracked)
 		if (!bPaused) { ++Metrics.Pauses; }
 		bPaused = true; ++Metrics.IgnoredReleases; return false;
 	}
+	ReleasedCoastHand = bCoast && CoastSpeed != 0 ? GrabHand : INDEX_NONE;
 	GrabHand = GrabHandle = INDEX_NONE;
 	return true;
 }
@@ -181,6 +182,7 @@ void FVBoRDoorMotion::MoveTo(double Desired, double DeltaSeconds, bool bPushing)
 void FVBoRDoorMotion::ClearCoast()
 {
 	CoastSpeed = 0; // EMA has no separate history (P5za D3)
+	ReleasedCoastHand = INDEX_NONE;
 }
 
 void FVBoRDoorMotion::MeasureCoast(double BeforeAngle, double DeltaSeconds)
@@ -210,6 +212,7 @@ void FVBoRDoorMotion::AdvanceCoast(double DeltaSeconds)
 	if (CoastSpeed == 0) { return; } // End stop/latch already cleared speed (P5za D7)
 	const double Deceleration = FMath::Max(0.01, CoastDecelerationDegPerSecond2);
 	CoastSpeed = FMath::Sign(Speed) * FMath::Max(0.0, FMath::Abs(Speed) - Deceleration * DeltaSeconds);
+	if (CoastSpeed == 0) { ClearCoast(); }
 }
 
 void FVBoRDoorMotion::Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSeconds)
@@ -269,6 +272,12 @@ void FVBoRDoorMotion::Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSecon
 			{
 				if (bContactNear[H]) { RecordIgnore(H, bLocked ? EVBoRDoorIgnore::Locked : EVBoRDoorIgnore::TrackingLow); }
 				else { RecordIgnore(H, EVBoRDoorIgnore::Count); }
+				continue;
+			}
+			if (H == ReleasedCoastHand)
+			{
+				bContactNear[H] = false; ContactFace[H] = INDEX_NONE;
+				RecordIgnore(H, EVBoRDoorIgnore::Count);
 				continue;
 			}
 			if (PushHand != H && PushSide[H] != INDEX_NONE && HasLeftPushSide(Hands[H], PushSide[H])) { PushSide[H] = INDEX_NONE; }

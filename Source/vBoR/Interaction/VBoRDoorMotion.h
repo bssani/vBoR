@@ -54,6 +54,7 @@ private:
 	bool bContactNear[2] = {false, false};
 	int32 ContactFace[2] = {INDEX_NONE, INDEX_NONE};
 	int32 PushSide[2] = {INDEX_NONE, INDEX_NONE}; // Keep accepted face through withdrawal (P5w D1)
+	int32 ReleasedCoastHand = INDEX_NONE; // Released palm must not block its own coast (P5za R1-1)
 	EVBoRDoorIgnore LastIgnored[2] = {EVBoRDoorIgnore::Count, EVBoRDoorIgnore::Count};
 	double PreviousAngleDeg = 0;
 	FVector LastGrabPoint = FVector::ZeroVector;

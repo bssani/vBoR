@@ -379,4 +379,53 @@ bool FP5zaSettings::RunTest(const FString& Parameters)
 	World->DestroyWorld(false);
 	return true;
 }
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5zaHandleRelease, "vBoR.P5za.E20.HandleRelease", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FP5zaHandleRelease::RunTest(const FString& Parameters)
+{
+	for (double Direction : {1.0, -1.0})
+	{
+		for (double OffsetCm : {7.0, 9.0, 12.0})
+		{
+			const double Start = Direction > 0 ? 20 : 50;
+			auto Door = P5zaDoor(Start);
+			FVBoRDoorHand Hands[2] = {};
+			const FVector Point(80, Direction * OffsetCm, 50), Normal(0, -Direction, 0);
+			Hands[0] = P5zaHand(Start, Point, Normal);
+			TestTrue(TEXT("Handle grab accepted"), Door.BeginGrab(0, Direction > 0 ? 0 : 1, Hands[0]));
+			for (int32 Frame = 1; Frame <= 45; ++Frame)
+			{
+				Hands[0] = P5zaHand(Start + Direction * 60 * Frame * P5zaDt, Point, Normal);
+				Door.Advance(Hands, P5zaDt);
+			}
+			TestTrue(TEXT("Handle release accepted"), Door.ReleaseGrab(true));
+			const double Before = Door.AngleDeg;
+			P5zaWait(Door, Hands, 1);
+			TestTrue(FString::Printf(TEXT("Handle Y=%.0f cm direction=%.0f: coast %.4f deg"),
+				OffsetCm, Direction, Direction * (Door.AngleDeg - Before)),
+				FMath::Abs(Direction * (Door.AngleDeg - Before) - 10) <= 1.5);
+			const int32 OppositeFace = Direction > 0 ? 0 : 1;
+			TestEqual(TEXT("Released hand never starts opposite push"), Door.Metrics.PushStarts[0][OppositeFace], 0);
+			TestEqual(TEXT("Coast decelerated to rest"), Door.CoastSpeed, 0.0);
+			if (Direction > 0 && OffsetCm == 9)
+			{
+				const double Stopped = Door.AngleDeg;
+				Hands[0] = P5zaHand(Stopped, FVector(80, -8, 50)); Door.Advance(Hands, P5zaDt);
+				Hands[0] = P5zaHand(Stopped, FVector(80, -4, 50)); Door.Advance(Hands, P5zaDt);
+				TestEqual(TEXT("Same hand can push after coast ends"), Door.Metrics.PushStarts[0][1], 1);
+				TestTrue(TEXT("Same hand opens after coast ends"), Door.AngleDeg > Stopped);
+			}
+		}
+	}
+	// No momentum means no suppression (P5za R1-1)
+	auto Door = P5zaDoor(); FVBoRDoorHand Hands[2] = {};
+	Hands[0] = P5zaHand(20, FVector(80, -8, 50));
+	TestTrue(TEXT("Stationary grab accepted"), Door.BeginGrab(0, 1, Hands[0]));
+	Door.Advance(Hands, P5zaDt);
+	TestTrue(TEXT("Stationary release accepted"), Door.ReleaseGrab(true));
+	Hands[0] = P5zaHand(20, FVector(80, -4, 50)); Door.Advance(Hands, P5zaDt);
+	TestEqual(TEXT("Stationary release allows immediate push"), Door.Metrics.PushStarts[0][1], 1);
+	TestTrue(TEXT("Stationary release push moves door"), Door.AngleDeg > 20);
+	return true;
+}
 #endif
