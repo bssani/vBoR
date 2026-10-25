@@ -80,6 +80,7 @@ protected:
 	virtual void NotifyUnlocked();
 	virtual void NotifyLocked();
 	void SyncSettings();
+	virtual void SyncMotionSettings(FVBoRDoorMotion& State) const {}
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 	virtual bool ReadHand(int32 Hand, FVBoRDoorHand& Input);

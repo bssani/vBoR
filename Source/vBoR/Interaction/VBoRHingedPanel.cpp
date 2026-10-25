@@ -76,6 +76,7 @@ void AVBoRHingedPanel::SyncSettings()
 		Motion.QueryFace = [this](const FVector& Point, int32 Face, double& Y) { return QueryMeshFace(Point, Face, Y); };
 	}
 	else { Motion.QueryFace = nullptr; }
+	SyncMotionSettings(Motion);
 }
 
 void AVBoRHingedPanel::OnConstruction(const FTransform& Transform)
