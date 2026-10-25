@@ -31,6 +31,8 @@ struct FVBoRDoorMotion
 	double LatchAngleDeg = 2, RearmAngleDeg = 5;
 	double PalmLimitDeg = 60, MinAxisDistanceCm = 15, FrontToleranceCm = 0.5;
 	double AngleDeg = 0;
+	bool bCoast = false;
+	double CoastDecelerationDegPerSecond2 = 180, CoastSpeed = 0; // Approximate feel, deg/s^2 and deg/s (P5za)
 	bool bUseLatch = true; // Lock enabled for existing door, disabled for shared panel (P2c D2)
 	bool bAllowPalmOpening = true;
 	bool bLocked = true, bLatchArmed = false, bPaused = false;
@@ -52,6 +54,7 @@ private:
 	bool bContactNear[2] = {false, false};
 	int32 ContactFace[2] = {INDEX_NONE, INDEX_NONE};
 	int32 PushSide[2] = {INDEX_NONE, INDEX_NONE}; // Keep accepted face through withdrawal (P5w D1)
+	int32 ReleasedCoastHand = INDEX_NONE; // Released palm must not block its own coast (P5za R1-1)
 	EVBoRDoorIgnore LastIgnored[2] = {EVBoRDoorIgnore::Count, EVBoRDoorIgnore::Count};
 	double PreviousAngleDeg = 0;
 	FVector LastGrabPoint = FVector::ZeroVector;
@@ -61,4 +64,8 @@ private:
 	bool FindPush(int32 Hand, const FVBoRDoorHand& Input, int32 Face, double& OutAngle, EVBoRDoorIgnore& OutReason);
 	void RecordIgnore(int32 Hand, EVBoRDoorIgnore Reason);
 	void MoveTo(double Desired, double DeltaSeconds, bool bPushing);
+	void ClearCoast();
+	void MeasureCoast(double BeforeAngle, double DeltaSeconds);
+	double CoastDelta(double DeltaSeconds) const;
+	void AdvanceCoast(double DeltaSeconds);
 };
