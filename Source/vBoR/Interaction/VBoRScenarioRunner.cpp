@@ -34,6 +34,7 @@
 
 namespace
 {
+	constexpr double MarkerFloorLiftCm = 0.5; // Avoid floor z-fighting (P5zb D3, cm)
 	TAutoConsoleVariable<int32> CVarHomeShift(TEXT("vBoR.HomeShift"), 0,
 		TEXT("Home testing only: enable keypad 8/2/4/6 to shift by 1 m in car axes, 5 to reset."));
 	TAutoConsoleVariable<int32> CVarRouteIgnorePlayArea(TEXT("vBoR.RouteIgnorePlayArea"), 0,
@@ -423,6 +424,7 @@ void AVBoRScenarioRunner::Tick(float DeltaSeconds)
 	// Validate once after all Actor BeginPlay calls (independent of P3 placement order)
 	if (!bInitialized) { InitializeFlow(); }
 	ProcessFlow(DeltaSeconds);
+	UpdateMarker(); // Follow live floor-height edits (P5zb D2)
 }
 
 void AVBoRScenarioRunner::ProcessFlow(double DeltaSeconds)
@@ -752,10 +754,11 @@ void AVBoRScenarioRunner::UpdateMarker()
 	if (!Target) { return; }
 	FVector P = Target->GetComponentLocation();
 	MarkerArrow->SetWorldLocationAndRotation(P + FVector(0, 0, 160), FRotator(-90, 0, 0));
+	const double RingWorldZCm = (Alignment ? Alignment->FloorWorldZCm : 0.0f) + MarkerFloorLiftCm;
 	for (int32 I = 0; I < 4; ++I)
 	{
 		const bool bX = I < 2;
-		MarkerRing[I]->SetWorldLocation(FVector(P.X, P.Y, 0.5) + (bX ? FVector(0, I == 0 ? -30 : 30, 0) : FVector(I == 2 ? -30 : 30, 0, 0)));
+		MarkerRing[I]->SetWorldLocation(FVector(P.X, P.Y, RingWorldZCm) + (bX ? FVector(0, I == 0 ? -30 : 30, 0) : FVector(I == 2 ? -30 : 30, 0, 0)));
 		MarkerRing[I]->SetWorldRotation(FRotator::ZeroRotator);
 		MarkerRing[I]->SetWorldScale3D(bX ? FVector(0.62, 0.02, 0.005) : FVector(0.02, 0.62, 0.005));
 	}

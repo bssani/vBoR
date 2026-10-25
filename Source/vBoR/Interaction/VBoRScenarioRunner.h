@@ -93,6 +93,7 @@ private:
 	friend struct FP4eTestAccess;
 	friend struct FP5qTestAccess;
 	friend struct FP5zTestAccess;
+	friend struct FP5zbTestAccess;
 	TWeakObjectPtr<UVBoRVehiclePowerComponent> VehiclePower;
 	UPROPERTY() TObjectPtr<UVBoRVehicleAlignmentComponent> Alignment;
 	UPROPERTY() TObjectPtr<UVBoRApproachZoneComponent> Approach;
