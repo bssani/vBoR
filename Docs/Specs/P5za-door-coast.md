@@ -7,7 +7,7 @@
 | 베이스 브랜치 | `main` @ 이 명세 머지 뒤 |
 | 작업 브랜치 | `codex/P5za-door-coast` |
 | 리뷰 파일 | `Docs/Reviews/P5za-door-coast.md` (첫 리뷰 때 생김) |
-| 상태 | 개정 1 — 1회차 리뷰 R1-1 반영 대기 |
+| 상태 | 개정 1 — 구현 리뷰 통과(2회차) |
 | 에디터 작업 | **없음** (켜는 것은 사용자가 `BP_Door_FL`에서 직접) |
 | 앞 명세 | [P5z-fixed-guidance-panel.md](P5z-fixed-guidance-panel.md) |
 
