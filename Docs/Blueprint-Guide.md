@@ -46,10 +46,15 @@ L_Main
 ## 2. 시작 전에
 
 1. **좌표:** UE는 X 앞, Y 오른쪽, Z 위, cm다. CAD는 흔히 X가 뒤쪽이고 mm다. 가져올 때 축과 단위를 맞춘다(Company-PC-Guide §4 #1).
-2. **지면(타이어 바닥)은 월드 Z 0에 둔다. 앞뒤·좌우·Yaw는 CAD가 온 자리 그대로 둬도 된다.** 실물 차에 맞추는 건 4점 정렬이 Pawn을 옮겨서 한다(P4h).
-   - 4점 정렬은 정렬점 컴포넌트의 **월드 위치**를 쓴다(`Interaction/VBoRPointAlignment.cpp:50`). 그래서 차가 월드 원점에 있을 필요는 없다. 대신 `BP_Car_Core`(정렬점·눈 위치·시점)와 부품 BP, 바닥 경로, 키 테이블, 박스 받침을 모두 CAD 차에 맞춰 놓아야 한다.
-   - 근사 차와 자동화 시험은 모두 원점에 놓고 시험했다. 원점이 아닌 자리는 시험하지 않았다(§9에서 정렬 결과를 본다).
-   - 높이는 다르다. 정렬은 Pawn을 `FloorWorldZCm`(기본 0)에 둔다(U-17). 가장 안전한 방법은 CAD 전체를 Z로만 옮겨 지면을 0에 맞추는 것이다. 그럴 수 없으면 `FloorWorldZCm`에 지면 높이(cm)를 넣는다. 이때 경로·키 테이블·받침도 그 높이에 둬야 하고, 이 경우도 시험하지 않았다.
+2. **CAD는 온 자리 그대로 둔다 — CAD 원점 = 월드 원점(사용자 결정 2026-10-25).** CAD 정적 메시, 부품 BP, `BP_Car_Core`의 Actor는 모두 (0,0,0), 회전 0이다. 차 몸체가 원점에서 떨어져 보이는 것(예 (15, 30, 150))은 CAD 피벗이 차 중심이 아니라 CAD 좌표 원점이라서 그렇다. 옮기지 않는다.
+   - 그래서 `BP_Car_Core`의 정렬점·시점(SgRP)·앉음 구역과 부품 축 자리는 **CAD 좌표를 cm로 바꾼 값 그대로** 넣는다. 차 중심을 빼는 계산이 없다. 숫자 변환(축 방향·mm)이 헷갈리면 CAD 메시의 점에 버텍스 스냅(V)으로 붙인다.
+   - 부품 BP Actor가 (0,0,0)인지는 자동화 시험이 본다(`P3Probe/P4iCarBlueprintTests.cpp:297-304`). 차를 옮기면 실패한다.
+   - **Pawn은 직접 맞추지 않는다.** 4점 정렬이 정렬점 컴포넌트의 **월드 위치**(`Interaction/VBoRPointAlignment.cpp:50`)로 Pawn 자리를 구한다. 정렬 전(집 시험) PIE 시작 자리인 `PlayerStart`만 차 근처로 옮겨 둔다.
+   - **지면(타이어 바닥)은 Z 0이 아니다.** 회사 CAD는 타이어 바닥이 Z 0에 있지 않다(사용자 2026-10-25). 그래서:
+     - `BP_Car_Core` → `VBoR Vehicle Alignment` → **`FloorWorldZCm` = 지면의 월드 Z(cm)**. 정렬이 Pawn(실제 바닥)을 이 높이에 둔다(U-17, `Interaction/VBoRBuckAlignment.cpp:33`).
+     - **바닥에 놓는 것은 모두 그 높이에 둔다:** 레벨 바닥 메시, 바닥 경로 두 개(Actor Z와 Spline 점), 키 테이블 두 개(Actor Z = 바닥, 키가 테이블 Actor Z에 닿으면 돌아옴 `VBoRKeyFob.cpp:202`), 박스 받침(Actor Z = 박스 바닥 판정 높이 `VBoRBoxStand.cpp:61`), `Car.Start` 표시, `PlayerStart`.
+     - **알려진 문제 — 목표 표시 고리:** 단계 목표 아래 바닥 고리는 월드 Z 0.5 cm에 박혀 있다(`Interaction/VBoRScenarioRunner.cpp:758`). 지면이 0이 아니면 고리가 바닥 위에 뜨거나 밑에 묻힌다. 화살표(목표 +160 cm)는 괜찮다. 고칠 때까지 고리 위치는 무시한다(Claude가 명세로 고침).
+     - 지면이 0이 아닌 상태는 아직 시험하지 않았다(§9에서 정렬 높이 경고·박스 착지·키 복귀를 본다).
 3. **`Approx` 폴더를 먼저 통째로 지운다.** BP 메시를 바꾸기 전에 한다.
    - CAD 차체와 겹치기 때문이다.
    - 자동화 시험 `vBoR.P4i.E2`와 E4 일부는 `Approx`가 있을 때만 BP를 근사 차와 비교한다. 지우지 않고 BP를 바꾸면 그 시험이 실패한다(P4i R1-1).
@@ -65,7 +70,7 @@ L_Main
 
 | 컴포넌트(클래스) | 개수 | 태그 | 자리·값 | 쓰는 곳 | 근사 차 예 |
 |---|---|---|---|---|---|
-| `VBoR Vehicle Alignment` (`UVBoRVehicleAlignmentComponent`) | 1 | — | `bHeightFromFloor` 켬, `FloorWorldZCm` 0 | 정렬·좌석 전환 | `P3VehicleMock.cpp:52` |
+| `VBoR Vehicle Alignment` (`UVBoRVehicleAlignmentComponent`) | 1 | — | `bHeightFromFloor` 켬, **`FloorWorldZCm` = 지면 월드 Z**(근사 차는 0, 회사 CAD는 0 아님 — §2-2) | 정렬·좌석 전환 | `P3VehicleMock.cpp:52` |
 | `VBoR Align Point` (`UVBoRAlignPointComponent`) | 4 | — | 실물 좌석의 단단한 점 4개 CAD 자리. `Order` 1–4, `Label`(진행자 창에 보임, 예 `Front-left rail end`) | 4점 정렬(P4h, U-18) | `:40-46` |
 | `VBoR Viewpoint` (`UVBoRViewpointComponent`) | 3 | `Car.DriverView` / `Car.PassengerView` / `Car.RearView` | 운전석·동승석·2열 **SgRP** | 14·15 좌석 전환(SgRP 차이, P4h D6) | `:48-49`(근사 차는 눈 위치 — 아래 주의) |
 | `VBoR Seat Zone` (`UVBoRSeatZoneComponent`) | 1 | `Car.DriverSeat` | 앉은 머리가 들어오는 상자. 근사 차는 설계 눈 아래 7.5 cm 중심, 반크기 25×25×32.5 cm | 10번 "좌석에 앉아보세요"(1.5 s) | `:51`, `:89` |
