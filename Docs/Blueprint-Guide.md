@@ -46,10 +46,15 @@ L_Main
 ## 2. 시작 전에
 
 1. **좌표:** UE는 X 앞, Y 오른쪽, Z 위, cm다. CAD는 흔히 X가 뒤쪽이고 mm다. 가져올 때 축과 단위를 맞춘다(Company-PC-Guide §4 #1).
-2. **지면(타이어 바닥)은 월드 Z 0에 둔다. 앞뒤·좌우·Yaw는 CAD가 온 자리 그대로 둬도 된다.** 실물 차에 맞추는 건 4점 정렬이 Pawn을 옮겨서 한다(P4h).
-   - 4점 정렬은 정렬점 컴포넌트의 **월드 위치**를 쓴다(`Interaction/VBoRPointAlignment.cpp:50`). 그래서 차가 월드 원점에 있을 필요는 없다. 대신 `BP_Car_Core`(정렬점·눈 위치·시점)와 부품 BP, 바닥 경로, 키 테이블, 박스 받침을 모두 CAD 차에 맞춰 놓아야 한다.
-   - 근사 차와 자동화 시험은 모두 원점에 놓고 시험했다. 원점이 아닌 자리는 시험하지 않았다(§9에서 정렬 결과를 본다).
-   - 높이는 다르다. 정렬은 Pawn을 `FloorWorldZCm`(기본 0)에 둔다(U-17). 가장 안전한 방법은 CAD 전체를 Z로만 옮겨 지면을 0에 맞추는 것이다. 그럴 수 없으면 `FloorWorldZCm`에 지면 높이(cm)를 넣는다. 이때 경로·키 테이블·받침도 그 높이에 둬야 하고, 이 경우도 시험하지 않았다.
+2. **CAD는 온 자리 그대로 둔다 — CAD 원점 = 월드 원점(사용자 결정 2026-10-25).** CAD 정적 메시, 부품 BP, `BP_Car_Core`의 Actor는 모두 (0,0,0), 회전 0이다. 차 몸체가 원점에서 떨어져 보이는 것(예 (15, 30, 150))은 CAD 피벗이 차 중심이 아니라 CAD 좌표 원점이라서 그렇다. 옮기지 않는다.
+   - 그래서 `BP_Car_Core`의 정렬점·시점(SgRP)·앉음 구역과 부품 축 자리는 **CAD 좌표를 cm로 바꾼 값 그대로** 넣는다. 차 중심을 빼는 계산이 없다. 숫자 변환(축 방향·mm)이 헷갈리면 CAD 메시의 점에 버텍스 스냅(V)으로 붙인다.
+   - 부품 BP Actor가 (0,0,0)인지는 자동화 시험이 본다(`P3Probe/P4iCarBlueprintTests.cpp:297-304`). 차를 옮기면 실패한다.
+   - **Pawn은 직접 맞추지 않는다.** 4점 정렬이 정렬점 컴포넌트의 **월드 위치**(`Interaction/VBoRPointAlignment.cpp:50`)로 Pawn 자리를 구한다. 정렬 전(집 시험) PIE 시작 자리인 `PlayerStart`만 차 근처로 옮겨 둔다.
+   - **지면(타이어 바닥)은 Z 0이 아니다.** 회사 CAD는 타이어 바닥이 Z 0에 있지 않다(사용자 2026-10-25). 그래서:
+     - `BP_Car_Core` → `VBoR Vehicle Alignment` → **`FloorWorldZCm` = 지면의 월드 Z(cm)**. 정렬이 Pawn(실제 바닥)을 이 높이에 둔다(U-17, `Interaction/VBoRBuckAlignment.cpp:33`).
+     - **바닥에 놓는 것은 모두 그 높이에 둔다:** 레벨 바닥 메시, 바닥 경로 두 개(Actor Z와 Spline 점), 키 테이블 두 개(Actor Z = 바닥, 키가 테이블 Actor Z에 닿으면 돌아옴 `VBoRKeyFob.cpp:202`), 박스 받침(Actor Z = 박스 바닥 판정 높이 `VBoRBoxStand.cpp:61`), `Car.Start` 표시, `PlayerStart`.
+     - **알려진 문제 — 목표 표시 고리:** 단계 목표 아래 바닥 고리는 월드 Z 0.5 cm에 박혀 있다(`Interaction/VBoRScenarioRunner.cpp:758`). 지면이 0이 아니면 고리가 바닥 위에 뜨거나 밑에 묻힌다. 화살표(목표 +160 cm)는 괜찮다. 고칠 때까지 고리 위치는 무시한다(명세 [P5zb](Specs/P5zb-floor-marker-height.md)에서 고침).
+     - 지면이 0이 아닌 상태는 아직 시험하지 않았다(§9에서 정렬 높이 경고·박스 착지·키 복귀를 본다).
 3. **`Approx` 폴더를 먼저 통째로 지운다.** BP 메시를 바꾸기 전에 한다.
    - CAD 차체와 겹치기 때문이다.
    - 자동화 시험 `vBoR.P4i.E2`와 E4 일부는 `Approx`가 있을 때만 BP를 근사 차와 비교한다. 지우지 않고 BP를 바꾸면 그 시험이 실패한다(P4i R1-1).
@@ -65,7 +70,7 @@ L_Main
 
 | 컴포넌트(클래스) | 개수 | 태그 | 자리·값 | 쓰는 곳 | 근사 차 예 |
 |---|---|---|---|---|---|
-| `VBoR Vehicle Alignment` (`UVBoRVehicleAlignmentComponent`) | 1 | — | `bHeightFromFloor` 켬, `FloorWorldZCm` 0 | 정렬·좌석 전환 | `P3VehicleMock.cpp:52` |
+| `VBoR Vehicle Alignment` (`UVBoRVehicleAlignmentComponent`) | 1 | — | `bHeightFromFloor` 켬, **`FloorWorldZCm` = 지면 월드 Z**(근사 차는 0, 회사 CAD는 0 아님 — §2-2) | 정렬·좌석 전환 | `P3VehicleMock.cpp:52` |
 | `VBoR Align Point` (`UVBoRAlignPointComponent`) | 4 | — | 실물 좌석의 단단한 점 4개 CAD 자리. `Order` 1–4, `Label`(진행자 창에 보임, 예 `Front-left rail end`) | 4점 정렬(P4h, U-18) | `:40-46` |
 | `VBoR Viewpoint` (`UVBoRViewpointComponent`) | 3 | `Car.DriverView` / `Car.PassengerView` / `Car.RearView` | 운전석·동승석·2열 **SgRP** | 14·15 좌석 전환(SgRP 차이, P4h D6) | `:48-49`(근사 차는 눈 위치 — 아래 주의) |
 | `VBoR Seat Zone` (`UVBoRSeatZoneComponent`) | 1 | `Car.DriverSeat` | 앉은 머리가 들어오는 상자. 근사 차는 설계 눈 아래 7.5 cm 중심, 반크기 25×25×32.5 cm | 10번 "좌석에 앉아보세요"(1.5 s) | `:51`, `:89` |
@@ -101,7 +106,7 @@ L_Main
 
 | 부품(INT) | 부모 클래스 | 메시 / 축 | 꼭 넣을 값 | 태그·연결 | 근사 차 예 | 확인 |
 |---|---|---|---|---|---|---|
-| 운전석 문 — `BP_Door_FL` | `AVBoRHingedDoor` | `DoorMesh` / `HingePivot`(+Z가 경첩축) | `MaxAngleDeg`, `bUseLatch`, 미는 면 — 메시 표면(`bPushOnMeshSurface`, §4.3) 또는 미는 면 상자(`bUsePushFaceBox`) | `Car.DriverDoor` — 07·08·11·18·20단계 | `:141-163` | 자동화(P2e·P2g·P4i) |
+| 운전석 문 — `BP_Door_FL` | `AVBoRHingedDoor` | `DoorMesh` / `HingePivot`(+Z가 경첩축) | `MaxAngleDeg`, `bUseLatch`, 미는 면 — 메시 표면(`bPushOnMeshSurface`, §4.3) 또는 미는 면 상자(`bUsePushFaceBox`). 선택: **관성**(`Door → Coast`, 아래) | `Car.DriverDoor` — 07·08·11·18·20단계 | `:141-163` | 자동화(P2e·P2g·P4i·P5za) |
 | 문 손잡이 바깥·안쪽(001·002) — `BP_DoorHandle_FL_Ext`·`_Int` | `AVBoRAxisPart` | `PartMesh` / `AxisPivot` + `Axis`·`bReverse` | **`DoorHandleSide` = 바깥/안쪽**, `MaxAngleDeg`, `Release`, 메시로 잡기(`bGrabWithMesh`, §4.3) | 문 BP 밑에 붙인다(§6.1) | `:146-162` | 자동화(P2e·P2f·P4i) |
 | 콘솔박스(005) — `BP_ConsoleLid` + `BP_ConsoleHandle` | `AVBoRHingedPanel` + 손잡이 `AVBoRAxisPart` | 같음. 손잡이는 `PartMesh` / `AxisPivot` | `bUseLatch` 켬, `bAllowPalmOpening` 끔, `MaxAngleDeg` 100. 손잡이: `Movement` = Translate, `MaxTravelCm` 0.75, `Release` = Return, 손바닥 잡기만 | 손잡이는 문과 같은 방식(§6.1, 바깥). 잡고 끝까지 눌러야(0.6 cm, `OpenThreshold` 0.8) 풀린다(P5x) | `:165-184` | 자동화(P4i) |
 | 글러브박스(006) — `BP_Glovebox` + `BP_GloveboxHandle` | `AVBoRHingedPanel` + 손잡이 `AVBoRAxisPart` | 같음 | `bUseLatch` 켬, `bAllowPalmOpening` 끔, 손잡이 `Release` = Return | 손잡이는 문과 같은 방식(§6.1, 바깥) | `:186-203` | 자동화(P4i) |
@@ -149,6 +154,13 @@ L_Main
   - **높이를 크게 바꾸면 `LevelLiftMaxCm`도 본다.** 놓을 때 박스를 세우면서 위로 올릴 수 있는 한도다(P1c D2). 기본 15 cm는 기본 높이 30 cm의 절반으로 잡은 값이다.
   - 적재 영역(`AVBoRLoadTarget`)은 박스 크기를 따르지 않는다. 트렁크 안 공간 크기로 따로 둔다(§5).
   - `Approx`가 있는 집 PC에서 `BP_Box` 값을 바꾸면 `vBoR.P5t.E6`이 실패한다(§4.4 마지막 문단과 같은 이유).
+
+**문 관성 — `Door → Coast`(P5za, 자동화로만 확인).** `BP_Door_FL`에만 있다(콘솔 뚜껑·글러브박스에는 없음).
+- **`Coast after release`**: 켜면 손바닥으로 밀다 손을 멈추거나 떼었을 때, 손잡이를 잡았다 놓았을 때 문이 그 속도로 조금 더 가다 선다. **기본은 꺼짐**이고, 끄면 예전과 똑같다.
+- **`Coast deceleration (deg/s^2)`**: 클수록 빨리 선다. 60 deg/s로 놓을 때 더 가는 거리: 90 → 약 20°, **180(기본) → 약 10°**, 360 → 약 5°. 임시 값이다 — Quest 3에서 맞춘다.
+- PIE 중 디테일 패널에서 바꿔도 바로 적용된다. 마음에 드는 값은 PIE를 끝낸 뒤 BP에 다시 넣는다.
+- 관성이 안 생기는 때: 미는 손의 추적이 끊김(그 자리에 섬), 끝 각도·닫힌 자리, 다른 손으로 막거나 손잡이를 다시 잡음. 닫히는 쪽으로 가다 래치 각도에 닿으면 잠긴다.
+- 근사 조작감이다. 실차 문의 조작력 평가로 쓰지 않는다. 평가 단계에서 켤지는 Quest 3 확인 뒤 정한다(켜면 `DoorOpened` 판정 단계가 관성으로 채워질 수 있음).
 
 ### 4.3 메시로 잡기·밀기 — 선택(P2f·P2g, 자동화로만 확인)
 
@@ -375,6 +387,7 @@ L_Main
    - **박스를 트렁크에 놓아 바닥에 착지하는지** 본다. `Approx`의 근사 트렁크를 지운 뒤에는 CAD 트렁크 충돌이 받친다(§2-3).
    - **`BP_Box` 메시를 바꿨다면:** 박스가 받침 위에 뜨거나 묻히지 않는지, 잡혀서 움직이는지 본다. Output Log에 피벗·simple collision 경고가 없어야 한다(§4.2 아래).
    - 메시로 잡는 부품은 hover가 메시에 닿을 때만 켜지는지 본다. 얇은 손잡이가 잡히는지, 가까운 부품끼리 맞게 골라지는지도 본다. 콘솔 변수 `Meta.InteractionSDK.DebugInteractionVisuals 1`은 잡는 충돌의 bounds 상자를 그린다. 메시 충돌 모양은 뷰포트 Show → Collision으로 본다.
+   - **문 관성을 켰다면(§4.2 아래):** 안쪽에서 툭 밀기, 바깥 손잡이로 당겨 열고 손을 그 자리에 둔 채 놓기, 바깥에서 툭 밀어 닫기(잠기는지), 밀다가 손을 시야 밖으로 빼기(서는지)를 본다. 감속값을 맞춘다.
    - 메시 표면으로 미는 문은 바깥 면과 안쪽 트림을 밀어 본다. 보이는 면에 닿을 때 밀리기 시작하는지, 돌출부와 창문 자리에서 어떻게 되는지 본다.
    - **선바이저:** 잡아 내리고 놓은 자리에 남는지 본다. 앞·뒤 면을 밀어 보고, 잡으려다 밀려 버리지 않는지 본다.
    - **시동 버튼·미러:** 누르면 두 미러가 펼쳐지고 다시 누르면 접히는지 본다. 운전석 문을 연 채로도 해 본다. 진행자 `E`와 `R`도 본다(§6.5). 미러가 접히며 차체·창문과 겹치지 않는지 본다.
