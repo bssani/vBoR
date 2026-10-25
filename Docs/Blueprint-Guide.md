@@ -53,7 +53,7 @@ L_Main
    - **지면(타이어 바닥)은 Z 0이 아니다.** 회사 CAD는 타이어 바닥이 Z 0에 있지 않다(사용자 2026-10-25). 그래서:
      - `BP_Car_Core` → `VBoR Vehicle Alignment` → **`FloorWorldZCm` = 지면의 월드 Z(cm)**. 정렬이 Pawn(실제 바닥)을 이 높이에 둔다(U-17, `Interaction/VBoRBuckAlignment.cpp:33`).
      - **바닥에 놓는 것은 모두 그 높이에 둔다:** 레벨 바닥 메시, 바닥 경로 두 개(Actor Z와 Spline 점), 키 테이블 두 개(Actor Z = 바닥, 키가 테이블 Actor Z에 닿으면 돌아옴 `VBoRKeyFob.cpp:202`), 박스 받침(Actor Z = 박스 바닥 판정 높이 `VBoRBoxStand.cpp:61`), `Car.Start` 표시, `PlayerStart`.
-     - **알려진 문제 — 목표 표시 고리:** 단계 목표 아래 바닥 고리는 월드 Z 0.5 cm에 박혀 있다(`Interaction/VBoRScenarioRunner.cpp:758`). 지면이 0이 아니면 고리가 바닥 위에 뜨거나 밑에 묻힌다. 화살표(목표 +160 cm)는 괜찮다. 고칠 때까지 고리 위치는 무시한다(Claude가 명세로 고침).
+     - **알려진 문제 — 목표 표시 고리:** 단계 목표 아래 바닥 고리는 월드 Z 0.5 cm에 박혀 있다(`Interaction/VBoRScenarioRunner.cpp:758`). 지면이 0이 아니면 고리가 바닥 위에 뜨거나 밑에 묻힌다. 화살표(목표 +160 cm)는 괜찮다. 고칠 때까지 고리 위치는 무시한다(명세 [P5zb](Specs/P5zb-floor-marker-height.md)에서 고침).
      - 지면이 0이 아닌 상태는 아직 시험하지 않았다(§9에서 정렬 높이 경고·박스 착지·키 복귀를 본다).
 3. **`Approx` 폴더를 먼저 통째로 지운다.** BP 메시를 바꾸기 전에 한다.
    - CAD 차체와 겹치기 때문이다.
