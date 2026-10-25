@@ -101,7 +101,7 @@ L_Main
 
 | 부품(INT) | 부모 클래스 | 메시 / 축 | 꼭 넣을 값 | 태그·연결 | 근사 차 예 | 확인 |
 |---|---|---|---|---|---|---|
-| 운전석 문 — `BP_Door_FL` | `AVBoRHingedDoor` | `DoorMesh` / `HingePivot`(+Z가 경첩축) | `MaxAngleDeg`, `bUseLatch`, 미는 면 — 메시 표면(`bPushOnMeshSurface`, §4.3) 또는 미는 면 상자(`bUsePushFaceBox`) | `Car.DriverDoor` — 07·08·11·18·20단계 | `:141-163` | 자동화(P2e·P2g·P4i) |
+| 운전석 문 — `BP_Door_FL` | `AVBoRHingedDoor` | `DoorMesh` / `HingePivot`(+Z가 경첩축) | `MaxAngleDeg`, `bUseLatch`, 미는 면 — 메시 표면(`bPushOnMeshSurface`, §4.3) 또는 미는 면 상자(`bUsePushFaceBox`). 선택: **관성**(`Door → Coast`, 아래) | `Car.DriverDoor` — 07·08·11·18·20단계 | `:141-163` | 자동화(P2e·P2g·P4i·P5za) |
 | 문 손잡이 바깥·안쪽(001·002) — `BP_DoorHandle_FL_Ext`·`_Int` | `AVBoRAxisPart` | `PartMesh` / `AxisPivot` + `Axis`·`bReverse` | **`DoorHandleSide` = 바깥/안쪽**, `MaxAngleDeg`, `Release`, 메시로 잡기(`bGrabWithMesh`, §4.3) | 문 BP 밑에 붙인다(§6.1) | `:146-162` | 자동화(P2e·P2f·P4i) |
 | 콘솔박스(005) — `BP_ConsoleLid` + `BP_ConsoleHandle` | `AVBoRHingedPanel` + 손잡이 `AVBoRAxisPart` | 같음. 손잡이는 `PartMesh` / `AxisPivot` | `bUseLatch` 켬, `bAllowPalmOpening` 끔, `MaxAngleDeg` 100. 손잡이: `Movement` = Translate, `MaxTravelCm` 0.75, `Release` = Return, 손바닥 잡기만 | 손잡이는 문과 같은 방식(§6.1, 바깥). 잡고 끝까지 눌러야(0.6 cm, `OpenThreshold` 0.8) 풀린다(P5x) | `:165-184` | 자동화(P4i) |
 | 글러브박스(006) — `BP_Glovebox` + `BP_GloveboxHandle` | `AVBoRHingedPanel` + 손잡이 `AVBoRAxisPart` | 같음 | `bUseLatch` 켬, `bAllowPalmOpening` 끔, 손잡이 `Release` = Return | 손잡이는 문과 같은 방식(§6.1, 바깥) | `:186-203` | 자동화(P4i) |
@@ -149,6 +149,13 @@ L_Main
   - **높이를 크게 바꾸면 `LevelLiftMaxCm`도 본다.** 놓을 때 박스를 세우면서 위로 올릴 수 있는 한도다(P1c D2). 기본 15 cm는 기본 높이 30 cm의 절반으로 잡은 값이다.
   - 적재 영역(`AVBoRLoadTarget`)은 박스 크기를 따르지 않는다. 트렁크 안 공간 크기로 따로 둔다(§5).
   - `Approx`가 있는 집 PC에서 `BP_Box` 값을 바꾸면 `vBoR.P5t.E6`이 실패한다(§4.4 마지막 문단과 같은 이유).
+
+**문 관성 — `Door → Coast`(P5za, 자동화로만 확인).** `BP_Door_FL`에만 있다(콘솔 뚜껑·글러브박스에는 없음).
+- **`Coast after release`**: 켜면 손바닥으로 밀다 손을 멈추거나 떼었을 때, 손잡이를 잡았다 놓았을 때 문이 그 속도로 조금 더 가다 선다. **기본은 꺼짐**이고, 끄면 예전과 똑같다.
+- **`Coast deceleration (deg/s^2)`**: 클수록 빨리 선다. 60 deg/s로 놓을 때 더 가는 거리: 90 → 약 20°, **180(기본) → 약 10°**, 360 → 약 5°. 임시 값이다 — Quest 3에서 맞춘다.
+- PIE 중 디테일 패널에서 바꿔도 바로 적용된다. 마음에 드는 값은 PIE를 끝낸 뒤 BP에 다시 넣는다.
+- 관성이 안 생기는 때: 미는 손의 추적이 끊김(그 자리에 섬), 끝 각도·닫힌 자리, 다른 손으로 막거나 손잡이를 다시 잡음. 닫히는 쪽으로 가다 래치 각도에 닿으면 잠긴다.
+- 근사 조작감이다. 실차 문의 조작력 평가로 쓰지 않는다. 평가 단계에서 켤지는 Quest 3 확인 뒤 정한다(켜면 `DoorOpened` 판정 단계가 관성으로 채워질 수 있음).
 
 ### 4.3 메시로 잡기·밀기 — 선택(P2f·P2g, 자동화로만 확인)
 
@@ -375,6 +382,7 @@ L_Main
    - **박스를 트렁크에 놓아 바닥에 착지하는지** 본다. `Approx`의 근사 트렁크를 지운 뒤에는 CAD 트렁크 충돌이 받친다(§2-3).
    - **`BP_Box` 메시를 바꿨다면:** 박스가 받침 위에 뜨거나 묻히지 않는지, 잡혀서 움직이는지 본다. Output Log에 피벗·simple collision 경고가 없어야 한다(§4.2 아래).
    - 메시로 잡는 부품은 hover가 메시에 닿을 때만 켜지는지 본다. 얇은 손잡이가 잡히는지, 가까운 부품끼리 맞게 골라지는지도 본다. 콘솔 변수 `Meta.InteractionSDK.DebugInteractionVisuals 1`은 잡는 충돌의 bounds 상자를 그린다. 메시 충돌 모양은 뷰포트 Show → Collision으로 본다.
+   - **문 관성을 켰다면(§4.2 아래):** 안쪽에서 툭 밀기, 바깥 손잡이로 당겨 열고 손을 그 자리에 둔 채 놓기, 바깥에서 툭 밀어 닫기(잠기는지), 밀다가 손을 시야 밖으로 빼기(서는지)를 본다. 감속값을 맞춘다.
    - 메시 표면으로 미는 문은 바깥 면과 안쪽 트림을 밀어 본다. 보이는 면에 닿을 때 밀리기 시작하는지, 돌출부와 창문 자리에서 어떻게 되는지 본다.
    - **선바이저:** 잡아 내리고 놓은 자리에 남는지 본다. 앞·뒤 면을 밀어 보고, 잡으려다 밀려 버리지 않는지 본다.
    - **시동 버튼·미러:** 누르면 두 미러가 펼쳐지고 다시 누르면 접히는지 본다. 운전석 문을 연 채로도 해 본다. 진행자 `E`와 `R`도 본다(§6.5). 미러가 접히며 차체·창문과 겹치지 않는지 본다.
