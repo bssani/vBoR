@@ -75,20 +75,29 @@ void AVBoRKeyFob::PreInitializeComponents()
 	Super::PreInitializeComponents();
 }
 
-AVBoRPokeButton* AVBoRKeyFob::CreateButton(FVector OffsetCm, FLinearColor Color)
+AVBoRPokeButton* AVBoRKeyFob::CreateButton(FVector OffsetCm, FLinearColor Color, TSubclassOf<AVBoRPokeButton> ButtonClass, const TCHAR* Slot)
 {
+	if (ButtonClass && ButtonClass->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated | CLASS_NewerVersionExists))
+	{
+		UE_LOG(LogKeyFob, Warning, TEXT("%s %s: unusable button class %s; using default cube button"), *GetName(), Slot, *ButtonClass->GetName());
+		ButtonClass = nullptr;
+	}
 	// Attach at world size (root mesh scale must not alter button cm size/spacing, P4a D3)
 	const FTransform Frame(GetActorQuat(), GetActorLocation());
 	const FTransform ButtonWorld(GetActorQuat(), Frame.TransformPosition(OffsetCm));
-	AVBoRPokeButton* Button = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), ButtonWorld, this);
-	Button->ButtonMesh->SetRelativeScale3D(ButtonSizeCm.ComponentMax(FVector(0.1)) / 100);
-	Button->PressDepthMm = 1;
+	AVBoRPokeButton* Button = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(ButtonClass ? ButtonClass.Get() : AVBoRPokeButton::StaticClass(), ButtonWorld, this);
+	if (!ButtonClass)
+	{
+		Button->ButtonMesh->SetRelativeScale3D(ButtonSizeCm.ComponentMax(FVector(0.1)) / 100);
+		Button->PressDepthMm = 1;
+	}
 	Button->PressFilter.BindUObject(this, &AVBoRKeyFob::CanPress);
 	Button->PressedCue = ButtonPressedCue; Button->ReleasedCue = ButtonReleasedCue;
 	Button->FinishSpawning(ButtonWorld);
+	Button->SpectatorName = FText::GetEmpty();
 	Button->Poke->Deactivate();
 	Button->AttachToComponent(KeyMesh, FAttachmentTransformRules::KeepWorldTransform);
-	UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, IsdkContentAssetPaths::Materials::GrabbableDefault);
+	UMaterialInterface* Material = !ButtonClass ? LoadObject<UMaterialInterface>(nullptr, IsdkContentAssetPaths::Materials::GrabbableDefault) : nullptr;
 	if (Material)
 	{
 		UMaterialInstanceDynamic* ColorMaterial = UMaterialInstanceDynamic::Create(Material, Button);
@@ -100,8 +109,8 @@ AVBoRPokeButton* AVBoRKeyFob::CreateButton(FVector OffsetCm, FLinearColor Color)
 void AVBoRKeyFob::BeginPlay()
 {
 	Super::BeginPlay();
-	UnlockButton = CreateButton(UnlockButtonCm, FLinearColor(0.1,0.7,0.2,1));
-	LockButton = CreateButton(LockButtonCm, FLinearColor(0.8,0.15,0.1,1));
+	UnlockButton = CreateButton(UnlockButtonCm, FLinearColor(0.1,0.7,0.2,1), UnlockButtonClass, TEXT("UnlockButtonClass"));
+	LockButton = CreateButton(LockButtonCm, FLinearColor(0.8,0.15,0.1,1), LockButtonClass, TEXT("LockButtonClass"));
 	UnlockButton->OnButtonPressed.AddDynamic(this, &AVBoRKeyFob::UnlockPressed);
 	LockButton->OnButtonPressed.AddDynamic(this, &AVBoRKeyFob::LockPressed);
 	UE_LOG(LogKeyFob, Log, TEXT("%s approximate key size=%s cm"), *GetName(), *KeySizeCm.ToCompactString());

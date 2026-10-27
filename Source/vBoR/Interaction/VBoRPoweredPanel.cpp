@@ -61,14 +61,20 @@ void AVBoRPoweredPanel::OnConstruction(const FTransform& Transform)
 	ApplyAngle();
 }
 
-AVBoRPokeButton* AVBoRPoweredPanel::CreateButton(const FTransform& Relative)
+AVBoRPokeButton* AVBoRPoweredPanel::CreateButton(const FTransform& Relative, TSubclassOf<AVBoRPokeButton> ButtonClass, const TCHAR* Slot)
 {
+	if (ButtonClass && ButtonClass->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated | CLASS_NewerVersionExists))
+	{
+		UE_LOG(LogPoweredPanel, Warning, TEXT("%s %s: unusable button class %s; using default cube button"), *GetName(), Slot, *ButtonClass->GetName());
+		ButtonClass = nullptr;
+	}
 	const FTransform Pose = Relative * HingePivot->GetComponentTransform();
-	AVBoRPokeButton* Button = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), Pose, this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
+	AVBoRPokeButton* Button = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(ButtonClass ? ButtonClass.Get() : AVBoRPokeButton::StaticClass(), Pose, this, nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 	if (!Button) { return nullptr; }
-	Button->ButtonMesh->SetRelativeScale3D(ButtonSizeCm.ComponentMax(FVector(0.1)) / 100.0);
+	if (!ButtonClass) { Button->ButtonMesh->SetRelativeScale3D(ButtonSizeCm.ComponentMax(FVector(0.1)) / 100.0); }
 	Button->PressedCue = ButtonPressedCue; Button->ReleasedCue = ButtonReleasedCue;
 	Button->FinishSpawning(Pose);
+	Button->SpectatorName = FText::GetEmpty();
 	Button->AttachToComponent(HingePivot, FAttachmentTransformRules::KeepWorldTransform);
 	return Button;
 }
@@ -77,8 +83,8 @@ void AVBoRPoweredPanel::BeginPlay()
 {
 	Super::BeginPlay();
 	ResetPanel();
-	OpenButton = CreateButton(OpenButtonFromHinge);
-	CloseButton = CreateButton(CloseButtonFromHinge);
+	OpenButton = CreateButton(OpenButtonFromHinge, OpenButtonClass, TEXT("OpenButtonClass"));
+	CloseButton = CreateButton(CloseButtonFromHinge, CloseButtonClass, TEXT("CloseButtonClass"));
 	if (OpenButton) { OpenButton->OnButtonPressed.AddDynamic(this, &AVBoRPoweredPanel::OpenPressed); }
 	if (CloseButton) { CloseButton->OnButtonPressed.AddDynamic(this, &AVBoRPoweredPanel::ClosePressed); }
 	if (APlayerController* Controller = UGameplayStatics::GetPlayerController(this, 0))
