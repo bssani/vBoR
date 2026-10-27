@@ -58,6 +58,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Key") TObjectPtr<UIsdkGrabFreeTransformer> FreeTransformer;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Key") TObjectPtr<AVBoRPokeButton> UnlockButton;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Key") TObjectPtr<AVBoRPokeButton> LockButton;
+	// Button Actor origin = face center, +Z outward (P5zc D6)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Key", meta=(DisplayName="Unlock button class", ToolTip="Empty = default cube button. Set = this BP's mesh/size/material/press depth kept.")) TSubclassOf<AVBoRPokeButton> UnlockButtonClass;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Key", meta=(DisplayName="Lock button class", ToolTip="Empty = default cube button. Set = this BP's mesh/size/material/press depth kept.")) TSubclassOf<AVBoRPokeButton> LockButtonClass;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Approximation", meta=(Units="cm", ClampMin="0.1")) FVector KeySizeCm = FVector(6,3,1.5);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Approximation", meta=(Units="cm")) FVector UnlockButtonCm = FVector(1.5,0,0.95);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Approximation", meta=(Units="cm")) FVector LockButtonCm = FVector(-1.5,0,0.95);
@@ -82,7 +85,7 @@ private:
 	void RecordTrackingFrame();
 	void AfterPointer(const FIsdkInteractionPointerEvent& Event);
 	bool CanPress(const FIsdkInteractionPointerEvent& Event) const;
-	AVBoRPokeButton* CreateButton(FVector OffsetCm, FLinearColor Color);
+	AVBoRPokeButton* CreateButton(FVector OffsetCm, FLinearColor Color, TSubclassOf<AVBoRPokeButton> ButtonClass, const TCHAR* Slot);
 	void ClearVelocity();
 	UFUNCTION() void UnlockPressed(const FIsdkInteractionPointerEvent& Event);
 	UFUNCTION() void LockPressed(const FIsdkInteractionPointerEvent& Event);

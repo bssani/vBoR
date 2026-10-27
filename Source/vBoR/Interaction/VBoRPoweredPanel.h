@@ -90,6 +90,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Sound", meta = (ToolTip = "Starts in the OnOpened arrival frame.")) FVBoRSoundCue OpenedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Sound", meta = (ToolTip = "Starts in the OnClosed arrival frame.")) FVBoRSoundCue ClosedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Sound", meta = (ToolTip = "Starts in the OnObstructed detection frame.")) FVBoRSoundCue ObstructedCue;
+	// Button Actor origin = face center, +Z outward (P5zc D6)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Buttons", meta = (DisplayName = "Open button class", ToolTip = "Empty = default cube button. Set = this BP's mesh/size/material/press depth kept.")) TSubclassOf<AVBoRPokeButton> OpenButtonClass;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Buttons", meta = (DisplayName = "Close button class", ToolTip = "Empty = default cube button. Set = this BP's mesh/size/material/press depth kept.")) TSubclassOf<AVBoRPokeButton> CloseButtonClass;
 	// Gate-axis cm/deg. Button top +Z faces user -X (P4b D6)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Buttons") FTransform OpenButtonFromHinge = FTransform(FRotator(90, 0, 0), FVector(-6, 20, -60));
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Buttons") FTransform CloseButtonFromHinge = FTransform(FRotator(90, 0, 0), FVector(-6, -20, -60));
@@ -124,7 +127,7 @@ private:
 	void StopHeldSounds();
 	FTransform MeshPoseAt(float Angle) const;
 	AVBoRCarryObject* FindObstruction(float FromAngle, float ToAngle) const;
-	AVBoRPokeButton* CreateButton(const FTransform& Relative);
+	AVBoRPokeButton* CreateButton(const FTransform& Relative, TSubclassOf<AVBoRPokeButton> ButtonClass, const TCHAR* Slot);
 	UFUNCTION() void OpenPressed(const FIsdkInteractionPointerEvent& Event);
 	UFUNCTION() void ClosePressed(const FIsdkInteractionPointerEvent& Event);
 };
