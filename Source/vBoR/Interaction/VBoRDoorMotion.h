@@ -18,6 +18,7 @@ struct FVBoRDoorMetrics
 	int32 PushStarts[2][2] = {}; // Hand, face (0 outside / 1 inside)
 	int32 Ignored[static_cast<int32>(EVBoRDoorIgnore::Count)] = {};
 	int32 Attempts[2][2] = {}, Grabs[2][2] = {}; // Hand, handle
+	int32 GripGrabs[2] = {}; // Separate from unlock levers (P5ze D7)
 	int32 RateLimitedFrames = 0, Pauses = 0, IgnoredReleases = 0, PushTrackingLosses = 0;
 	double PushedDeg = 0, HeldSeconds = 0, PausedSeconds = 0, RecoveryDistanceCm = 0;
 	FVBoRDoorMetrics Since(const FVBoRDoorMetrics& Before) const;
@@ -42,7 +43,7 @@ struct FVBoRDoorMotion
 	FVBoRDoorMetrics Metrics;
 	// Door-space point/face → face Y (cm). Empty query keeps existing plane (P2g D5)
 	TFunction<bool(const FVector&, int32, double&)> QueryFace;
-	bool BeginGrab(int32 Hand, int32 Handle, const FVBoRDoorHand& Input);
+	bool BeginGrab(int32 Hand, int32 Handle, const FVBoRDoorHand& Input, bool bUnlockLatch = true);
 	bool Unlock(int32 Handle = INDEX_NONE);
 	bool ReleaseGrab(bool bTracked);
 	void Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSeconds);

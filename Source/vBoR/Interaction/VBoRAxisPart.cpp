@@ -113,7 +113,7 @@ FTransform UVBoRAxisTransformer::UpdateTransform(const TArray<FIsdkGrabPose>& Po
 FTransform UVBoRAxisTransformer::UpdateTracked(const TArray<FIsdkGrabPose>& Poses, const FIsdkTargetTransform& Target, bool bTracked)
 {
 	AVBoRAxisPart* Part = GetTypedOuter<AVBoRAxisPart>();
-	if (!bActive || Poses.IsEmpty() || Part->bDoorHold) { return Part->AxisPivot->GetRelativeTransform(); }
+	if (!bActive || Poses.IsEmpty() || Part->bDoorHold || Part->IsDoorGrip()) { return Part->AxisPivot->GetRelativeTransform(); }
 	if (!bTracked)
 	{
 		if (!Part->bPaused) { ++Part->Pauses; }
@@ -190,7 +190,7 @@ void AVBoRAxisPart::OnConstruction(const FTransform& Transform)
 void AVBoRAxisPart::PreInitializeComponents()
 {
 	RestPivot = AxisPivot->GetRelativeTransform();
-	if (Release == EVBoRAxisRelease::Detent)
+	if (!IsDoorGrip() && Release == EVBoRAxisRelease::Detent)
 	{
 		const FString Problem = DetentProblem(); bDetentValid = Problem.IsEmpty();
 		if (!bDetentValid)
@@ -202,6 +202,7 @@ void AVBoRAxisPart::PreInitializeComponents()
 		PartMesh->GetStaticMesh() != nullptr && bDetentValid, MeshRestFromRoot));
 	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, bAllowPalmGrab && PartMesh->GetStaticMesh() != nullptr && bDetentValid);
 	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch, bAllowPinchGrab && PartMesh->GetStaticMesh() != nullptr && bDetentValid);
+	RefreshGripInput();
 	ConfigurePush();
 	GrabComponent->Configure();
 	GrabComponent->SetTransformTarget(AxisPivot);
@@ -212,7 +213,7 @@ void AVBoRAxisPart::PreInitializeComponents()
 void AVBoRAxisPart::BeginPlay()
 {
 	Super::BeginPlay();
-	if (Release == EVBoRAxisRelease::Detent)
+	if (!IsDoorGrip() && Release == EVBoRAxisRelease::Detent)
 	{
 		// Set start angle after RestPivot (avoid construction accumulation, P5b D7)
 		DetentIndex = DetentAnglesDeg.IsValidIndex(DetentStartIndex) ? DetentStartIndex : INDEX_NONE;
@@ -293,6 +294,7 @@ FTransform AVBoRAxisPart::ValueTransform() const
 }
 void AVBoRAxisPart::AcceptTransform(const FTransform& Transform)
 {
+	if (IsDoorGrip()) { return; } // Fixed on panel, no local travel (P5ze D6)
 	if (Transform.ContainsNaN()) { return; }
 	const double Raw = Movement == EVBoRAxisMovement::Translate ? FVector::DotProduct(Transform.GetLocation(), LocalAxis()) :
 		FMath::RadiansToDegrees(2 * FMath::Atan2(FVector::DotProduct(FVector(Transform.GetRotation().X, Transform.GetRotation().Y, Transform.GetRotation().Z), LocalAxis()), Transform.GetRotation().W));
@@ -355,7 +357,7 @@ void AVBoRAxisPart::ReadPushHands(FVBoRDoorHand (&Hands)[2]) const
 
 void AVBoRAxisPart::ConfigurePush()
 {
-	bPushEnabled = bAllowPush && bDetentValid && PartMesh->GetStaticMesh() && Movement == EVBoRAxisMovement::Rotate;
+	bPushEnabled = !IsDoorGrip() && bAllowPush && bDetentValid && PartMesh->GetStaticMesh() && Movement == EVBoRAxisMovement::Rotate;
 	if (bAllowPush && Movement != EVBoRAxisMovement::Rotate)
 	{ UE_LOG(LogAxisPart,Warning,TEXT("%s: Push requires Rotate; push disabled"),*GetName()); }
 	if (!bPushEnabled) { ClearPush(); return; }
@@ -460,6 +462,12 @@ void AVBoRAxisPart::HandlePointer(const FIsdkInteractionPointerEvent& Event)
 	EIsdkHandedness Handedness;
 	if (!Grabber || !UIsdkFunctionLibrary::GetHandednessFromInteractor(Grabber, Handedness)) { return; }
 	const int32 Hand = Handedness == EIsdkHandedness::Left ? 0 : 1;
+	if (IsDoorGrip() && (!LinkedDoor || (LinkedDoor->GetMotion().bUseLatch && LinkedDoor->GetMotion().bLocked)))
+	{
+		Hovering.Reset();
+		if (Event.Type == EIsdkPointerEventType::Select) { bCancelPending = true; }
+		return;
+	}
 	if (Event.Type == EIsdkPointerEventType::Hover) { if (!Hovering.Contains(Grabber)) { Hovering.Add(Grabber); ++Attempts; } }
 	else if (Event.Type == EIsdkPointerEventType::Unhover) { Hovering.Remove(Grabber); }
 	else if (Event.Type == EIsdkPointerEventType::Select)
@@ -496,6 +504,27 @@ void AVBoRAxisPart::ReleasePart(bool bCancelSDK)
 void AVBoRAxisPart::ConnectDoor(AVBoRHingedPanel* Door, int32 Handle)
 {
 	LinkedDoor = Door; DoorHandle = Handle; Release = EVBoRAxisRelease::Return;
+	if (IsDoorGrip()) { Value = 0; AxisPivot->SetRelativeTransform(RestPivot); ClearPush(); bPushEnabled = false; }
+	RefreshGripInput();
+}
+
+void AVBoRAxisPart::RefreshGripInput()
+{
+	if (!IsDoorGrip()) { return; }
+	const bool bAllowed = LinkedDoor && !(LinkedDoor->GetMotion().bUseLatch && LinkedDoor->GetMotion().bLocked) && PartMesh->GetStaticMesh();
+	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Palm, bAllowed && bAllowPalmGrab);
+	Grabbable->SetGrabInputMethodAllowed(EIsdkGrabInputMethod::Pinch, bAllowed && bAllowPinchGrab);
+	// Rebuild overlaps on unlock even if hand stayed nearby (ISDK filters BeginOverlap, P5ze D3)
+	if (UPrimitiveComponent* Collider = Grabbable->GetGrabCollider())
+	{
+		Collider->SetCollisionEnabled(bAllowed ? ECollisionEnabled::QueryOnly : ECollisionEnabled::NoCollision);
+	}
+	if (!bAllowed)
+	{
+		Hovering.Reset();
+		if (HoldingHand != INDEX_NONE) { EndDoorHold(true); }
+		if (StateOverlay) { StateOverlay->SetVectorParameterValue(TEXT("ColorParam"), FLinearColor::Transparent); }
+	}
 }
 void AVBoRAxisPart::EndDoorHold(bool bLatch)
 {
@@ -529,6 +558,23 @@ void AVBoRAxisPart::Tick(float DeltaSeconds)
 		bool bClosed = true;
 		if (bNeedsPalmOpen[H] &&
 			ReadGrabClosed(H,bNeedsPinchOpen[H],bClosed) && !bClosed) { bNeedsPalmOpen[H] = false; }
+	}
+	if (IsDoorGrip())
+	{
+		RefreshGripInput();
+		Value = 0; AxisPivot->SetRelativeTransform(RestPivot);
+		if (HoldingHand != INDEX_NONE && !bDoorHold && IsHandTracked())
+		{
+			bool bClosed = true;
+			if (ReadGrabClosed(HoldingHand, bPinch, bClosed) && !bClosed) { ReleasePart(); }
+			else if (LinkedDoor && LinkedDoor->BeginGrabFromAxisPart(this))
+			{
+				bPaused = bRebase = false;
+				bDoorHold = true; GrabComponent->CancelSelection();
+			}
+		}
+		EvaluateState();
+		return;
 	}
 	if (HoldingHand != INDEX_NONE && !bDoorHold)
 	{
@@ -585,7 +631,7 @@ void AVBoRAxisPart::Tick(float DeltaSeconds)
 void AVBoRAxisPart::EvaluateState()
 {
 	if (bPaused) { return; }
-	if (Release == EVBoRAxisRelease::Detent)
+	if (IsDoorGrip() || Release == EVBoRAxisRelease::Detent)
 	{
 		if (StateOverlay)
 		{
