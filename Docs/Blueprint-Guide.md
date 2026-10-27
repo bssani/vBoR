@@ -117,7 +117,7 @@ L_Main
 | 룸미러(U-12: 반사 없음) — `BP_RearviewMirror` | `AVBoRTwoAxisPart` | `PartMesh` / `Pivot` | `YawLimitDeg`, `PitchLimitDeg` | 거울면은 CAD 재질 그대로 | `:247-261` | 자동화(P4i) |
 | 콘솔 노브 — `BP_ConsoleKnob` | `AVBoRKnob` | `KnobMesh` / `Pivot`(+Z가 윗면·회전축) | `TwistGain`, `StepDeg` | — | `:263-272` | 자동화(P4i) |
 | 13번 도달 버튼 — `BP_ReachButton` | `AVBoRPokeButton` | `ButtonMesh` | **`HitAreaScale` 1**(13번은 판정 확대 없음, AGENTS.md) | `Car.ReachButton` — 13단계. Actor가 대시보드 위 버튼 자리에 있음(차 원점 아님) — CAD 피벗 처리 확인 안 함 | `:273-278` | 자동화(P4i) |
-| 리프트게이트(011) — `BP_Liftgate` | `AVBoRPoweredPanel` | `PanelMesh` / `HingeLocationCm` | `OpenAngleDeg`, `DelaySeconds`, 열기·닫기 버튼 자리(`OpenButtonFromHinge`·`CloseButtonFromHinge`) | `Car.Liftgate` — 04·06단계. 버튼은 스스로 만듦 | `:356-363` | 자동화(P4i) |
+| 리프트게이트(011) — `BP_Liftgate` | `AVBoRPoweredPanel` | `PanelMesh` / `HingeLocationCm` | `OpenAngleDeg`, `DelaySeconds`, 열기·닫기 버튼 자리(`OpenButtonFromHinge`·`CloseButtonFromHinge`). 선택: 버튼 모양 `Open button class`·`Close button class`(아래) | `Car.Liftgate` — 04·06단계. 버튼은 스스로 만듦 | `:356-363` | 자동화(P4i·P5zc) |
 | 2열 등받이 — `BP_RearSeatBack` | `AVBoRFoldingSeat` | `SeatMesh` / `HingeLocationCm` | `FoldAngleDeg` | `Car.RearSeat`. 진행자 F·U가 모든 접는 시트를 찾음 | `:128-132` | 자동화(P4i) |
 | 선바이저 L·R — `BP_SunVisor_L`·`_R` | `AVBoRAxisPart` | `PartMesh` / `AxisPivot`, `Axis` Y | `Release` = Stay, palm·pinch·밀기 켬, `MaxAngleDeg` 95(근사). **값 +가 내림이다** — 경첩 방향은 아래 주의 | 없음(자유모드 부품, 단계와 안 이음) | 근사 차에 없음. 근사 값: 경첩 (18, ∓37, 142), 판 16×35×1.5 cm | 자동화(P5p) |
 | 시동 버튼 — `BP_StartButton` | `AVBoRPokeButton` | `ButtonMesh` | `HitAreaScale` 1(기본값) | **`Car.StartButton`** — 전원(§6.5). Actor가 대시보드 위 버튼 자리 (27, −15, 91.6)에 있음(차 원점 아님) — CAD 피벗 처리 확인 안 함 | 근사 차에 없음 | 자동화(P5q) |
@@ -161,6 +161,14 @@ L_Main
 - PIE 중 디테일 패널에서 바꿔도 바로 적용된다. 마음에 드는 값은 PIE를 끝낸 뒤 BP에 다시 넣는다.
 - 관성이 안 생기는 때: 미는 손의 추적이 끊김(그 자리에 섬), 끝 각도·닫힌 자리, 다른 손으로 막거나 손잡이를 다시 잡음. 닫히는 쪽으로 가다 래치 각도에 닿으면 잠긴다.
 - 근사 조작감이다. 실차 문의 조작력 평가로 쓰지 않는다. 평가 단계에서 켤지는 Quest 3 확인 뒤 정한다(켜면 `DoorOpened` 판정 단계가 관성으로 채워질 수 있음).
+
+**생성 버튼 바꾸기 — 버튼 클래스 칸(P5zc, 자동화로만 확인).** 리프트게이트 열기·닫기 버튼과 키 열림·잠금 버튼은 Play 때 코드가 만든다. 칸이 비어 있으면 엔진 Cube 버튼이다.
+1. Content Browser 우클릭 → Blueprint Class → 부모 `VBoRPokeButton`(`AVBoRPokeButton`)으로 버튼 BP를 만든다(예 `Main/Car/Parts/BP_LiftgateOpenButton`).
+2. `ButtonMesh`에 메시를 넣고 크기를 정한다. **Actor 원점 = 누르는 면 가운데, +Z = 누르는 면이 바라보는 쪽(바깥).** 어기면 버튼이 면에 묻히거나 뜬다. 누름 깊이 `PressDepthMm`, 판정 확대 `HitAreaScale`도 이 BP에서 정한다.
+3. `BP_Liftgate`의 **`Open button class`·`Close button class`**, `BP_KeyFob_Front`·`_Rear`의 **`Unlock button class`·`Lock button class`**에 고른다. 버튼마다 다른 BP를 골라도 된다.
+- 고르면 BP의 메시·크기·재질·누름 깊이를 그대로 쓴다. 자리(`…FromHinge`, `UnlockButtonCm`·`LockButtonCm`), 따라 움직이기, 키를 든 때만 눌림은 코드가 그대로 맡는다.
+- **소리는 버튼 BP가 아니라 `BP_Liftgate`·키 BP의 소리 칸에서 정한다**(§4.4). 버튼 BP의 소리 칸은 덮어써진다.
+- 관전 화면 이름(`SpectatorName`)은 비워진다.
 
 ### 4.3 메시로 잡기·밀기 — 선택(P2f·P2g, 자동화로만 확인)
 
@@ -319,6 +327,7 @@ L_Main
 
 - 키는 키 테이블이 Play 때 만든다(`KeyClass`, `Interaction/VBoRKeyTable.cpp:42`). 그래서 레벨에서 키에 태그를 직접 달 수 없다.
 - **키 BP**가 이미 있다: `BP_KeyFob_Front`(Actor Tags `Car.FrontKey`), `BP_KeyFob_Rear`(`Car.RearKey`). 키 테이블의 `KeyClass`가 그 BP다. 키 메시는 키 BP에서 바꾼다.
+- 키의 열림·잠금 버튼 모양은 키 BP의 `Unlock button class`·`Lock button class`로 바꾼다(§4.2 아래 "생성 버튼 바꾸기").
 - 01단계(키 집기, 표시도 이 태그)와 02단계(키 버튼 열림·잠김)가 이 태그를 쓴다.
 - 근사 차는 키 버튼에도 태그(`Car.FrontKey.Unlock`·`.Lock`)를 붙이지만, 지금 단계는 쓰지 않는다.
 
