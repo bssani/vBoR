@@ -61,7 +61,7 @@ public:
 	// Button Actor origin = face center, +Z outward (P5zc D6)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Key", meta=(DisplayName="Unlock button class", ToolTip="Empty = default cube button. Set = this BP's mesh/size/material/press depth kept.")) TSubclassOf<AVBoRPokeButton> UnlockButtonClass;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Key", meta=(DisplayName="Lock button class", ToolTip="Empty = default cube button. Set = this BP's mesh/size/material/press depth kept.")) TSubclassOf<AVBoRPokeButton> LockButtonClass;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Approximation", meta=(Units="cm", ClampMin="0.1")) FVector KeySizeCm = FVector(6,3,1.5);
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Approximation", meta=(Units="cm", ClampMin="0.1", ToolTip="Placeholder cube only. Any other key mesh keeps its own size.")) FVector KeySizeCm = FVector(6,3,1.5);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Approximation", meta=(Units="cm")) FVector UnlockButtonCm = FVector(1.5,0,0.95);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Approximation", meta=(Units="cm")) FVector LockButtonCm = FVector(-1.5,0,0.95);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Approximation", meta=(Units="cm", ClampMin="0.1")) FVector ButtonSizeCm = FVector(1.2,1.2,0.4);
