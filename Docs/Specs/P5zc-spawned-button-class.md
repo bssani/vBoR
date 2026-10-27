@@ -7,7 +7,7 @@
 | 베이스 브랜치 | `main` @ 이 명세 머지 뒤 |
 | 작업 브랜치 | `codex/P5zc-spawned-button-class` |
 | 리뷰 파일 | `Docs/Reviews/P5zc-spawned-button-class.md` (첫 리뷰 때 생김) |
-| 상태 | 명세 — 구현 전 |
+| 상태 | 구현 리뷰 통과(1회차) |
 | 에디터 작업 | **없음** (버튼 BP는 사용자가 만든다) |
 | 앞 명세 | [P5zb-floor-marker-height.md](P5zb-floor-marker-height.md) |
 
