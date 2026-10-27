@@ -59,6 +59,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel") FTransform MeshRestFromRoot = FTransform(FQuat::Identity, FVector(55,0,52.5), FVector(1.1,0.1,1.05));
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Hinged panel") TObjectPtr<AVBoRAxisPart> OutsideAxisHandle;
 	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Hinged panel") TObjectPtr<AVBoRAxisPart> InsideAxisHandle;
+	UPROPERTY(EditInstanceOnly, BlueprintReadWrite, Category = "Hinged panel") TObjectPtr<AVBoRAxisPart> GripAxisHandle;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hinged panel") TObjectPtr<USceneComponent> HingePivot;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Hinged panel") TObjectPtr<UStaticMeshComponent> DoorMesh;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel", meta = (Units = "deg", ClampMin = "0", ClampMax = "180")) float MaxAngleDeg = 70;
@@ -88,6 +89,7 @@ protected:
 private:
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FP5sTestAccess;
+	friend struct FP5zeTestAccess;
 #endif
 	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
 	FVBoRSoundPlayback SoundPlayback[2];
@@ -101,13 +103,13 @@ private:
 	friend struct FP2gTestAccess;
 	struct FSetupAssessment
 	{
-		AVBoRAxisPart* Handles[2] = {nullptr, nullptr};
+		AVBoRAxisPart* Handles[3] = {nullptr, nullptr, nullptr};
 		TArray<FString> Problems;
 		TArray<FString> Notices;
 		bool bMeshTraceable = false;
 	};
 	FSetupAssessment EvaluateSetup() const;
-	void CollectHandleCandidates(TArray<AVBoRAxisPart*> (&Candidates)[2]) const;
+	void CollectHandleCandidates(TArray<AVBoRAxisPart*> (&Candidates)[3]) const;
 	TArray<AVBoRAxisPart*> GetHandleClaims() const;
 	bool IsHandleShared(const AVBoRAxisPart* Part) const;
 	bool CanConnectAxisHandle(AVBoRAxisPart* Part, TArray<FString>& Problems) const;

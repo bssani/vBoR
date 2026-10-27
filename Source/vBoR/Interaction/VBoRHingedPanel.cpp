@@ -95,7 +95,7 @@ void AVBoRHingedPanel::OnConstruction(const FTransform& Transform)
 
 void AVBoRHingedPanel::SetAxisHandle(int32 Handle, AVBoRAxisPart* Part)
 {
-	if (Handle < 0 || Handle > 1) { return; }
+	if (Handle < 0 || Handle > 2) { return; }
 	// Report this connection only (full setup warning once in BeginPlay, P2e E20)
 	TArray<FString> Problems;
 	const bool bConnect = !Part || CanConnectAxisHandle(Part, Problems);
@@ -149,14 +149,15 @@ bool AVBoRHingedPanel::HasTraceableMesh() const
 	return false;
 }
 
-void AVBoRHingedPanel::CollectHandleCandidates(TArray<AVBoRAxisPart*> (&Candidates)[2]) const
+void AVBoRHingedPanel::CollectHandleCandidates(TArray<AVBoRAxisPart*> (&Candidates)[3]) const
 {
 	ForEachAttachedActors([&](AActor* Actor)
 	{
 		AVBoRAxisPart* Part = Cast<AVBoRAxisPart>(Actor);
 		if (Part && Part->DoorHandleSide != EVBoRDoorHandleSide::None)
 		{
-			Candidates[Part->DoorHandleSide == EVBoRDoorHandleSide::Outside ? 0 : 1].AddUnique(Part);
+			const int32 Slot = Part->DoorHandleSide == EVBoRDoorHandleSide::Outside ? 0 : Part->DoorHandleSide == EVBoRDoorHandleSide::Grip ? 2 : 1;
+			Candidates[Slot].AddUnique(Part);
 		}
 		return true;
 	});
@@ -164,10 +165,11 @@ void AVBoRHingedPanel::CollectHandleCandidates(TArray<AVBoRAxisPart*> (&Candidat
 
 TArray<AVBoRAxisPart*> AVBoRHingedPanel::GetHandleClaims() const
 {
-	TArray<AVBoRAxisPart*> Candidates[2]; CollectHandleCandidates(Candidates);
+	TArray<AVBoRAxisPart*> Candidates[3]; CollectHandleCandidates(Candidates);
 	TArray<AVBoRAxisPart*> Claims = Candidates[0];
 	for (AVBoRAxisPart* Part : Candidates[1]) { Claims.AddUnique(Part); }
-	for (AVBoRAxisPart* Part : {OutsideAxisHandle.Get(), InsideAxisHandle.Get()}) { if (Part) { Claims.AddUnique(Part); } }
+	for (AVBoRAxisPart* Part : Candidates[2]) { Claims.AddUnique(Part); }
+	for (AVBoRAxisPart* Part : {OutsideAxisHandle.Get(), InsideAxisHandle.Get(), GripAxisHandle.Get()}) { if (Part) { Claims.AddUnique(Part); } }
 	return Claims;
 }
 
@@ -206,15 +208,15 @@ bool AVBoRHingedPanel::CanConnectAxisHandle(AVBoRAxisPart* Part, TArray<FString>
 AVBoRHingedPanel::FSetupAssessment AVBoRHingedPanel::EvaluateSetup() const
 {
 	FSetupAssessment Result;
-	TArray<AVBoRAxisPart*> Candidates[2]; CollectHandleCandidates(Candidates);
+	TArray<AVBoRAxisPart*> Candidates[3]; CollectHandleCandidates(Candidates);
 	for (AVBoRAxisPart* Claim : GetHandleClaims())
 	{
 		if (IsHandleShared(Claim)) { Result.Problems.AddUnique(FString::Printf(TEXT("shared handle %s; first connected panel keeps it."), *Claim->GetName())); }
 	}
-	for (int32 I = 0; I < 2; ++I)
+	for (int32 I = 0; I < 3; ++I)
 	{
-		const TCHAR* Side = I == 0 ? TEXT("outside") : TEXT("inside");
-		AVBoRAxisPart* Explicit = I == 0 ? OutsideAxisHandle.Get() : InsideAxisHandle.Get();
+		const TCHAR* Side = I == 0 ? TEXT("outside") : I == 1 ? TEXT("inside") : TEXT("grip");
+		AVBoRAxisPart* Explicit = I == 0 ? OutsideAxisHandle.Get() : I == 1 ? InsideAxisHandle.Get() : GripAxisHandle.Get();
 		AVBoRAxisPart* Part = Explicit;
 		if (Explicit)
 		{
@@ -231,7 +233,7 @@ AVBoRHingedPanel::FSetupAssessment AVBoRHingedPanel::EvaluateSetup() const
 		{
 			// Do not reselect handle assigned to opposite slot (slot overrides side, P2e E9)
 			TArray<AVBoRAxisPart*> Available = Candidates[I];
-			Available.Remove(OutsideAxisHandle); Available.Remove(InsideAxisHandle);
+			Available.Remove(OutsideAxisHandle); Available.Remove(InsideAxisHandle); Available.Remove(GripAxisHandle);
 			if (Available.Num() == 1) { Part = Available[0]; }
 			else if (Available.Num() > 1) { Result.Problems.Add(FString::Printf(TEXT("%s has multiple attached candidates; assign the slot explicitly."), Side)); }
 		}
@@ -270,10 +272,11 @@ void AVBoRHingedPanel::CheckSetup()
 
 void AVBoRHingedPanel::ApplyAxisHandle(int32 Handle, AVBoRAxisPart* Part)
 {
-	AVBoRAxisPart* Previous = Handle == 0 ? OutsideAxisHandle.Get() : InsideAxisHandle.Get();
+	AVBoRAxisPart* Previous = Handle == 0 ? OutsideAxisHandle.Get() : Handle == 1 ? InsideAxisHandle.Get() : GripAxisHandle.Get();
 	if (Previous && Previous != Part && Previous->LinkedDoor == this)
 	{
 		Previous->LinkedDoor = nullptr; Previous->DoorHandle = INDEX_NONE;
+		Previous->RefreshGripInput();
 	}
 	if (Part && !Part->GetRootComponent()->IsAttachedTo(HingePivot))
 	{
@@ -283,7 +286,7 @@ void AVBoRHingedPanel::ApplyAxisHandle(int32 Handle, AVBoRAxisPart* Part)
 		}
 		else { Part = nullptr; }
 	}
-	if (Handle == 0) { OutsideAxisHandle = Part; } else { InsideAxisHandle = Part; }
+	if (Handle == 0) { OutsideAxisHandle = Part; } else if (Handle == 1) { InsideAxisHandle = Part; } else { GripAxisHandle = Part; }
 	if (Part) { Part->ConnectDoor(this, Handle); }
 }
 
@@ -299,23 +302,23 @@ bool AVBoRHingedPanel::Unlock()
 
 bool AVBoRHingedPanel::BeginGrabFromAxisPart(AVBoRAxisPart* Part)
 {
-	if (!Part || (Part != OutsideAxisHandle && Part != InsideAxisHandle) || Part->HoldingHand == INDEX_NONE) { return false; }
+	if (!Part || (Part != OutsideAxisHandle && Part != InsideAxisHandle && Part != GripAxisHandle) || Part->HoldingHand == INDEX_NONE) { return false; }
 	FVBoRDoorHand Input; ReadHand(Part->HoldingHand, Input);
 	return BeginAxisGrab(Part, Input);
 }
 
 bool AVBoRHingedPanel::BeginAxisGrab(AVBoRAxisPart* Part, const FVBoRDoorHand& Input)
 {
-	const int32 Hand = Part->HoldingHand, Handle = Part == OutsideAxisHandle ? 0 : 1;
-	if (bNeedsPalmOpen[Hand] || Part->GetOpenRatio() < Part->OpenThreshold) { return false; }
+	const int32 Hand = Part->HoldingHand, Handle = Part == OutsideAxisHandle ? 0 : Part == InsideAxisHandle ? 1 : 2;
+	if (bNeedsPalmOpen[Hand] || (Handle != 2 && Part->GetOpenRatio() < Part->OpenThreshold)) { return false; }
 	const int32 Unlocks = Motion.Metrics.Unlocks;
 	const bool bWasLocked = Motion.bLocked;
-	if (!Motion.BeginGrab(Hand, Handle, Input)) { return false; }
+	if (!Motion.BeginGrab(Hand, Handle, Input, Handle != 2)) { return false; }
 	HoldingAxisPart = Part;
 	AxisHoldHand = Hand; AxisHoldHandle = Handle;
 	AxisHoldStartSeconds = Motion.Metrics.HeldSeconds + Motion.Metrics.PausedSeconds;
 	UE_LOG(LogAxisDoor, Log, TEXT("%s axis hold begin part=%s handle=%s hand=%s locked=%d angle=%.2f deg"),
-		*GetName(), *Part->GetName(), Handle == 0 ? TEXT("outside") : TEXT("inside"), Hand == 0 ? TEXT("L") : TEXT("R"), bWasLocked, Motion.AngleDeg);
+		*GetName(), *Part->GetName(), Handle == 0 ? TEXT("outside") : Handle == 1 ? TEXT("inside") : TEXT("grip"), Hand == 0 ? TEXT("L") : TEXT("R"), bWasLocked, Motion.AngleDeg);
 	bNeedsPalmOpen[Hand] = true;
 	ApplyState(Motion.AngleDeg, Unlocks, Motion.Metrics.Latches);
 	return true;
@@ -339,7 +342,7 @@ void AVBoRHingedPanel::BeginPlay()
 	SyncSettings();
 	for (const FString& Problem : Setup.Problems) { UE_LOG(LogAxisDoor, Warning, TEXT("%s P2e setup: %s"), *GetName(), *Problem); }
 	for (const FString& Notice : Setup.Notices) { UE_LOG(LogAxisDoor, Log, TEXT("%s: %s"), *GetName(), *Notice); }
-	ApplyAxisHandle(0, Setup.Handles[0]); ApplyAxisHandle(1, Setup.Handles[1]);
+	ApplyAxisHandle(0, Setup.Handles[0]); ApplyAxisHandle(1, Setup.Handles[1]); ApplyAxisHandle(2, Setup.Handles[2]);
 	if (bUseLatch && !OutsideAxisHandle && !InsideAxisHandle)
 	{
 		UE_LOG(LogAxisDoor, Warning, TEXT("%s: Latched panel has no opening handle. %s"), *GetName(),
@@ -379,7 +382,7 @@ void AVBoRHingedPanel::EndAxisHold(const TCHAR* Reason, bool bLatch)
 {
 	if (!HoldingAxisPart) { return; }
 	UE_LOG(LogAxisDoor, Log, TEXT("%s axis hold end part=%s handle=%s hand=%s reason=%s angle=%.2f deg held=%.3f s"),
-		*GetName(), *HoldingAxisPart->GetName(), AxisHoldHandle == 0 ? TEXT("outside") : TEXT("inside"),
+		*GetName(), *HoldingAxisPart->GetName(), AxisHoldHandle == 0 ? TEXT("outside") : AxisHoldHandle == 1 ? TEXT("inside") : TEXT("grip"),
 		AxisHoldHand == 0 ? TEXT("L") : TEXT("R"), Reason, Motion.AngleDeg, Motion.Metrics.HeldSeconds + Motion.Metrics.PausedSeconds - AxisHoldStartSeconds);
 	HoldingAxisPart->EndDoorHold(bLatch); HoldingAxisPart = nullptr;
 	AxisHoldHand = AxisHoldHandle = INDEX_NONE;
@@ -388,7 +391,7 @@ void AVBoRHingedPanel::EndAxisHold(const TCHAR* Reason, bool bLatch)
 void AVBoRHingedPanel::CancelSelections(const TCHAR* Reason)
 {
 	EndAxisHold(Reason, true);
-	for (AVBoRAxisPart* Part : {OutsideAxisHandle.Get(), InsideAxisHandle.Get()})
+	for (AVBoRAxisPart* Part : {OutsideAxisHandle.Get(), InsideAxisHandle.Get(), GripAxisHandle.Get()})
 	{
 		if (Part) { Part->EndDoorHold(true); }
 	}
@@ -410,7 +413,7 @@ void AVBoRHingedPanel::Tick(float DeltaSeconds)
 		// Tracking loss pauses, never ends (separate from grab log, P2b D7/R1-4)
 		UE_LOG(LogAxisDoor, Log, TEXT("%s axis hold %s part=%s handle=%s hand=%s reason=tracking loss pause angle=%.2f deg held=%.3f s"),
 			*GetName(), Motion.bPaused ? TEXT("pause") : TEXT("resume"), *HoldingAxisPart->GetName(),
-			AxisHoldHandle == 0 ? TEXT("outside") : TEXT("inside"), AxisHoldHand == 0 ? TEXT("L") : TEXT("R"),
+			AxisHoldHandle == 0 ? TEXT("outside") : AxisHoldHandle == 1 ? TEXT("inside") : TEXT("grip"), AxisHoldHand == 0 ? TEXT("L") : TEXT("R"),
 			Motion.AngleDeg, Motion.Metrics.HeldSeconds + Motion.Metrics.PausedSeconds - AxisHoldStartSeconds);
 	}
 	for (int32 H = 0; H < 2; ++H)
@@ -434,6 +437,7 @@ void AVBoRHingedPanel::ApplyState(double BeforeAngle, int32 BeforeUnlocks, int32
 	HingePivot->SetRelativeRotation(ClosedHingeRotation * FQuat(FVector::UpVector, FMath::DegreesToRadians(Motion.AngleDeg)));
 	if (Motion.Metrics.Unlocks != BeforeUnlocks) { SoundPlayback[0].Queue(UnlockedCue, SoundAudio[0], SoundFrame); NotifyUnlocked(); }
 	if (Motion.Metrics.Latches != BeforeLatches) { CancelSelections(TEXT("latch")); SoundPlayback[1].Queue(LatchedCue, SoundAudio[1], SoundFrame); NotifyLocked(); }
+	if (GripAxisHandle) { GripAxisHandle->RefreshGripInput(); }
 	if (Motion.AngleDeg != BeforeAngle) { OnAngleChanged.Broadcast(static_cast<float>(Motion.AngleDeg)); }
 	if (StateOverlay)
 	{

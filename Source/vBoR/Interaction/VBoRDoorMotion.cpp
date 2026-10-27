@@ -15,6 +15,7 @@ FVBoRDoorMetrics FVBoRDoorMetrics::Since(const FVBoRDoorMetrics& Before) const
 	Result.PushedDeg -= Before.PushedDeg; Result.HeldSeconds -= Before.HeldSeconds; Result.PausedSeconds -= Before.PausedSeconds;
 	for (int32 H = 0; H < 2; ++H)
 	{
+		Result.GripGrabs[H] -= Before.GripGrabs[H];
 		for (int32 F = 0; F < 2; ++F)
 		{
 			Result.PushStarts[H][F] -= Before.PushStarts[H][F];
@@ -37,17 +38,19 @@ void FVBoRDoorMotion::RebaseGrab(const FVector& Point)
 	GrabReferenceAngleDeg = AngleDeg;
 }
 
-bool FVBoRDoorMotion::BeginGrab(int32 Hand, int32 Handle, const FVBoRDoorHand& Input)
+bool FVBoRDoorMotion::BeginGrab(int32 Hand, int32 Handle, const FVBoRDoorHand& Input, bool bUnlockLatch)
 {
-	if (Hand < 0 || Hand > 1 || Handle < 0 || Handle > 1 || !Input.bTracked || Input.Points[0].ContainsNaN()) { return false; }
+	if (Hand < 0 || Hand > 1 || Handle < 0 || Handle > 2 || (Handle == 2 && bUnlockLatch) || !Input.bTracked || Input.Points[0].ContainsNaN()) { return false; }
+	if (!bUnlockLatch && bUseLatch && bLocked) { return false; }
 	if (GrabHand != INDEX_NONE || bPaused || Input.Points[0].SizeSquared2D() < SMALL_NUMBER) { return false; }
 	GrabHand = Hand; GrabHandle = Handle;
 	ClearCoast();
 	PushHand = PushFace = INDEX_NONE;
 	for (int32 H = 0; H < 2; ++H) { bContactNear[H] = false; ContactFace[H] = PushSide[H] = INDEX_NONE; LastIgnored[H] = EVBoRDoorIgnore::Count; }
 	RebaseGrab(Input.Points[0]);
-	++Metrics.Grabs[Hand][Handle];
-	Unlock(Handle);
+	if (Handle == 2) { ++Metrics.GripGrabs[Hand]; }
+	else { ++Metrics.Grabs[Hand][Handle]; }
+	if (bUnlockLatch) { Unlock(Handle); }
 	return true;
 }
 

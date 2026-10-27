@@ -29,7 +29,8 @@ enum class EVBoRDoorHandleSide : uint8
 {
 	None UMETA(DisplayName="None"),
 	Outside UMETA(DisplayName="Outside"),
-	Inside UMETA(DisplayName="Inside")
+	Inside UMETA(DisplayName="Inside"),
+	Grip UMETA(DisplayName="Grip")
 };
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FVBoRAxisEvent);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVBoRDetentEvent, int32, Index);
@@ -155,6 +156,7 @@ protected:
 private:
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FP5sTestAccess;
+	friend struct FP5zeTestAccess;
 #endif
 	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
 	FVBoRSoundPlayback SoundPlayback[4];
@@ -183,6 +185,8 @@ private:
 	bool bNeedsPalmOpen[2] = {false,false};
 	bool bNeedsPinchOpen[2] = {false,false};
 	bool bPinch = false, bPushEnabled = false;
+	bool IsDoorGrip() const { return DoorHandle == 2 || (DoorHandle == INDEX_NONE && DoorHandleSide == EVBoRDoorHandleSide::Grip); }
+	void RefreshGripInput();
 	FBox PushBounds = FBox(ForceInit);
 	FVector PushRadial = FVector::YAxisVector, PushNormal = FVector::ZAxisVector;
 	FVBoRDoorHand PreviousPushHands[2];
