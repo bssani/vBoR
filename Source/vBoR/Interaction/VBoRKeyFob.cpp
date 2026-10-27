@@ -52,7 +52,8 @@ AVBoRKeyFob::AVBoRKeyFob()
 void AVBoRKeyFob::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
-	if (KeyMesh->GetStaticMesh())
+	// Real key mesh kept as authored (scale from BP/placement). Size only the placeholder cube (P5zd D1)
+	if (KeyMesh->GetStaticMesh() && KeyMesh->GetStaticMesh()->GetPackage()->GetName() == IsdkContentAssetPaths::Engine::BasicShapes::Cube)
 	{
 		// Size from child mesh bounds in cm (approximate geometry, P4a §2)
 		const FVector BoundsSize = KeyMesh->GetStaticMesh()->GetBoundingBox().GetSize().ComponentMax(FVector(0.01));
@@ -113,7 +114,8 @@ void AVBoRKeyFob::BeginPlay()
 	LockButton = CreateButton(LockButtonCm, FLinearColor(0.8,0.15,0.1,1), LockButtonClass, TEXT("LockButtonClass"));
 	UnlockButton->OnButtonPressed.AddDynamic(this, &AVBoRKeyFob::UnlockPressed);
 	LockButton->OnButtonPressed.AddDynamic(this, &AVBoRKeyFob::LockPressed);
-	UE_LOG(LogKeyFob, Log, TEXT("%s approximate key size=%s cm"), *GetName(), *KeySizeCm.ToCompactString());
+	const FVector SizeCm = KeyMesh->GetStaticMesh() ? KeyMesh->GetStaticMesh()->GetBoundingBox().GetSize() * KeyMesh->GetComponentScale().GetAbs() : FVector::ZeroVector;
+	UE_LOG(LogKeyFob, Log, TEXT("%s key size=%s cm"), *GetName(), *SizeCm.ToCompactString());
 }
 
 bool AVBoRKeyFob::IsHandTracked() const
