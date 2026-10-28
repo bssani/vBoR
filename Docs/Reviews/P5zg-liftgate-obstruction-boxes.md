@@ -1,4 +1,33 @@
-# P5zg 리프트게이트 끼임 판정 상자 — 질문
+# P5zg 리프트게이트 끼임 판정 상자 — 리뷰
+
+## 1회차 (2026-10-28, Claude) — 통과 (문제 없음, 참고 3개)
+
+- 리뷰한 커밋: `e01af6f` feat: 리프트게이트 판정 상자 지원. 베이스 `main@bdca41b`(명세 개정 2).
+
+### 확인한 것
+
+| 항목 | 결과 |
+|---|---|
+| D1 | `UVBoRObstructionBoxComponent`(부모 `UBoxComponent`, `BlueprintSpawnableComponent`, 표시 이름 `Obstruction Box`). 생성자에서 게임 숨김·`NoCollision`·모든 채널 무시·겹침 이벤트 끔·내비 영향 없음. 모양 데이터만 |
+| D2 | `BeginPlay`에 한 번 모음(`CollectObstructionBoxes`). 유효 상자가 있으면 `FindObstruction`이 상자만 보고, 0개면 기존 메시 경계 코드를 한 줄도 바꾸지 않고 그대로 탐 |
+| D3 | 상자 자세 = `HingePivot` 기준 상대 변환(지금 경첩 회전을 뺀 값, 중간 부모 포함) × 중간 각 경첩 × Actor — `MeshPoseAt`과 같은 방식. 크기 = unscaled extent × 합성 배율 절댓값. 여유는 상자마다 그 상자의 경첩 거리로 기존 식 그대로 |
+| D4 | `IsAttachedTo(HingePivot)`가 아니면, 또는 월드 크기 한 축이라도 0이면 경고 1번(이름·이유) 후 제외. 남은 것이 0개면 메시 경계 |
+| D5 | BeginPlay 로그 `obstruction basis: mesh bounds (approximate)` / `N obstruction boxes` |
+| D6 | 닫힐 때만, 박스 `Mesh`만, 1° 분할·되돌림·소리·이벤트·횟수 그대로 |
+| §3 기존 시험 | 기존 시험 파일 변경 0. 제품 변경은 리프트게이트 2파일 + 새 컴포넌트 + 시험 friend 한 줄 |
+| 새 시험 | `vBoR.P5zg.E1`–`E9` 9개, 명세 표와 일치. E3 1.5°(개정 2), E4는 중간 SceneComponent를 거친 자손까지, E5는 음수 배율까지 확인 |
+| 빌드·시험 재현 | `e01af6f`: unity 빌드 up to date(Succeeded). `vBoR.*` 632개 중 **631 통과**, `vBoR.P0Buck.E8Persistence` 1개 실패(`Repeated replacement 24: candidate replacement failed (OS error 5)`, `Saved/Logs/P5zgReviewAll.log:2281`) — 참고 1. `vBoR.P0Buck`만 다시 돌려 **14/14**(`P5zgReviewP0Buck.log`). Codex 재개 실행은 632/632 |
+
+### 문제
+
+없음.
+
+### 참고 (고치지 않아도 됨)
+
+1. **`P0Buck.E8Persistence` 세 번째 간헐 실패**(P5zb·P5ze 리뷰와 같은 OS error 5, Windows 파일 교체 거부). P5zg와 무관. 세 번째라 mid review 뒤 명세 목록 맨 앞으로 올린다(HANDOFF).
+2. **판정 상자는 BeginPlay에 한 번만 모은다.** Play 중 BP에서 상자를 추가·이동하는 경우는 다루지 않는다(명세 §5 권장대로). 에디터에서 상자를 고치면 Play를 다시 시작해야 반영된다.
+3. **사용법 문서가 아직 없다.** `BP_Liftgate`에 상자를 넣는 순서(`HingePivot` 밑, 닫힌 자세에서 판 모양을 따라 1~3개, 트렁크 안쪽 빈 공간은 비움)는 명세 §7에만 있다. Blueprint-Guide에 그립(P5ze)과 함께 넣는다(Claude, 사용자 요청 시).
+- Quest 3(T-02, `not-tested`): 명세 §7 ①–③. 원인 추정(굽은 경계)은 회사 PC `obstructions=` 로그로 아직 확인 전이다.
 
 ## 질문
 
