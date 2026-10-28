@@ -69,14 +69,15 @@ void AVBoRBoxStand::SpawnBox()
 void AVBoRBoxStand::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	if (!bSourceLifted || (IsValid(SourceBox) && SourceBox->GetCarrySession().bPaused)) { return; }
+	if (!bSourceLifted) { return; }
 	const FTransform Pose = StartPose();
 	const FVector BoxSizeCm = GetBoxSizeCm();
 	const FBox Slot(-BoxSizeCm*0.5-FVector(1), BoxSizeCm*0.5+FVector(1));
-	// Refill after held/returned box clears spawn space by 1 cm (P1b D5/P4d D1)
+	// Wait for all hands, including paused sessions, before refill (P5zf D1)
 	for (const AVBoRCarryObject* Box : Boxes)
 	{
 		if (!IsValid(Box)) { continue; }
+		if (Box->GetCarrySession().Hand != INDEX_NONE) { return; }
 		const FBox Bounds = Box->GetCollisionBoundsInPose(Box->GetActorTransform(), Pose);
 		if (Bounds.IsValid && Bounds.Intersect(Slot)) { return; }
 	}

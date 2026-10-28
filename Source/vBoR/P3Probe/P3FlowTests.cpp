@@ -1208,10 +1208,11 @@ bool FP4dStandTest::RunTest(const FString&)
 	First->SetActorLocation(Start.GetLocation()+FVector(0,0,31)); S->Tick(0); TestEqual(TEXT("E6 one cm boundary still occupied"),P4dBoxes(E.World,S),1);
 	First->SetActorLocation(Start.GetLocation()+FVector(0,0,40)); FP4dTestAccess::Pause(First,true); S->Tick(0);
 	TestEqual(TEXT("E6 paused clear source is not replenished"),P4dBoxes(E.World,S),1);
-	FP4dTestAccess::Pause(First,false); S->Tick(0); TestEqual(TEXT("E6 clear source makes one more"),P4dBoxes(E.World,S),2);
+	FP4dTestAccess::Pause(First,false); S->Tick(0); TestEqual(TEXT("E6 recovered held source stays alone"),P4dBoxes(E.World,S),1);
+	FP4dTestAccess::Release(First); S->Tick(0); TestEqual(TEXT("E6 released clear source makes one more"),P4dBoxes(E.World,S),2);
 	TestTrue(TEXT("E6 replacement at original pose"),S->SourceBox->GetActorTransform().Equals(Start));
 	S->Tick(0); TestEqual(TEXT("E6 only one replacement"),P4dBoxes(E.World,S),2);
-	First->SetActorLocation(FVector(-500,300,25)); FP4dTestAccess::Release(First); First->Tick(1);
+	First->SetActorLocation(FVector(-500,300,25)); First->Tick(1);
 	TestFalse(TEXT("E7 released box reaches floor and disappears"),IsValid(First));
 	TestEqual(TEXT("E7 floor leaves one"),P4dBoxes(E.World,S),1);
 	auto* Before = S->SourceBox.Get(); S->ResetStand(); TestFalse(TEXT("E7 reset destroys old source"),IsValid(Before));
