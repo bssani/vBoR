@@ -87,6 +87,16 @@
 | 17 | 선바이저 | 운전석·동승석 경첩 축(두 점), 내리는 최대 각, 판 메시 | `AVBoRAxisPart`(`BP_SunVisor_L`·`_R`) | 값 +가 내림이 되게 경첩 방향과 `bReverse`를 맞춘다(Blueprint-Guide §4.2 주의) |
 | 18 | 사이드미러 | 접이 경첩 축(두 점), 접힌 각, 접는 데 걸리는 시간, 하우징과 거울면 메시 | `AVBoRFoldingMirror`(`BP_SideMirror_L`·`_R`) | CAD 설계 자세(펼침)가 `MeshRestFromRoot`다. 하우징과 거울면을 merge해 하나로 넣는다 |
 
+### 4.1 CAD 계층 덤프 — 구조를 Claude에게 넘길 때 (2026-10-28)
+
+Datasmith(JT)로 가져온 계층을 텍스트로 뽑는다. 형상은 넣지 않고 이름·부착·위치·메시 경계·충돌 유무만 적는다.
+
+1. Outliner에서 움직이는 부품의 최상위 노드(문·리프트게이트·미러·콘솔 등)를 Ctrl로 여러 개 선택한다. 차 전체는 선택하지 않는다(수만 줄).
+2. Output Log 입력칸을 `Python`으로 바꾸고 [Tools/DumpHierarchy.py](../Tools/DumpHierarchy.py) 경로를 넣어 실행한다. `Python Editor Script Plugin`이 꺼져 있으면 켠다.
+3. 결과는 `Saved/vBoR_hierarchy.txt`. **리포에 커밋하지 않는다.** 부품 이름이 보안상 문제면 이름만 바꿔도 된다.
+- `bounds_center`가 (0,0,0)에서 멀면 메시 피벗이 차 원점, 가까우면 자기 피벗 + Location이다(Datasmith는 둘이 섞여 온다).
+- 스크립트는 엔진에서 아직 실행해 보지 않았다(Claude 2026-10-28). 오류가 나면 그 줄을 그대로 넘긴다.
+
 **뽑은 값을 어디에 적을지:**
 - 차량 수치를 이 리포에 적어도 되는지(회사 보안)는 **아직 정하지 않았다.**
 - 정하기 전에는 회사 PC의 git 밖 파일에 적는다.
