@@ -13,6 +13,7 @@ class UStaticMeshComponent;
 class UAudioComponent;
 class USoundBase;
 class AVBoRPoweredPanel;
+class UVBoRObstructionBoxComponent;
 
 enum class EVBoRPoweredSound : uint8 { OpenAccepted, CloseAccepted, Warning, Motor, Opened, Closed, Obstructed, Count };
 
@@ -117,6 +118,7 @@ private:
 	FVBoRSoundPlayback SoundPlayback[static_cast<int32>(EVBoRPoweredSound::Count)];
 	uint64 SoundFrame = 0;
 	int32 ObstructionCount = 0;
+	UPROPERTY() TArray<TObjectPtr<UVBoRObstructionBoxComponent>> ObstructionBoxes;
 	void Request(bool bOpen);
 	void PublishState();
 	void ApplyAngle();
@@ -126,6 +128,7 @@ private:
 	void AdvanceSounds(double Seconds, bool bIncludeHeld = true);
 	void StopHeldSounds();
 	FTransform MeshPoseAt(float Angle) const;
+	void CollectObstructionBoxes();
 	AVBoRCarryObject* FindObstruction(float FromAngle, float ToAngle) const;
 	AVBoRPokeButton* CreateButton(const FTransform& Relative, TSubclassOf<AVBoRPokeButton> ButtonClass, const TCHAR* Slot);
 	UFUNCTION() void OpenPressed(const FIsdkInteractionPointerEvent& Event);

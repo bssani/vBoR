@@ -171,6 +171,7 @@ private:
 	friend struct FP5sTestAccess;
 	friend struct FP5tTestAccess;
 	friend struct FP5zfTestAccess;
+	friend class FP5zgIsolation;
 #endif
 	void WarnIfOffCenterPivot(const FBox& Bounds, const FVector& Scale) const;
 	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
