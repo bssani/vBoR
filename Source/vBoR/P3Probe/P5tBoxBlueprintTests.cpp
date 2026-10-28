@@ -17,6 +17,7 @@
 struct FP5tTestAccess
 {
 	static bool Grab(AVBoRCarryObject* Box) { return Box->BeginCarry(0, nullptr, Box->GetActorTransform()); }
+	static void Release(AVBoRCarryObject* Box) { Box->ReleaseCarry(); }
 	static void Pivot(const AVBoRCarryObject* Box, const FBox& Bounds, const FVector& Scale)
 	{ Box->WarnIfOffCenterPivot(Bounds, Scale); }
 };
@@ -129,10 +130,13 @@ bool FP5tSupply::RunTest(const FString&)
 	auto* First = S->SourceBox.Get(); if (!TestNotNull(TEXT("Source"), First)) { return false; }
 	const FTransform Start = First->GetActorTransform();
 	TestTrue(TEXT("Grab accepted"), FP5tTestAccess::Grab(First));
+	First->SetActorLocation(Start.GetLocation() + FVector(0, 0, 50)); S->Tick(0);
+	TestEqual(TEXT("Held 50 cm lift does not supply"), P5tBoxes(W.World, S), 1);
+	FP5tTestAccess::Release(First);
 	First->SetActorLocation(Start.GetLocation() + FVector(0, 0, 41)); S->Tick(0);
 	TestEqual(TEXT("40 + 1 cm boundary still occupied"), P5tBoxes(W.World, S), 1);
 	First->SetActorLocation(Start.GetLocation() + FVector(0, 0, 50)); S->Tick(0);
-	TestEqual(TEXT("50 cm lift supplies one box"), P5tBoxes(W.World, S), 2);
+	TestEqual(TEXT("Released 50 cm lift supplies one box"), P5tBoxes(W.World, S), 2);
 	if (TestNotNull(TEXT("Replacement"), S->SourceBox.Get()))
 	{ TestTrue(TEXT("Replacement at original pose"), S->SourceBox->GetActorTransform().Equals(Start)); }
 	S->Tick(0); TestEqual(TEXT("No duplicate supply"), P5tBoxes(W.World, S), 2);

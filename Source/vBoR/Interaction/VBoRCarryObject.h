@@ -170,6 +170,7 @@ private:
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FP5sTestAccess;
 	friend struct FP5tTestAccess;
+	friend struct FP5zfTestAccess;
 #endif
 	void WarnIfOffCenterPivot(const FBox& Bounds, const FVector& Scale) const;
 	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
