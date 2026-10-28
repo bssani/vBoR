@@ -2,12 +2,13 @@
 
 | 항목 | 값 |
 |---|---|
-| 단계 | P5 리허설 준비(사용자 요청 2026-10-28, 회사 PC 시험). 시험 T-04·T-06(리프트게이트 열기·닫기) |
+| 단계 | P5 리허설 준비(사용자 요청 2026-10-28, 회사 PC 시험). 시험 T-02(박스 적재 — "입구 및 게이트 간섭 확인") |
 | 결정 근거 | **사용자(2026-10-28):** "트렁크에 box를 실으면 liftgate이 닫히다가 열리던데 box에 부딪히면 다시 열리는 건가?" → Claude 설명 → "명세서 작성해".<br>**지금:** 닫히는 동안 1° 단위로 판 메시의 **경계 상자**(메시 축 OBB, 중간 각도 자세 + 여유)와 박스가 겹치는지 본다(`AVBoRPoweredPanel::FindObstruction` `VBoRPoweredPanel.cpp:147-170`, P4b D5). 근사 판은 얇은 판이라 경계 = 판이다. **회사 CAD 리프트게이트는 굽어 있어(유리 + 아래 판, ㄱ자) 경계 상자가 트렁크 안쪽 공간까지 덮는다.** 그래서 제대로 실린 박스도 끼임으로 잡혀 다시 열린다(Claude 추정 — 사용자가 `obstructions=` 로그 확인 전). 메시 모양 그대로 보는 방법은 §1 |
 | 베이스 브랜치 | `main` @ 이 명세 머지 뒤 |
 | 작업 브랜치 | `codex/P5zg-liftgate-obstruction-boxes` |
 | 리뷰 파일 | `Docs/Reviews/P5zg-liftgate-obstruction-boxes.md` (첫 리뷰 때 생김) |
-| 상태 | 명세 |
+| 상태 | 명세 개정 1 |
+| 개정 | **1 (2026-10-28, Claude):** 시험 ID T-04·T-06 → **T-02**(계획서 §7 `Dev-Plan-50pct-VR.md:255` "입구 및 게이트 간섭 확인". T-04는 손·키보드 입력 일치, T-06은 순서·완료 판정). P5zf Q1 때 함께 발견. 내용 변경 없음 |
 | 에디터 작업 | **없음** (`BP_Liftgate`에 상자를 넣는 것은 사용자가 회사 CAD로 한다, §7) |
 | 앞 명세 | [P5zf-box-refill-after-release.md](P5zf-box-refill-after-release.md) — 순서는 P5zf 뒤 |
 
@@ -86,4 +87,4 @@
 
 - 빌드: 위 3.
 - **에디터(사용자, 회사 PC):** `BP_Liftgate` → Add Component → `Obstruction Box`를 `HingePivot` 밑에 넣는다. 닫힌 상태에서 리프트게이트 판(유리 아래 테두리·아래 판) 모양을 따라 상자 1~3개로 덮는다(회전 가능). 트렁크 안쪽 빈 공간은 덮지 않는다. Play → Output Log에 `N obstruction boxes`.
-- Quest 3(T-04·T-06, `not-tested`): ① 트렁크 안쪽 깊이 실은 박스로는 끝까지 닫힘 ② 입구에 걸친 박스에는 다시 열림 ③ 소리·버튼 그대로.
+- Quest 3(T-02, `not-tested`): ① 트렁크 안쪽 깊이 실은 박스로는 끝까지 닫힘 ② 입구에 걸친 박스에는 다시 열림 ③ 소리·버튼 그대로.
