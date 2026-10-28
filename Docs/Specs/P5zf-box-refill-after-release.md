@@ -1,4 +1,4 @@
-# P5zf 박스 받침대 — 손에서 놓은 뒤에 다음 박스
+﻿# P5zf 박스 받침대 — 손에서 놓은 뒤에 다음 박스
 
 | 항목 | 값 |
 |---|---|
@@ -7,7 +7,7 @@
 | 베이스 브랜치 | `main` @ 이 명세 머지 뒤 |
 | 작업 브랜치 | `codex/P5zf-box-refill-after-release` |
 | 리뷰 파일 | `Docs/Reviews/P5zf-box-refill-after-release.md` (첫 리뷰 때 생김) |
-| 상태 | 명세 개정 1 |
+| 상태 | 명세 개정 1 · 구현 리뷰 통과(1회차) |
 | 개정 | **1 (2026-10-28, Claude):** 시험 ID T-05 → **T-02**(계획서 §7 `Dev-Plan-50pct-VR.md:255` 박스 적재. T-05는 좌석 시점 전환). Codex Q1 지적. 내용 변경 없음 |
 | 에디터 작업 | **없음** |
 | 앞 명세 | [P5ze-door-grip.md](P5ze-door-grip.md) |
