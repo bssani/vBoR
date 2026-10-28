@@ -1,6 +1,7 @@
 #include "VBoRPoweredPanel.h"
 
 #include "VBoRCarryObject.h"
+#include "VBoRObstructionBoxComponent.h"
 #include "VBoRPokeButton.h"
 #include "Components/AudioComponent.h"
 #include "Components/InputComponent.h"
@@ -83,6 +84,7 @@ void AVBoRPoweredPanel::BeginPlay()
 {
 	Super::BeginPlay();
 	ResetPanel();
+	CollectObstructionBoxes();
 	OpenButton = CreateButton(OpenButtonFromHinge, OpenButtonClass, TEXT("OpenButtonClass"));
 	CloseButton = CreateButton(CloseButtonFromHinge, CloseButtonClass, TEXT("CloseButtonClass"));
 	if (OpenButton) { OpenButton->OnButtonPressed.AddDynamic(this, &AVBoRPoweredPanel::OpenPressed); }
@@ -144,8 +146,62 @@ FTransform AVBoRPoweredPanel::MeshPoseAt(float Angle) const
 	return PanelMesh->GetRelativeTransform() * Hinge * GetActorTransform();
 }
 
+void AVBoRPoweredPanel::CollectObstructionBoxes()
+{
+	ObstructionBoxes.Reset();
+	TArray<UVBoRObstructionBoxComponent*> Components;
+	GetComponents(Components);
+	for (UVBoRObstructionBoxComponent* Box : Components)
+	{
+		const TCHAR* Reason = nullptr;
+		if (!Box->IsAttachedTo(HingePivot)) { Reason = TEXT("not a descendant of HingePivot"); }
+		else if ((Box->GetUnscaledBoxExtent() * Box->GetComponentScale().GetAbs()).GetMin() <= 0)
+		{ Reason = TEXT("zero extent or scale"); }
+		if (Reason)
+		{
+			UE_LOG(LogPoweredPanel, Warning, TEXT("%s %s: ignored obstruction box (%s)"), *GetName(), *Box->GetName(), Reason);
+		}
+		else { ObstructionBoxes.Add(Box); }
+	}
+	if (ObstructionBoxes.IsEmpty())
+	{
+		UE_LOG(LogPoweredPanel, Log, TEXT("%s obstruction basis: mesh bounds (approximate)"), *GetName());
+	}
+	else
+	{
+		UE_LOG(LogPoweredPanel, Log, TEXT("%s obstruction basis: %d obstruction boxes"), *GetName(), ObstructionBoxes.Num());
+	}
+}
+
 AVBoRCarryObject* AVBoRPoweredPanel::FindObstruction(float FromAngle, float ToAngle) const
 {
+	if (!ObstructionBoxes.IsEmpty() && GetWorld())
+	{
+		const FTransform Hinge(FQuat(FVector::YAxisVector, FMath::DegreesToRadians((FromAngle + ToAngle) * 0.5f)), HingeLocationCm);
+		const FVector Pivot = GetActorTransform().TransformPosition(HingeLocationCm);
+		FCollisionObjectQueryParams Objects;
+		Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+		Objects.AddObjectTypesToQuery(ECC_WorldStatic);
+		for (const UVBoRObstructionBoxComponent* Box : ObstructionBoxes)
+		{
+			if (!IsValid(Box)) { continue; }
+			// Include intermediate parents; undo current hinge rotation before sampling (P5zg D3)
+			const FTransform Relative = Box->GetComponentTransform().GetRelativeTransform(HingePivot->GetComponentTransform());
+			const FTransform Mid = Relative * Hinge * GetActorTransform();
+			const FVector Extent = Box->GetUnscaledBoxExtent() * Mid.GetScale3D().GetAbs();
+			const double Radius = FVector::Distance(Mid.GetLocation(), Pivot) + Extent.Size();
+			const double MarginCm = Radius * FMath::DegreesToRadians(FMath::Abs(ToAngle - FromAngle) * 0.5) + 0.001;
+			TArray<FOverlapResult> Hits;
+			GetWorld()->OverlapMultiByObjectType(Hits, Mid.GetLocation(), Mid.GetRotation(), Objects,
+				FCollisionShape::MakeBox(Extent + FVector(MarginCm)), FCollisionQueryParams(SCENE_QUERY_STAT(PoweredPanel), false, this));
+			for (const FOverlapResult& Hit : Hits)
+			{
+				AVBoRCarryObject* Cargo = Cast<AVBoRCarryObject>(Hit.GetActor());
+				if (IsValid(Cargo) && Hit.GetComponent() == Cargo->Mesh) { return Cargo; }
+			}
+		}
+		return nullptr;
+	}
 	if (!PanelMesh->GetStaticMesh() || !GetWorld()) { return nullptr; }
 	const FBox Bounds = PanelMesh->GetStaticMesh()->GetBoundingBox();
 	const FTransform Mid = MeshPoseAt((FromAngle + ToAngle) * 0.5f);
