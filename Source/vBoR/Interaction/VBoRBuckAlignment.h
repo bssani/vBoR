@@ -86,4 +86,9 @@ struct VBOR_API FVBoRBuckAlignmentStore
 {
 	static bool Load(const FString& Path, FVBoRBuckSavedAlignment& Out, FString& Reason);
 	static bool Save(const FString& Path, const FVBoRBuckSavedAlignment& Candidate, FString& Reason);
+private:
+#if WITH_DEV_AUTOMATION_TESTS && PLATFORM_WINDOWS
+	friend struct FR0BuckSaveTestAccess;
+	static uint32 (*ReplaceForTest)(const FString& CandidatePath, const FString& Path);
+#endif
 };

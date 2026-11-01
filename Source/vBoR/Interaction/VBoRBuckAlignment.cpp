@@ -2,10 +2,15 @@
 #include "Dom/JsonObject.h"
 #include "Serialization/JsonSerializer.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformProcess.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #if PLATFORM_WINDOWS
 #include "Windows/WindowsHWrapper.h"
+#endif
+
+#if WITH_DEV_AUTOMATION_TESTS && PLATFORM_WINDOWS
+uint32 (*FVBoRBuckAlignmentStore::ReplaceForTest)(const FString&, const FString&) = nullptr;
 #endif
 
 bool FVBoRBuckAlignment::FitPoints(const TArray<FVector>& Stage, const TArray<FVector>& World, double FloorZCm, FVBoRPointFit& Out)
@@ -310,8 +315,37 @@ bool FVBoRBuckAlignmentStore::Save(const FString& Path, const FVBoRBuckSavedAlig
 	if (Load(CandidatePath, Verified, Reason))
 	{
 #if PLATFORM_WINDOWS
-		bReplaced = ::MoveFileExW(*FPaths::ConvertRelativePathToFull(CandidatePath), *FPaths::ConvertRelativePathToFull(Path), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
-		if (!bReplaced) { ReplacementError = ::GetLastError(); }
+		const FString FullCandidatePath = FPaths::ConvertRelativePathToFull(CandidatePath);
+		const FString FullPath = FPaths::ConvertRelativePathToFull(Path);
+		constexpr int32 MaxAttempts = 5;
+		constexpr float RetrySeconds = 0.05f; // At most 200 ms waiting (R0 D4)
+		uint32 PreviousError = 0;
+		for (int32 Attempt = 1; Attempt <= MaxAttempts; ++Attempt)
+		{
+#if WITH_DEV_AUTOMATION_TESTS
+			if (ReplaceForTest)
+			{
+				ReplacementError = ReplaceForTest(FullCandidatePath, FullPath);
+				bReplaced = ReplacementError == 0;
+			}
+			else
+#endif
+			{
+				bReplaced = ::MoveFileExW(*FullCandidatePath, *FullPath, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != 0;
+				ReplacementError = bReplaced ? 0 : ::GetLastError();
+			}
+			if (bReplaced)
+			{
+				if (Attempt > 1)
+				{
+					UE_LOG(LogTemp, Warning, TEXT("Buck alignment save: replacement succeeded on attempt %d after OS error %u"), Attempt, PreviousError);
+				}
+				break;
+			}
+			if (Attempt == MaxAttempts || (ReplacementError != ERROR_ACCESS_DENIED && ReplacementError != ERROR_SHARING_VIOLATION)) { break; }
+			PreviousError = ReplacementError;
+			FPlatformProcess::Sleep(RetrySeconds);
+		}
 #else
 		Reason = TEXT("safe replacement available only on Windows PCVR");
 #endif
