@@ -1,4 +1,29 @@
-# R8a AxisPart 밀기 면 맞춤 — 질문
+# R8a AxisPart 밀기 면 맞춤 — 리뷰
+
+| 회차 | 날짜 | 대상 | 리뷰어 | 결과 |
+|---|---|---|---|---|
+| 1 | 2026-11-01 | `e547efb` feat: AxisPart 밀기 면 상자와 접촉 여유 | Claude | **열린 항목 없음 — 통과.** 빌드: unity 최신(Target is up to date — Codex 최종 빌드와 같은 트리). `vBoR.*` **685/685**, Fail 0, `EXIT CODE: 0`(`Saved/Logs/ReviewR8aAll.log`). R8a 10/10 |
+
+## 1회차 (2026-11-01, `main...codex/R8a-axis-push-face`)
+
+### 확인한 것
+
+- **AGENTS.md 제약:** 범위 안. 제품 변경은 `VBoRAxisPart.h/.cpp`, `VBoRJudgmentGuide.cpp`뿐. 새 주석·로그·표시 이름 영어. 에디터·BP·에셋 변경 없음. Q1 답 커밋 보존, `main` 병합(rebase 없음).
+- **D1:** `PushFaceBox`는 `AxisPivot` 밑, 충돌·overlap 없음, 게임 숨김(`VBoRAxisPart.cpp:157-160`). `PushGeometry`가 켜졌고 회전 0일 때 상자의 상대 위치 ± `GetUnscaledBoxExtent() × |scale|`을 메시 경계 대신 쓴다(`:711-717`). 같은 AxisPivot 좌표라 이후 `Radial`·`Normal`·판 계산은 메시 경로와 같다. 이름 `PushFaceBox`(P4iComponents 짝짓기 조건 지킴).
+- **D2:** 꺼져 있을 때만 `OnConstruction`에서 GrabBox와 같은 메시 경계로 위치·크기, 회전·스케일 초기화(`:193-197`). 켜진 상자는 건드리지 않는다(E4).
+- **D3:** 회전 ≠ 0이면 `PushGeometry`가 메시 경계로 돌아가고, BeginPlay에서 경고 한 줄(`:239-242`), R2c 판은 자홍색(E3이 `AddExpectedMessagePlain`으로 한 번 확인).
+- **D4:** `PushPlane(Face)`가 면 0은 `Min.Y - 여유`, 면 1은 `Max.Y + 여유`(손이 오는 쪽)로 옮기고, `FindPush`의 깊이·이전 깊이·두께 상한과 `AdvancePush`의 `Plane`이 모두 이 함수를 쓴다(`:406-411, 436-439, 471`). 0이면 원래 식과 같다. 옆 범위(`Inside`, X·Z)와 축 최소 거리는 그대로 — D6.
+- **D5:** R2a 화살표·R2c 판 모두 `PushGeometry` 기준, 여유 없는 면(E10).
+- **§3 기존 시험:** 허용 수정은 `P5mLeverTests.cpp` E5/E6 준비의 `PushContactOffsetCm=0` 한 줄뿐(단언·손 위치 그대로). 다른 기존 시험 변경 없음.
+- **시험:** E7이 Q1 수치(1.911276° → 4.979106°)와 회전된 판 좌표 거리 0.8 cm(0.01)를, E9가 두 면의 부호·바깥 방향을 단언한다. 명세 개정 1과 맞다.
+
+### 참고 (항목 아님)
+
+1. **R2c 판 표시의 비균일 스케일 — 메시 경로는 예전 그대로.** Codex가 찾은 대로 `FTransform(Basis) * AxisPivot 월드`는 월드 스케일이 비균일하면 축을 바꾼 뒤 스케일을 잘못된 축에 곱한다. 이번에는 상자 경로만 `FaceBounds.TransformBy(Basis)` 뒤 월드 변환으로 고쳤고(`VBoRJudgmentGuide.cpp:133-138`), 메시 경계 경로는 R2c 때 식 그대로다. 그래서 액터·피벗 월드 스케일이 비균일한 AxisPart에서는 상자를 켜는 순간(D2로 같은 경계여도) 파란 판이 옮겨 보일 수 있다. 판정(`PushBounds`)은 피벗 좌표라 영향이 없고 표시만의 문제다. 이 버그는 R2c 리뷰 때 내가 놓친 것이다. 차 BP는 보통 스케일 1이므로 이번에는 다시 열지 않는다. 회사 CAD에서 판이 메시와 어긋나 보이면 두 경로를 같은 식으로 맞추는 작은 수정으로 따로 처리한다(`Basis`는 ±단위축 순열이라 `TransformBy`가 정확하다).
+2. 회전 경고는 `bAllowPush`가 꺼져 있어도 상자를 켜고 회전하면 한 번 나온다. 해롭지 않다.
+3. **사용자 확인(not-tested):** 회사 선바이저 BP에서 `Use push face box`를 켜고 상자를 판 표면에 맞춘 뒤 파란 판·화살표 확인. Quest 3(T-08)에서 손가락 살이 면에 닿을 때 움직이기 시작하는지, 미는 중 파고듦이 줄었는지, 0.8 cm가 적절한지. 손 모델 멈추기(R8c)는 그 결과로 정한다.
+
+## 질문
 
 ## 질문
 
