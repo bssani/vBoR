@@ -7,7 +7,8 @@
 | 베이스 브랜치 | `main` (R2a 머지 뒤, `3185712` 이후) |
 | 작업 브랜치 | `codex/R2c-judgment-guide` |
 | 리뷰 파일 | `Docs/Reviews/R2c-judgment-guide.md` (첫 리뷰 때 생김) |
-| 상태 | 명세 작성 |
+| 상태 | 명세 개정 1 |
+| 개정 | **1 (2026-11-01, Claude):** Codex Q1 — R2a 시험 E7(`R2aMotionGuideTests.cpp:217` 그립 "전체 모양 0")·E11(`:323-324` `Motion guide` Off·미선택에서 전체 모양 0, Off에서 `BatchedLines` 0)이 **종류별이 아니라 전체 수**를 단언한다. 내 §3 감사가 "종류 수"만 봤다. §3에 허용 수정 한 가지를 넣음: 그 두 시험 준비에서 `Judgment guide = Off`. 제품 기본값(Always)·독립성은 그대로 |
 | 에디터 작업 | **없음** |
 | 앞 명세 | [R2a-motion-guide.md](R2a-motion-guide.md) — 이 명세는 R2a의 `UVBoRMotionGuideComponent`에 모양을 더한다 |
 
@@ -58,8 +59,9 @@
   - `P2Probe/P2fMeshGrabTests.cpp` 전체(`E1`–`E10`) — 특히 경고 횟수 단언 `:210`(`Contains`, 4번), `:252`, `:274-277`. 표시가 잡기 조건을 계산해도 **경고가 늘면 안 된다**(D6).
   - `P1Probe/P4bPoweredPanelTests.cpp`, `P1Probe/P5zgObstructionBoxTests.cpp`, `P1Probe/P5rSoundCueTests.cpp`, `P3Probe/P3FlowTests.cpp`의 끼임 관련 단언 — `FindObstruction` 자세 계산을 함수로 뽑아도 결과(멈춤 각 ≤ 1.5° 차, 겹침 대상) 그대로.
   - `P3Probe/R2aMotionGuideTests.cpp` — R2a 모양 수·종류 단언이 있다. R2c 모양은 **새 종류**로 넣어 기존 종류(`Axis`·`Arc`·`Rest`·`Travel`·`Detent`·`Push`) 수가 바뀌지 않게 한다. `Judgment guide = Off`면 R2a 모양만 남는다.
+  - **고쳐도 되는 것(개정 1, 유일한 허용):** 같은 파일의 `E7GripAndMissingMesh`(`:216-217` 그립 전체 모양 0)과 `E11DisplayFlags`(`:323-324` 전체 모양·`BatchedLines` 0)는 **R2a 표시만** 시험하려는 것이다. 그 시험 준비에서 부품의 `Judgment guide = Off`로 두어 원래 의도를 지킨다. 단언 자체는 바꾸지 않는다. 그립 잡기 형상(D1)과 `Judgment guide`·`Motion guide`의 독립성은 R2c 시험(E1·E12)에서 확인한다.
   - `P5xPanelHandlesTests.cpp:84-88`(HingedPanel CDO의 `UBoxComponent` 1개) — 새 컴포넌트를 더하지 않는다(R2a 컴포넌트에 모양만).
-  - **고쳐도 되는 단언: 없음.** 기존 시험을 고쳐야 통과하면 멈추고 리뷰 파일 "질문"에 적는다.
+  - **그 밖에 고쳐도 되는 단언: 없음.** 기존 시험을 더 고쳐야 통과하면 멈추고 리뷰 파일 "질문"에 적는다.
 
 ## 4. 시험 — `vBoR.R2c.*`
 
@@ -67,7 +69,7 @@ R2a처럼 모양 목록을 만드는 순수 함수와 실제 판정 함수를 �
 
 | ID | 상황 | 확인 |
 |---|---|---|
-| E1 | AxisPart `bGrabWithMesh = false` | 잡기 모양 = GrabBox(월드 자세·크기 0.1 cm), 경고 색 아님 |
+| E1 | AxisPart `bGrabWithMesh = false`, 그리고 같은 설정의 문 그립(`DoorHandleSide = Grip`) | 둘 다 잡기 모양 = GrabBox(월드 자세·크기 0.1 cm), 경고 색 아님. 그립은 R2a 모양 0개 |
 | E2 | `bGrabWithMesh = true`, 메시 simple collision 있음(박스 요소 1개 이상인 시험 메시) | 잡기 모양 = 메시 simple 요소(위치·크기가 요소 월드 자세와 0.1 cm), GrabBox 모양 없음 |
 | E3 | `bGrabWithMesh = true`, simple collision 없음 | GrabBox를 경고 색으로. **경고 로그는 지금과 같은 횟수**(표시 때문에 늘지 않음 — `AddExpectedMessage` 횟수 또는 로그 수집으로) |
 | E4 | `CTF_UseComplexAsSimple` 메시 | 메시 쪽(D1 대체 표시 포함), GrabBox 없음 |
@@ -78,7 +80,7 @@ R2a처럼 모양 목록을 만드는 순수 함수와 실제 판정 함수를 �
 | E9 | AxisPart 밀기 판(`bAllowPush`, Rotate, `Axis` X·Y·Z) | 상자 꼭짓점 = `PushGeometry` 판의 꼭짓점을 피벗 좌표에서 월드로 바꾼 것. `bAllowPush = false`나 Translate면 없음 |
 | E10 | 리프트게이트 장애물 상자 2개, `OpenAngleDeg` 85 | 각 단계(≤ 10°, 0과 85 포함)마다 상자 2개. 각 상자 자세 = 같은 각에서 `FindObstruction`이 쓰는 자세(여유 제외, 0.1 cm) |
 | E11 | 장애물 상자 없음 | 판 메시 경계 상자를 경고 색으로, 각마다 1개. 자세 = 메시 경계 경로의 자세 |
-| E12 | `Judgment guide` Off / Selected only(선택 안 됨) / 게임 월드 | R2c 모양 0개, R2a 모양은 `Motion guide` 설정대로 |
+| E12 | `Judgment guide` Off / Selected only(선택 안 됨) / 게임 월드. 그리고 `Motion guide = Off` + `Judgment guide = Always` | 앞의 셋: R2c 모양 0개, R2a 모양은 `Motion guide` 설정대로. 마지막: R2a 모양 0개, R2c 모양은 있음(서로 독립) |
 | E13 | `Preview` 1(R2a) | 움직이는 부품의 잡기·밀기 모양이 미리보기 자세를 따른다. 리프트게이트 쓸림 영역은 `Preview`와 상관없이 같다(전 구간을 그림) |
 
 ## 5. 구현자가 정할 것
