@@ -142,11 +142,11 @@ bool FVBoRDoorMotion::FindPush(int32 Hand, const FVBoRDoorHand& Input, int32 Fac
 	if (!bContactNear[Hand]) { ContactFace[Hand] = INDEX_NONE; return false; }
 	ContactFace[Hand] = Face;
 	const FVector Palm = ToDoor(Input.PalmNormal).GetSafeNormal();
-	const double PalmAngle = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Palm, FVector(0, -Sign, 0)), -1.0, 1.0)));
+	const double PalmAngle = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Palm, PushInward(Face)), -1.0, 1.0)));
 	PalmAngleDeg[Hand] = PalmAngle;
 	if (bUseLatch && bLocked) { OutReason = EVBoRDoorIgnore::Locked; }
 	// Keep locked count first. May allow closing face only after unlock (P2d R1 D7)
-	else if (Face == 1 && !bAllowPalmOpening) { OutReason = EVBoRDoorIgnore::OpeningDisabled; }
+	else if (PushOpens(Face) && !bAllowPalmOpening) { OutReason = EVBoRDoorIgnore::OpeningDisabled; }
 	else if (!bCrossing) { OutReason = EVBoRDoorIgnore::Behind; }
 	else if (!bAwayFromAxis) { OutReason = EVBoRDoorIgnore::NearAxis; }
 	else if (Palm.IsNearlyZero() || PalmAngle > PalmLimitDeg) { OutReason = EVBoRDoorIgnore::PalmDirection; }
@@ -159,7 +159,7 @@ bool FVBoRDoorMotion::FindPush(int32 Hand, const FVBoRDoorHand& Input, int32 Fac
 	const double Target = FMath::RadiansToDegrees(FMath::Atan2(Point.Y, Point.X) -
 		FMath::Asin(FMath::Clamp(DeepestPlaneY / Radius, -1.0, 1.0)));
 	OutAngle = AngleDeg + FMath::FindDeltaAngleDegrees(AngleDeg, Target);
-	OutAngle = Face == 0 ? FMath::Min(AngleDeg, OutAngle) : FMath::Max(AngleDeg, OutAngle);
+	OutAngle = !PushOpens(Face) ? FMath::Min(AngleDeg, OutAngle) : FMath::Max(AngleDeg, OutAngle);
 	return true;
 }
 

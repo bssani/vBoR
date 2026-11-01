@@ -5,6 +5,7 @@
 #include "VBoRDoorMotion.h"
 #include "VBoRSpectatorPart.h"
 #include "VBoRSoundCue.h"
+#include "VBoRMotionGuideComponent.h"
 #include "VBoRHingedPanel.generated.h"
 
 class UStaticMeshComponent;
@@ -24,6 +25,13 @@ class VBOR_API AVBoRHingedPanel : public AActor, public IVBoRSpectatorPart
 	GENERATED_BODY()
 public:
 	AVBoRHingedPanel();
+	static FQuat RotationAt(double Angle, const FQuat& Rest);
+	UPROPERTY(EditAnywhere, Transient, Category="Hinged panel|Guide", meta=(DisplayName="Preview (0–1)", ClampMin="0", ClampMax="1", UIMin="0", UIMax="1", ToolTip="Editor pose only. Zero keeps normal editor pose")) float Preview = 0;
+	UPROPERTY(EditAnywhere, Category="Hinged panel|Guide", meta=(DisplayName="Motion guide")) EVBoRMotionGuide MotionGuide = EVBoRMotionGuide::Always;
+#if WITH_EDITORONLY_DATA
+	UPROPERTY(VisibleAnywhere, Category="Hinged panel|Guide") TObjectPtr<UVBoRMotionGuideComponent> MotionDisplay;
+#endif
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Sound") FVBoRSoundCue UnlockedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Sound") FVBoRSoundCue LatchedCue;
 	// Slot order = property order above (P5s D12)
@@ -87,6 +95,11 @@ protected:
 	virtual bool ReadHand(int32 Hand, FVBoRDoorHand& Input);
 	virtual bool ReadPalmClosed(int32 Hand, bool& bClosed) const;
 private:
+	friend class UVBoRMotionGuideComponent;
+
+#if WITH_DEV_AUTOMATION_TESTS
+	friend struct FR2aTestAccess;
+#endif
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FP5sTestAccess;
 	friend struct FP5zeTestAccess;

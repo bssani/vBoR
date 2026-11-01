@@ -7,6 +7,7 @@
 #include "VBoRSpectatorPart.h"
 #include "VBoRDoorMotion.h"
 #include "VBoRSoundCue.h"
+#include "VBoRMotionGuideComponent.h"
 #include "VBoRAxisPart.generated.h"
 
 class UStaticMeshComponent;
@@ -80,6 +81,12 @@ class VBOR_API AVBoRAxisPart : public AActor, public IVBoRSpectatorPart
 	GENERATED_BODY()
 public:
 	AVBoRAxisPart();
+	UPROPERTY(EditAnywhere, Transient, Category="Axis part|Guide", meta=(DisplayName="Preview (0–1)", ClampMin="0", ClampMax="1", UIMin="0", UIMax="1", ToolTip="Editor pose only. Zero keeps normal editor pose")) float Preview = 0;
+	UPROPERTY(EditAnywhere, Category="Axis part|Guide", meta=(DisplayName="Motion guide")) EVBoRMotionGuide MotionGuide = EVBoRMotionGuide::Always;
+#if WITH_EDITORONLY_DATA
+	UPROPERTY(VisibleAnywhere, Category="Axis part|Guide") TObjectPtr<UVBoRMotionGuideComponent> MotionDisplay;
+#endif
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Sound") FVBoRSoundCue OpenedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Sound") FVBoRSoundCue ClosedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Sound") FVBoRSoundCue DetentCue;
@@ -154,6 +161,11 @@ protected:
 	virtual void ReadPushHands(FVBoRDoorHand (&Hands)[2]) const;
 	virtual UIsdkGrabberComponent* GetPushGrabber(int32 Hand) const;
 private:
+	friend class UVBoRMotionGuideComponent;
+
+#if WITH_DEV_AUTOMATION_TESTS
+	friend struct FR2aTestAccess;
+#endif
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FP5sTestAccess;
 	friend struct FP5zeTestAccess;
@@ -210,6 +222,9 @@ private:
 	double Limit() const;
 	FVector LocalAxis() const;
 	FTransform ValueTransform() const;
+	FTransform ValueTransform(double AtValue) const;
+	void PushGeometry(FBox& Bounds, FVector& Radial, FVector& Normal) const;
+	static double PushAngularDirection(int32 Face) { return Face == 0 ? 1 : -1; }
 	void AcceptTransform(const FTransform& Transform);
 	void EvaluateState();
 	void ReleasePart(bool bCancelSDK = true);

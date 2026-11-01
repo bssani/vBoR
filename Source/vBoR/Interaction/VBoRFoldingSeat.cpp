@@ -9,6 +9,10 @@ AVBoRFoldingSeat::AVBoRFoldingSeat()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("VehicleOrigin")));
+#if WITH_EDITORONLY_DATA
+	MotionDisplay = CreateEditorOnlyDefaultSubobject<UVBoRMotionGuideComponent>(TEXT("MotionDisplay"));
+	if (MotionDisplay) { MotionDisplay->SetupAttachment(RootComponent); }
+#endif
 	HingePivot = CreateDefaultSubobject<USceneComponent>(TEXT("HingePivot"));
 	HingePivot->SetupAttachment(RootComponent);
 	SeatMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ApproximateSeatBack"));
@@ -21,10 +25,17 @@ AVBoRFoldingSeat::AVBoRFoldingSeat()
 
 void AVBoRFoldingSeat::OnConstruction(const FTransform& Transform)
 {
+#if WITH_EDITORONLY_DATA
+	if (MotionDisplay) { MotionDisplay->ClearPreview(); }
+#endif
 	Super::OnConstruction(Transform);
 	HingePivot->SetRelativeLocationAndRotation(HingeLocationCm, FRotator::ZeroRotator);
 	SeatMesh->SetRelativeTransform(MeshRestFromRoot.GetRelativeTransform(FTransform(HingeLocationCm)));
 	ResetSeat();
+
+#if WITH_EDITORONLY_DATA
+	if (MotionDisplay) { MotionDisplay->Refresh(); }
+#endif
 }
 
 bool AVBoRFoldingSeat::Fold()
@@ -51,7 +62,7 @@ void AVBoRFoldingSeat::ResetSeat()
 void AVBoRFoldingSeat::ApplyAngle()
 {
 	// Positive +Y rotation tilts backrest top toward car front +X (P4e D1, deg)
-	HingePivot->SetRelativeRotation(FQuat(FVector::YAxisVector, FMath::DegreesToRadians(AngleDeg)));
+	HingePivot->SetRelativeRotation(HingePoseAt(AngleDeg).GetRotation());
 }
 
 void AVBoRFoldingSeat::Tick(float DeltaSeconds)
@@ -64,4 +75,9 @@ void AVBoRFoldingSeat::Tick(float DeltaSeconds)
 	AngleDeg = FMath::Clamp(FMath::FInterpConstantTo(AngleDeg, Target, FMath::Max(0.0f, DeltaSeconds), FMath::Max(0.1f, SpeedDegPerSecond)), 0.0f, Limit);
 	ApplyAngle();
 	if (AngleDeg == Target) { State = bFolding ? EVBoRFoldingSeatState::Folded : EVBoRFoldingSeatState::Standing; }
+}
+
+FTransform AVBoRFoldingSeat::HingePoseAt(double Angle) const
+{
+	return FTransform(FQuat(FVector::YAxisVector, FMath::DegreesToRadians(Angle)), HingeLocationCm);
 }
