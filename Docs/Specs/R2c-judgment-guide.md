@@ -69,7 +69,7 @@ R2a처럼 모양 목록을 만드는 순수 함수와 실제 판정 함수를 �
 
 | ID | 상황 | 확인 |
 |---|---|---|
-| E1 | AxisPart `bGrabWithMesh = false` | 잡기 모양 = GrabBox(월드 자세·크기 0.1 cm), 경고 색 아님 |
+| E1 | AxisPart `bGrabWithMesh = false`, 그리고 같은 설정의 문 그립(`DoorHandleSide = Grip`) | 둘 다 잡기 모양 = GrabBox(월드 자세·크기 0.1 cm), 경고 색 아님. 그립은 R2a 모양 0개 |
 | E2 | `bGrabWithMesh = true`, 메시 simple collision 있음(박스 요소 1개 이상인 시험 메시) | 잡기 모양 = 메시 simple 요소(위치·크기가 요소 월드 자세와 0.1 cm), GrabBox 모양 없음 |
 | E3 | `bGrabWithMesh = true`, simple collision 없음 | GrabBox를 경고 색으로. **경고 로그는 지금과 같은 횟수**(표시 때문에 늘지 않음 — `AddExpectedMessage` 횟수 또는 로그 수집으로) |
 | E4 | `CTF_UseComplexAsSimple` 메시 | 메시 쪽(D1 대체 표시 포함), GrabBox 없음 |
@@ -80,7 +80,7 @@ R2a처럼 모양 목록을 만드는 순수 함수와 실제 판정 함수를 �
 | E9 | AxisPart 밀기 판(`bAllowPush`, Rotate, `Axis` X·Y·Z) | 상자 꼭짓점 = `PushGeometry` 판의 꼭짓점을 피벗 좌표에서 월드로 바꾼 것. `bAllowPush = false`나 Translate면 없음 |
 | E10 | 리프트게이트 장애물 상자 2개, `OpenAngleDeg` 85 | 각 단계(≤ 10°, 0과 85 포함)마다 상자 2개. 각 상자 자세 = 같은 각에서 `FindObstruction`이 쓰는 자세(여유 제외, 0.1 cm) |
 | E11 | 장애물 상자 없음 | 판 메시 경계 상자를 경고 색으로, 각마다 1개. 자세 = 메시 경계 경로의 자세 |
-| E12 | `Judgment guide` Off / Selected only(선택 안 됨) / 게임 월드 | R2c 모양 0개, R2a 모양은 `Motion guide` 설정대로 |
+| E12 | `Judgment guide` Off / Selected only(선택 안 됨) / 게임 월드. 그리고 `Motion guide = Off` + `Judgment guide = Always` | 앞의 셋: R2c 모양 0개, R2a 모양은 `Motion guide` 설정대로. 마지막: R2a 모양 0개, R2c 모양은 있음(서로 독립) |
 | E13 | `Preview` 1(R2a) | 움직이는 부품의 잡기·밀기 모양이 미리보기 자세를 따른다. 리프트게이트 쓸림 영역은 `Preview`와 상관없이 같다(전 구간을 그림) |
 
 ## 5. 구현자가 정할 것
