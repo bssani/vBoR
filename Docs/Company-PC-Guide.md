@@ -12,7 +12,7 @@
 2. [AGENTS.md](../AGENTS.md): 지켜야 할 규칙(확정 제약·금지·작업 방식). 반드시 읽는다.
 3. [Dev-Plan-50pct-VR.md](Dev-Plan-50pct-VR.md): 범위, 결정(U-01…), 시나리오 19개, 개발 단계, 시험 계획
 4. [Research-Log.md](Research-Log.md): 결정의 근거. 최신 항목이 위에 있다. 정렬은 2026-10-20(점 4개)·2026-10-19(높이) 항목을 본다.
-5. [Blueprint-Guide.md](Blueprint-Guide.md): **실제 차를 L_Main에 넣는 법**(차 기준점 BP, 부품 BP, 연결 규칙, 시나리오 태그, 넣은 뒤 확인). CAD 작업을 시작하기 전에 읽는다.
+5. [Blueprint-Guide.md](Blueprint-Guide.md): **실제 차를 L_Main에 넣는 법**(부품 하나 만드는 순서 §3, 차 기준점 BP, 부품표, 판정 형상, 연결 규칙, 시나리오 태그, 넣은 뒤 확인). CAD 작업을 시작하기 전에 읽는다.
 6. [Agent-Workflow.md](Agent-Workflow.md): 빌드·시험 명령, 무시해도 되는 로그 잡음, 기록 위치
 7. 맡은 작업의 [Specs/](Specs/)`<이름>.md`와 [Reviews/](Reviews/)`<이름>.md`
 8. [Company-Handover.md](Company-Handover.md): **작업한 뒤 Claude에게 넘길 때** 무엇을 어떤 형식으로 적는지(차량 수치는 `Saved/Handover/`에, 리포 밖).
@@ -84,7 +84,7 @@
 | 14 | 콘솔 뚜껑·글러브박스 | 힌지 축, 열림 각, 손잡이 | `AVBoRHingedPanel`, `AVBoRAxisPart` | |
 | 15 | 버튼 | 시동·리프트게이트·도달(13번 대상) 버튼의 자리와 크기 | `AVBoRPokeButton` | 보이는 크기는 실제 그대로(AGENTS.md) |
 | 16 | 메시 구성 | 움직이는 부품마다 같이 움직이는 메시 이름 목록, 피벗 상태 | 부품 Blueprint | 메시 피벗은 차 원점 하나다(U-09). 회전 중심은 부모의 축 컴포넌트로 정한다 |
-| 17 | 선바이저 | 운전석·동승석 경첩 축(두 점), 내리는 최대 각, 판 메시 | `AVBoRAxisPart`(`BP_SunVisor_L`·`_R`) | 값 +가 내림이 되게 경첩 방향과 `bReverse`를 맞춘다(Blueprint-Guide §4.2 주의) |
+| 17 | 선바이저 | 운전석·동승석 경첩 축(두 점), 내리는 최대 각, 판 메시 | `AVBoRAxisPart`(`BP_SunVisor_L`·`_R`) | 값 +가 내림이 되게 경첩 방향과 `bReverse`를 맞춘다(Blueprint-Guide §5 "선바이저 경첩 방향") |
 | 18 | 사이드미러 | 접이 경첩 축(두 점), 접힌 각, 접는 데 걸리는 시간, 하우징과 거울면 메시 | `AVBoRFoldingMirror`(`BP_SideMirror_L`·`_R`) | CAD 설계 자세(펼침)가 `MeshRestFromRoot`다. 하우징과 거울면을 merge해 하나로 넣는다 |
 
 ### 4.1 CAD 계층 덤프 — 구조를 Claude에게 넘길 때 (2026-10-28)
@@ -119,7 +119,7 @@ Datasmith(JT)로 가져온 계층을 텍스트로 뽑는다. 형상은 넣지 �
 3. ~~`AVBoRPawn`·`AVBoRGameMode`~~ — 끝(P4f)
 4. ~~L_Main·차량 Blueprint 틀~~ — 만듦(`Content/Main/L_Main`, P4i)
 5. CAD 넣기 — [Blueprint-Guide.md](Blueprint-Guide.md)대로 `Approx`를 지우고, CAD 정적 메시를 넣고, BP마다 메시와 축 자리를 바꾼다.
-   - 잡는 부품의 피벗·메시 충돌은 아트 디자이너가 한다(Blueprint-Guide §4.3).
+   - 잡는 부품의 피벗·메시 충돌은 아트 디자이너가 한다(Blueprint-Guide §6.2).
    - 연결(손잡이·기어 끝 버튼·키 태그·박스 받침)은 BP 틀로 자동화 확인했다(P4i). VR 확인은 아직이다.
 6. 산출물:
    - 설치·정렬 절차서
