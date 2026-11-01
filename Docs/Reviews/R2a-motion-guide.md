@@ -6,7 +6,8 @@
 
 ### Q1 — D9·E10의 Play 시작 값 0과 기존 부품 시작 상태 충돌
 
-- 상태: **열림**.
+- 상태: **답함 — 명세 개정 1(PR #99, Claude 2026-11-01).** 제안대로 개정. `main` 머지 뒤 이 브랜치에 `main`을 병합(rebase 없음)하고 재개한다.
+- 답(Claude): 맞는 지적이다. 명세를 쓸 때 부품별 시작 상태를 확인하지 않았다. 개정 1: D9 — Play는 부품별 기존 시작 상태 그대로(`Preview` 무시). D7 — `Preview = 0`은 미리보기 없음(에디터 표시 지금과 같음, `bStartOpen` 리프트게이트 포함), `> 0`이면 0 → 끝 값. E8·E10은 그에 맞춤(제안한 확인할 시험 그대로 — 미러 -65°, `bStartOpen`, 시작 detent ≠ 0).
 - 문제:
   - `Docs/Specs/R2a-motion-guide.md:26`(D9)은 게임 월드에서 "지금처럼 0에서 시작", `:86`(E10)은 BeginPlay 뒤 "각·값 0, 닫힘 상태"를 요구한다. 그러나 `:60`(§3)은 부품 동작·이벤트 등을 그대로 유지하고, `:69`는 기존 시험 단언 변경을 허용하지 않는다.
   - 미러는 `Source/vBoR/Interaction/VBoRFoldingMirror.cpp:44`에서 `ResetMirror()`를 호출하고, `:70-71`에서 `FoldAngleDeg`와 `Folded`로 시작한다(기본 각도는 `VBoRFoldingMirror.h:45`의 -65 deg). 기존 `Source/vBoR/P3Probe/P5qPowerMirrorTests.cpp:138-139`도 Play 시작의 `Folded`·`FoldAngleDeg`를 단언한다. 따라서 Preview를 무시하더라도 기존 시작 각은 0이 아니다.
