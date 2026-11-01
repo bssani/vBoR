@@ -116,7 +116,7 @@ bool FP5mPush::RunTest(const FString&)
 {
 	for (bool Reverse:{false,true}) for (bool Below:{false,true}) for (double Magnitude:{5.,16.})
 	{
-		FP5mWorld W; auto* P=W.Part(Reverse); auto* E=P5mObserve(P); W.Play(); auto* A=FP5mTestAccess::Audio(P); P5mStart(P,Below,Reverse);
+		FP5mWorld W; auto* P=W.Part(Reverse); P->PushContactOffsetCm=0; auto* E=P5mObserve(P); W.Play(); auto* A=FP5mTestAccess::Audio(P); P5mStart(P,Below,Reverse);
 		const double Angle=Below?Magnitude:-Magnitude;
 		for (double Step=4;Step<Magnitude;Step+=4) { P5mPoint(P->Hands[0],P5mContact(Below?Step:-Step,Below,Reverse)); P->Tick(.001f); }
 		P5mPoint(P->Hands[0],P5mContact(Angle,Below,Reverse)); P->Tick(.001f);

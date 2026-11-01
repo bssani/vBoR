@@ -154,6 +154,10 @@ AVBoRAxisPart::AVBoRAxisPart()
 	GrabBox->SetCollisionResponseToAllChannels(ECR_Ignore);
 	GrabBox->SetCollisionResponseToChannel(ECC_WorldDynamic, ECR_Overlap);
 	GrabBox->SetGenerateOverlapEvents(true);
+	PushFaceBox = CreateDefaultSubobject<UBoxComponent>(TEXT("PushFaceBox")); PushFaceBox->SetupAttachment(AxisPivot);
+	PushFaceBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	PushFaceBox->SetGenerateOverlapEvents(false);
+	PushFaceBox->SetHiddenInGame(true);
 	Grabbable = CreateDefaultSubobject<UIsdkGrabbableComponent>(TEXT("Grabbable")); Grabbable->SetupAttachment(GrabBox);
 	GrabComponent = CreateDefaultSubobject<UVBoRAxisGrabComponent>(TEXT("GrabComponent"));
 	Transformer = CreateDefaultSubobject<UVBoRAxisTransformer>(TEXT("AxisTransformer"));
@@ -186,6 +190,11 @@ void AVBoRAxisPart::OnConstruction(const FTransform& Transform)
 		GrabBox->SetRelativeLocation(Bounds.GetCenter());
 		GrabBox->SetBoxExtent(Bounds.GetExtent() + FVector(FMath::Max(0.f, GrabMarginCm)));
 		GrabBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+		if (!bUsePushFaceBox)
+		{
+			PushFaceBox->SetRelativeTransform(FTransform(FQuat::Identity, Bounds.GetCenter()));
+			PushFaceBox->SetBoxExtent(Bounds.GetExtent());
+		}
 	}
 	else
 	{
@@ -227,6 +236,10 @@ void AVBoRAxisPart::PreInitializeComponents()
 void AVBoRAxisPart::BeginPlay()
 {
 	Super::BeginPlay();
+	if (bUsePushFaceBox && !PushFaceBox->GetRelativeRotation().IsNearlyZero())
+	{
+		UE_LOG(LogAxisPart, Warning, TEXT("%s: Push face box rotation must be zero; using mesh bounds"), *GetName());
+	}
 	if (!IsDoorGrip() && Release == EVBoRAxisRelease::Detent)
 	{
 		// Set start angle after RestPivot (avoid construction accumulation, P5b D7)
@@ -390,6 +403,13 @@ void AVBoRAxisPart::ClearPush()
 	PreviousPushHands[0] = PreviousPushHands[1] = FVBoRDoorHand(); PreviousPushValue = Value;
 }
 
+double AVBoRAxisPart::PushPlane(int32 Face) const
+{
+	// Joint center stays outside the visible face (finger thickness, R8a D4, cm)
+	const double Offset = FMath::Max(0.f, PushContactOffsetCm);
+	return Face == 0 ? PushBounds.Min.Y - Offset : PushBounds.Max.Y + Offset;
+}
+
 bool AVBoRAxisPart::FindPush(int32 Hand, const FVBoRDoorHand& Input, FVector& Point, int32& PointIndex, int32& FaceIndex) const
 {
 	if (!Input.bTracked) { return false; }
@@ -413,9 +433,10 @@ bool AVBoRAxisPart::FindPush(int32 Hand, const FVBoRDoorHand& Input, FVector& Po
 		for (int32 Face=0; Face<2; ++Face)
 		{
 			if (Continuing && Face != PushFace) { continue; }
-			const double Depth = Face == 0 ? P.Y-PushBounds.Min.Y : PushBounds.Max.Y-P.Y;
-			const double PreviousDepth = Face == 0 ? Prev.Y-PushBounds.Min.Y : PushBounds.Max.Y-Prev.Y;
-			if (Depth < (Continuing ? -Margin : 1.e-6) || Depth > PushBounds.Max.Y-PushBounds.Min.Y+Margin) { continue; }
+			const double Plane = PushPlane(Face);
+			const double Depth = Face == 0 ? P.Y-Plane : Plane-P.Y;
+			const double PreviousDepth = Face == 0 ? Prev.Y-Plane : Plane-Prev.Y;
+			if (Depth < (Continuing ? -Margin : 1.e-6) || Depth > PushPlane(1)-PushPlane(0)+Margin) { continue; }
 			// Recovered point on or inside face is no new crossing (P5m D3/E9/E13)
 			if (!Continuing && (!PreviousPushHands[Hand].bTracked || Prev.ContainsNaN() || !Inside(Prev) || PreviousDepth >= -1.e-6)) { continue; }
 			if (Depth > Deepest) { Deepest=Depth; Point=Input.Points[I]; PointIndex=I; FaceIndex=Face; Found=true; }
@@ -447,7 +468,7 @@ void AVBoRAxisPart::AdvancePush(const FVBoRDoorHand (&Input)[2])
 	if (Found)
 	{
 		const double R = FVector::DotProduct(Point,PushRadial), N = FVector::DotProduct(Point,PushNormal);
-		const double Radius = FMath::Sqrt(R*R+N*N), Plane = PushFace == 0 ? PushBounds.Min.Y : PushBounds.Max.Y;
+		const double Radius = FMath::Sqrt(R*R+N*N), Plane = PushPlane(PushFace);
 		if (Radius > FMath::Abs(Plane)+UE_SMALL_NUMBER)
 		{
 			const double Current = Value*(bReverse?-1:1);
@@ -687,7 +708,12 @@ void AVBoRAxisPart::AdvanceSounds(double Seconds)
 
 void AVBoRAxisPart::PushGeometry(FBox& Bounds, FVector& Radial, FVector& Normal) const
 {
-	const FBox MeshBounds = PartMesh->GetStaticMesh()->GetBoundingBox().TransformBy(PartMesh->GetRelativeTransform());
+	FBox MeshBounds = PartMesh->GetStaticMesh()->GetBoundingBox().TransformBy(PartMesh->GetRelativeTransform());
+	if (bUsePushFaceBox && PushFaceBox->GetRelativeRotation().IsNearlyZero())
+	{
+		const FVector Extent = PushFaceBox->GetUnscaledBoxExtent() * PushFaceBox->GetRelativeScale3D().GetAbs();
+		MeshBounds = FBox(PushFaceBox->GetRelativeLocation() - Extent, PushFaceBox->GetRelativeLocation() + Extent);
+	}
 	// Longer bounds axis perpendicular to rotation = lever length (rest bounds, not mesh pivot, P5m D3)
 	const int32 A = Axis == EAxis::Y ? 1 : Axis == EAxis::Z ? 2 : 0;
 	const int32 B = (A+1)%3, C = (A+2)%3;

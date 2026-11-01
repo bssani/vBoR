@@ -130,7 +130,12 @@ void UVBoRMotionGuideComponent::AppendJudgmentShapes(TArray<FVBoRGuideLine>& Lin
 			FBox FaceBounds; FVector Radial, Normal; AxisPart->PushGeometry(FaceBounds, Radial, Normal);
 			FMatrix Basis = FMatrix::Identity; Basis.SetAxes(&Radial, &Normal);
 			Basis.SetAxis(2, AxisPart->LocalAxis());
-			JudgmentBoxLines(Lines, FaceBounds, FTransform(Basis) * AxisPart->AxisPivot->GetComponentTransform(), FColor::Blue, EVBoRGuideShape::PushPlate);
+			const bool InvalidBox = AxisPart->bUsePushFaceBox && !AxisPart->PushFaceBox->GetRelativeRotation().IsNearlyZero();
+			const bool BoxFace = AxisPart->bUsePushFaceBox && !InvalidBox;
+			// Permute box axes before world scale (non-uniform scale, R8a D5)
+			const FBox DisplayBounds = BoxFace ? FaceBounds.TransformBy(Basis) : FaceBounds;
+			const FTransform Frame = BoxFace ? AxisPart->AxisPivot->GetComponentTransform() : FTransform(Basis) * AxisPart->AxisPivot->GetComponentTransform();
+			JudgmentBoxLines(Lines, DisplayBounds, Frame, InvalidBox ? FColor::Magenta : FColor::Blue, EVBoRGuideShape::PushPlate);
 		}
 	}
 	else if (Panel)
