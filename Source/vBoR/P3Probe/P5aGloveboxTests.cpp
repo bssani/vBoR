@@ -142,6 +142,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5aPalmClose, "vBoR.P5a.E4BottomPushClosesAndR
 bool FP5aPalmClose::RunTest(const FString&)
 {
 	FP5aWorld W; W.Tracked(); UP2cEventObserver* Events = P5aObserve(W.Panel); P5aOpen(W,60); P5aRelease(W);
+	W.Panel->NoPushNearHandleCm = 0; // Keep palm closing/latch coverage (R7 §3)
 	W.Panel->Hands[0] = P5aFace(60,2); W.Panel->Tick(0.1f);
 	W.Panel->Hands[0] = P5aFace(30,0); W.Panel->Tick(1);
 	TestTrue(TEXT("Bottom push first moves in closing direction"), W.Panel->GetMotion().AngleDeg < 60 && W.Panel->GetMotion().AngleDeg > 0);
@@ -163,6 +164,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5aRejectTop, "vBoR.P5a.E5TopPushCannotOpen", 
 bool FP5aRejectTop::RunTest(const FString&)
 {
 	FP5aWorld W; W.Tracked(); P5aOpen(W,60); P5aRelease(W);
+	W.Panel->NoPushNearHandleCm = 0; // Keep opening-disabled coverage (R7 §3)
 	const double Before = W.Panel->GetMotion().AngleDeg;
 	W.Panel->Hands[0] = P5aFace(Before,-2,20,FVector(0,1,0)); W.Panel->Tick(0.1f);
 	W.Panel->Hands[0] = P5aFace(Before,2,20,FVector(0,1,0)); W.Panel->Tick(1);

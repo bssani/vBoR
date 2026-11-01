@@ -6,11 +6,12 @@
 struct FVBoRDoorHand
 {
 	bool bTracked = false;
+	bool bNearHandle = false; // Any point inside a connected handle zone (R7 D2)
 	FVector Points[5] = {}; // Palm, Index, Middle, Ring, Little
 	FVector PalmNormal = FVector::ZeroVector;
 };
 
-enum class EVBoRDoorIgnore : uint8 { Locked, PalmDirection, Behind, NearAxis, Outside, TrackingLow, OpeningDisabled, Count };
+enum class EVBoRDoorIgnore : uint8 { Locked, PalmDirection, Behind, NearAxis, Outside, TrackingLow, OpeningDisabled, NearHandle, Count };
 
 struct FVBoRDoorMetrics
 {
