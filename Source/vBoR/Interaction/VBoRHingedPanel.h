@@ -85,6 +85,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel") FLinearColor PausedColor = FLinearColor(1, 0.35, 0, 0.5);
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Hinged panel") FLinearColor MaximumColor = FLinearColor(1, 0.75, 0, 0.4);
 	UPROPERTY(BlueprintAssignable, Category = "Hinged panel") FVBoRPanelEvent OnPanelUnlocked;
+	UPROPERTY(BlueprintAssignable, Category = "Hinged panel") FVBoRPanelEvent OnReset;
 	UPROPERTY(BlueprintAssignable, Category = "Hinged panel") FVBoRPanelEvent OnPanelLocked;
 	UPROPERTY(BlueprintAssignable, Category = "Hinged panel") FVBoRDoorAngleEvent OnAngleChanged;
 protected:

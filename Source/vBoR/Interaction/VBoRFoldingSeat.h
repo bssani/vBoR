@@ -6,9 +6,13 @@
 #include "VBoRFoldingSeat.generated.h"
 
 class UStaticMeshComponent;
+class AVBoRFoldingSeat;
 
 UENUM(BlueprintType)
 enum class EVBoRFoldingSeatState : uint8 { Standing, Folding, Folded, Unfolding };
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FVBoRFoldingSeatStateEvent, AVBoRFoldingSeat*, Seat, EVBoRFoldingSeatState, State);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVBoRFoldingSeatEvent, AVBoRFoldingSeat*, Seat);
 
 UCLASS(Blueprintable)
 class VBOR_API AVBoRFoldingSeat : public AActor
@@ -30,6 +34,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Seat folding") void ResetSeat();
 	UFUNCTION(BlueprintPure, Category="Seat folding") EVBoRFoldingSeatState GetState() const { return State; }
 	UFUNCTION(BlueprintPure, Category="Seat folding") float GetAngleDeg() const { return AngleDeg; }
+	UPROPERTY(BlueprintAssignable, Category="Seat folding") FVBoRFoldingSeatStateEvent OnStateChanged;
+	UPROPERTY(BlueprintAssignable, Category="Seat folding") FVBoRFoldingSeatEvent OnReset;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Seat folding") TObjectPtr<USceneComponent> HingePivot;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Seat folding") TObjectPtr<UStaticMeshComponent> SeatMesh;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Seat folding", meta=(Units="cm")) FVector HingeLocationCm = FVector(0,0,48);
@@ -45,5 +51,6 @@ private:
 #endif
 	EVBoRFoldingSeatState State = EVBoRFoldingSeatState::Standing;
 	float AngleDeg = 0;
+	void SetState(EVBoRFoldingSeatState NewState);
 	void ApplyAngle();
 };

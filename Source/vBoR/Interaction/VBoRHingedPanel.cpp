@@ -520,6 +520,7 @@ void AVBoRHingedPanel::ResetDoor()
 	}
 	CancelSelections(TEXT("reset"));
 	ApplyState(Before, Motion.Metrics.Unlocks, Motion.Metrics.Latches);
+	if (HasActorBegunPlay()) { OnReset.Broadcast(this); }
 }
 
 FString AVBoRHingedPanel::GetStateText() const
