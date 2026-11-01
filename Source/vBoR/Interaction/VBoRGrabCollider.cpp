@@ -7,14 +7,18 @@
 
 DEFINE_LOG_CATEGORY_STATIC(LogVBoRGrabCollider, Log, All);
 
+bool VBoRUsesGrabMesh(const UStaticMeshComponent* Mesh, bool bGrabWithMesh)
+{
+	const UBodySetup* Body = Mesh->GetStaticMesh() ? Mesh->GetStaticMesh()->GetBodySetup() : nullptr;
+	return bGrabWithMesh && Body && (Body->AggGeom.GetElementCount() > 0 || Body->GetCollisionTraceFlag() == CTF_UseComplexAsSimple);
+}
+
 UPrimitiveComponent* ConfigureVBoRGrabCollider(UStaticMeshComponent* Mesh, UBoxComponent* Box,
 	bool bGrabWithMesh, bool bGrabValid, const FTransform& MeshRestFromRoot)
 {
-	bool bUseMesh = false;
+	const bool bUseMesh = VBoRUsesGrabMesh(Mesh, bGrabWithMesh);
 	if (bGrabWithMesh)
 	{
-		const UBodySetup* Body = Mesh->GetStaticMesh() ? Mesh->GetStaticMesh()->GetBodySetup() : nullptr;
-		bUseMesh = Body && (Body->AggGeom.GetElementCount() > 0 || Body->GetCollisionTraceFlag() == CTF_UseComplexAsSimple);
 		if (!bUseMesh)
 		{
 			UE_LOG(LogVBoRGrabCollider, Warning, TEXT("%s: grab mesh has no simple collision (or Use Complex As Simple); using GrabBox"), *Mesh->GetOwner()->GetName());

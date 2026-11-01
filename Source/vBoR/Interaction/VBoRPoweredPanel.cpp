@@ -157,6 +157,28 @@ FTransform AVBoRPoweredPanel::MeshPoseAt(float Angle) const
 	return PanelMesh->GetRelativeTransform() * Hinge * GetActorTransform();
 }
 
+const TCHAR* AVBoRPoweredPanel::ObstructionBoxProblem(const UVBoRObstructionBoxComponent* Box) const
+{
+	if (!Box->IsAttachedTo(HingePivot)) { return TEXT("not a descendant of HingePivot"); }
+	if ((Box->GetUnscaledBoxExtent() * Box->GetComponentScale().GetAbs()).GetMin() <= 0) { return TEXT("zero extent or scale"); }
+	return nullptr;
+}
+
+FVBoRObstructionShape AVBoRPoweredPanel::ObstructionShapeAt(float Angle, const UVBoRObstructionBoxComponent* Box) const
+{
+	if (Box)
+	{
+		const FTransform Hinge(FQuat(FVector::YAxisVector, FMath::DegreesToRadians(Angle)), HingeLocationCm);
+		// Include intermediate parents; undo current hinge rotation before sampling (P5zg D3)
+		const FTransform Relative = Box->GetComponentTransform().GetRelativeTransform(HingePivot->GetComponentTransform());
+		const FTransform Pose = Relative * Hinge * GetActorTransform();
+		return {Pose.GetLocation(), Box->GetUnscaledBoxExtent() * Pose.GetScale3D().GetAbs(), Pose.GetRotation()};
+	}
+	const FBox Bounds = PanelMesh->GetStaticMesh()->GetBoundingBox();
+	const FTransform Pose = MeshPoseAt(Angle);
+	return {Pose.TransformPosition(Bounds.GetCenter()), Bounds.GetExtent() * Pose.GetScale3D().GetAbs(), Pose.GetRotation()};
+}
+
 void AVBoRPoweredPanel::CollectObstructionBoxes()
 {
 	ObstructionBoxes.Reset();
@@ -164,10 +186,7 @@ void AVBoRPoweredPanel::CollectObstructionBoxes()
 	GetComponents(Components);
 	for (UVBoRObstructionBoxComponent* Box : Components)
 	{
-		const TCHAR* Reason = nullptr;
-		if (!Box->IsAttachedTo(HingePivot)) { Reason = TEXT("not a descendant of HingePivot"); }
-		else if ((Box->GetUnscaledBoxExtent() * Box->GetComponentScale().GetAbs()).GetMin() <= 0)
-		{ Reason = TEXT("zero extent or scale"); }
+		const TCHAR* Reason = ObstructionBoxProblem(Box);
 		if (Reason)
 		{
 			UE_LOG(LogPoweredPanel, Warning, TEXT("%s %s: ignored obstruction box (%s)"), *GetName(), *Box->GetName(), Reason);
@@ -188,7 +207,6 @@ AVBoRCarryObject* AVBoRPoweredPanel::FindObstruction(float FromAngle, float ToAn
 {
 	if (!ObstructionBoxes.IsEmpty() && GetWorld())
 	{
-		const FTransform Hinge(FQuat(FVector::YAxisVector, FMath::DegreesToRadians((FromAngle + ToAngle) * 0.5f)), HingeLocationCm);
 		const FVector Pivot = GetActorTransform().TransformPosition(HingeLocationCm);
 		FCollisionObjectQueryParams Objects;
 		Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
@@ -196,14 +214,12 @@ AVBoRCarryObject* AVBoRPoweredPanel::FindObstruction(float FromAngle, float ToAn
 		for (const UVBoRObstructionBoxComponent* Box : ObstructionBoxes)
 		{
 			if (!IsValid(Box)) { continue; }
-			// Include intermediate parents; undo current hinge rotation before sampling (P5zg D3)
-			const FTransform Relative = Box->GetComponentTransform().GetRelativeTransform(HingePivot->GetComponentTransform());
-			const FTransform Mid = Relative * Hinge * GetActorTransform();
-			const FVector Extent = Box->GetUnscaledBoxExtent() * Mid.GetScale3D().GetAbs();
-			const double Radius = FVector::Distance(Mid.GetLocation(), Pivot) + Extent.Size();
+			const FVBoRObstructionShape Mid = ObstructionShapeAt((FromAngle + ToAngle) * 0.5f, Box);
+			const FVector Extent = Mid.Extent;
+			const double Radius = FVector::Distance(Mid.Center, Pivot) + Extent.Size();
 			const double MarginCm = Radius * FMath::DegreesToRadians(FMath::Abs(ToAngle - FromAngle) * 0.5) + 0.001;
 			TArray<FOverlapResult> Hits;
-			GetWorld()->OverlapMultiByObjectType(Hits, Mid.GetLocation(), Mid.GetRotation(), Objects,
+			GetWorld()->OverlapMultiByObjectType(Hits, Mid.Center, Mid.Rotation, Objects,
 				FCollisionShape::MakeBox(Extent + FVector(MarginCm)), FCollisionQueryParams(SCENE_QUERY_STAT(PoweredPanel), false, this));
 			for (const FOverlapResult& Hit : Hits)
 			{
@@ -214,20 +230,18 @@ AVBoRCarryObject* AVBoRPoweredPanel::FindObstruction(float FromAngle, float ToAn
 		return nullptr;
 	}
 	if (!PanelMesh->GetStaticMesh() || !GetWorld()) { return nullptr; }
-	const FBox Bounds = PanelMesh->GetStaticMesh()->GetBoundingBox();
-	const FTransform Mid = MeshPoseAt((FromAngle + ToAngle) * 0.5f);
-	const FVector Scale = Mid.GetScale3D().GetAbs();
-	const FVector Center = Mid.TransformPosition(Bounds.GetCenter());
+	const FVBoRObstructionShape Mid = ObstructionShapeAt((FromAngle + ToAngle) * 0.5f, nullptr);
+	const FVector Center = Mid.Center;
 	const FVector Pivot = GetActorTransform().TransformPosition(HingeLocationCm);
-	const double Radius = FVector::Distance(Center, Pivot) + (Bounds.GetExtent() * Scale).Size();
+	const double Radius = FVector::Distance(Center, Pivot) + Mid.Extent.Size();
 	// Conservative cm margin covers entire <=1 deg interval (no penetration on large Tick with clear endpoints, P4b D5/E9)
 	const double MarginCm = Radius * FMath::DegreesToRadians(FMath::Abs(ToAngle - FromAngle) * 0.5) + 0.001;
-	const FCollisionShape Shape = FCollisionShape::MakeBox(Bounds.GetExtent() * Scale + FVector(MarginCm));
+	const FCollisionShape Shape = FCollisionShape::MakeBox(Mid.Extent + FVector(MarginCm));
 	TArray<FOverlapResult> Hits;
 	FCollisionObjectQueryParams Objects;
 	Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
 	Objects.AddObjectTypesToQuery(ECC_WorldStatic);
-	GetWorld()->OverlapMultiByObjectType(Hits, Center, Mid.GetRotation(), Objects, Shape, FCollisionQueryParams(SCENE_QUERY_STAT(PoweredPanel), false, this));
+	GetWorld()->OverlapMultiByObjectType(Hits, Center, Mid.Rotation, Objects, Shape, FCollisionQueryParams(SCENE_QUERY_STAT(PoweredPanel), false, this));
 	for (const FOverlapResult& Hit : Hits)
 	{
 		AVBoRCarryObject* Box = Cast<AVBoRCarryObject>(Hit.GetActor());

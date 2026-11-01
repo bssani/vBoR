@@ -83,6 +83,7 @@ public:
 	AVBoRAxisPart();
 	UPROPERTY(EditAnywhere, Transient, Category="Axis part|Guide", meta=(DisplayName="Preview (0–1)", ClampMin="0", ClampMax="1", UIMin="0", UIMax="1", ToolTip="Editor pose only. Zero keeps normal editor pose")) float Preview = 0;
 	UPROPERTY(EditAnywhere, Category="Axis part|Guide", meta=(DisplayName="Motion guide")) EVBoRMotionGuide MotionGuide = EVBoRMotionGuide::Always;
+	UPROPERTY(EditAnywhere, Category="Axis part|Guide", meta=(DisplayName="Judgment guide")) EVBoRMotionGuide JudgmentGuide = EVBoRMotionGuide::Always;
 #if WITH_EDITORONLY_DATA
 	UPROPERTY(VisibleAnywhere, Category="Axis part|Guide") TObjectPtr<UVBoRMotionGuideComponent> MotionDisplay;
 #endif
@@ -165,6 +166,7 @@ private:
 
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FR2aTestAccess;
+	friend struct FR2cTestAccess;
 #endif
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FP5sTestAccess;

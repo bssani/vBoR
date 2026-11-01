@@ -214,6 +214,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FR2aE7, "vBoR.R2a.E7GripAndMissingMesh", EAutom
 bool FR2aE7::RunTest(const FString&)
 {
 	FR2aWorld W; auto* P = W.World->SpawnActor<AVBoRAxisPart>(); P->DoorHandleSide = EVBoRDoorHandleSide::Grip;
+	P->JudgmentGuide = EVBoRMotionGuide::Off;
 	TestEqual(TEXT("Grip has no guide"), P->MotionDisplay->BuildShapes().Num(), 0);
 	auto Check = [&](UVBoRMotionGuideComponent* Guide, USceneComponent* Pivot)
 	{
@@ -317,6 +318,7 @@ bool FR2aE11::RunTest(const FString&)
 	auto Check = [&](auto* P)
 	{
 		auto* C = P->MotionDisplay.Get(); TestNotNull(TEXT("Inherited motion display"), C);
+		if constexpr (std::is_same_v<std::remove_pointer_t<decltype(P)>, AVBoRAxisPart> || std::is_same_v<std::remove_pointer_t<decltype(P)>, AVBoRHingedPanel> || std::is_same_v<std::remove_pointer_t<decltype(P)>, AVBoRPoweredPanel>) { P->JudgmentGuide = EVBoRMotionGuide::Off; }
 		TestTrue(TEXT("Editor-only and hidden in game"), C->IsEditorOnly() && C->bHiddenInGame);
 		TestTrue(TEXT("No collision, overlap, shadow or navigation"), C->GetCollisionEnabled() == ECollisionEnabled::NoCollision && !C->GetGenerateOverlapEvents() && !C->CastShadow && !C->CanEverAffectNavigation());
 		TestTrue(TEXT("Visible in editor"), C->IsVisibleInEditor());

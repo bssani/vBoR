@@ -62,12 +62,7 @@ void AVBoRHingedPanel::SyncSettings()
 	}
 	if (DoorMesh->GetStaticMesh() || bUsePushFaceBox)
 	{
-		FBox Bounds = MeshFaceBounds();
-		if (!bPushOnMeshSurface && bUsePushFaceBox && PushFaceBox->GetRelativeRotation().IsNearlyZero())
-		{
-			const FVector Extent = PushFaceBox->GetUnscaledBoxExtent() * PushFaceBox->GetRelativeScale3D().GetAbs();
-			Bounds = FBox(PushFaceBox->GetRelativeLocation() - Extent, PushFaceBox->GetRelativeLocation() + Extent);
-		}
+		const FBox Bounds = PushFaceBounds();
 		Motion.FaceMinCm = Bounds.Min; Motion.FaceMaxCm = Bounds.Max;
 		Motion.ThicknessCm = Bounds.GetSize().Y;
 	}
@@ -119,6 +114,16 @@ FBox AVBoRHingedPanel::MeshFaceBounds() const
 	return DoorMesh->GetStaticMesh() ? DoorMesh->GetStaticMesh()->GetBoundingBox().TransformBy(DoorMesh->GetRelativeTransform()) : FBox(Motion.FaceMinCm, Motion.FaceMaxCm);
 }
 
+FBox AVBoRHingedPanel::PushFaceBounds() const
+{
+	if (!bPushOnMeshSurface && bUsePushFaceBox && PushFaceBox->GetRelativeRotation().IsNearlyZero())
+	{
+		const FVector Extent = PushFaceBox->GetUnscaledBoxExtent() * PushFaceBox->GetRelativeScale3D().GetAbs();
+		return FBox(PushFaceBox->GetRelativeLocation() - Extent, PushFaceBox->GetRelativeLocation() + Extent);
+	}
+	return MeshFaceBounds();
+}
+
 void AVBoRHingedPanel::ConfigurePushCollision()
 {
 	// Component trace only (separate hand detection/carry/world queries, P2g D6)
@@ -129,13 +134,17 @@ void AVBoRHingedPanel::ConfigurePushCollision()
 
 bool AVBoRHingedPanel::QueryMeshFace(const FVector& Point, int32 Face, double& OutY) const
 {
+	return QueryMeshFace(Point, Face, OutY, HingePivot->GetComponentTransform());
+}
+
+bool AVBoRHingedPanel::QueryMeshFace(const FVector& Point, int32 Face, double& OutY, const FTransform& Frame) const
+{
 	const FBox Bounds = MeshFaceBounds();
 	OutY = Face == 0 ? Bounds.Max.Y : Bounds.Min.Y;
 	constexpr double TraceMarginCm = 1; // Start outside bounds (avoid on-surface start ambiguity, P2g §5)
 	FVector Start(Point.X, Bounds.Max.Y + TraceMarginCm, Point.Z);
 	FVector End(Point.X, Bounds.Min.Y - TraceMarginCm, Point.Z);
 	if (Face == 1) { Swap(Start, End); }
-	const FTransform Frame = HingePivot->GetComponentTransform();
 	FCollisionQueryParams Params;
 	Params.bTraceComplex = true;
 	FHitResult Hit;
