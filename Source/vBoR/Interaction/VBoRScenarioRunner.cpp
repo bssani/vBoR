@@ -11,6 +11,8 @@
 #include "VBoRPokeButton.h"
 #include "VBoRFloorRoute.h"
 #include "VBoRKeyFob.h"
+#include "VBoRKeyTable.h"
+#include "VBoRAxisPart.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
@@ -61,7 +63,7 @@ namespace
 		}
 		return Points;
 	}
-	UObject* FindP3Tag(UWorld* World, FName Tag, FString& Problems)
+	UObject* FindP3Tag(UWorld* World, FName Tag, FString& Problems, const TArray<const AActor*>* Forecast = nullptr)
 	{
 		if (Tag.IsNone()) { return nullptr; }
 		TArray<UObject*> Matches;
@@ -70,6 +72,10 @@ namespace
 			if (It->ActorHasTag(Tag)) { Matches.Add(*It); }
 			TArray<UActorComponent*> Components; It->GetComponents(Components);
 			for (UActorComponent* Component : Components) { if (Component->ComponentHasTag(Tag)) { Matches.Add(Component); } }
+		}
+		if (Forecast) for (const AActor* Default : *Forecast)
+		{
+			if (Default->ActorHasTag(Tag)) { Matches.Add(const_cast<AActor*>(Default)); }
 		}
 		if (Matches.Num() != 1) { Problems += FString::Printf(TEXT("Tag %s: found %d (need 1)\n"), *Tag.ToString(), Matches.Num()); return nullptr; }
 		return Matches[0];
@@ -204,6 +210,173 @@ void AVBoRScenarioRunner::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	for (auto& Label : ButtonLabels) { Label->SetSlateWidget(nullptr); } ButtonLabelTexts.Reset();
 	if (InputComponent) { InputComponent->KeyBindings.Reset(); }
 	Super::EndPlay(EndPlayReason);
+}
+
+void AVBoRScenarioRunner::CheckSetup()
+{
+	UWorld* World = GetWorld();
+	if (!World) { return; }
+	TArray<FString> Problems, Notices;
+	TArray<const AActor*> Forecast;
+	TSet<FName> UsedTags = {FName(TEXT("Car.StartButton"))};
+	if (Scenario) for (const FVBoRScenarioStep& Step : Scenario->Steps)
+	{
+		for (FName Tag : {Step.TargetTag, Step.MarkerTag, Step.PanelTag, Step.RouteTag})
+		{ if (!Tag.IsNone()) { UsedTags.Add(Tag); } }
+	}
+	const bool bForecast = !World->HasBegunPlay();
+	auto ButtonSlot = [&](const FString& Source, const TCHAR* Slot, TSubclassOf<AVBoRPokeButton> Class)
+	{
+		// Same fallback as CreateButton (P5zc, R5 D3)
+		if (!Class || Class->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated | CLASS_NewerVersionExists)) { return; }
+		const auto* Default = Class->GetDefaultObject<AVBoRPokeButton>();
+		if (bForecast) { Forecast.Add(Default); }
+		for (FName Tag : Default->Tags)
+		{
+			if (UsedTags.Contains(Tag))
+			{
+				Problems.Add(FString::Printf(TEXT("%s %s class %s: every button spawned at Play gets tag %s"),
+					*Source, Slot, *Class->GetName(), *Tag.ToString()));
+			}
+		}
+	};
+	auto KeyButtons = [&](const AVBoRKeyFob* Key, const FString& Source)
+	{
+		ButtonSlot(Source, TEXT("UnlockButtonClass"), Key->UnlockButtonClass);
+		ButtonSlot(Source, TEXT("LockButtonClass"), Key->LockButtonClass);
+	};
+	int32 AlignmentCount = 0, StartButtons = 0;
+	TArray<AVBoRHingedPanel*> Panels;
+	TArray<AVBoRAxisPart*> Handles;
+	TArray<FString> StartProblems, MirrorProblems;
+	for (TActorIterator<AActor> It(World); It; ++It)
+	{
+		TArray<UVBoRVehicleAlignmentComponent*> Alignments; It->GetComponents(Alignments); AlignmentCount += Alignments.Num();
+		if (It->ActorHasTag(TEXT("Car.StartButton")))
+		{
+			if (It->IsA<AVBoRPokeButton>()) { ++StartButtons; }
+			else { StartProblems.Add(FString::Printf(TEXT("%s: Car.StartButton ignored; need a poke button Actor"), *It->GetName())); }
+		}
+		TArray<UActorComponent*> Components; It->GetComponents(Components);
+		for (const UActorComponent* Component : Components)
+		{
+			if (Component->ComponentHasTag(TEXT("Car.StartButton")))
+			{ StartProblems.Add(FString::Printf(TEXT("%s.%s: Car.StartButton component tag ignored; put it on a poke button Actor"), *It->GetName(), *Component->GetName())); }
+		}
+		if (auto* Table = Cast<AVBoRKeyTable>(*It); Table && bForecast && Table->KeyClass &&
+			!Table->KeyClass->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated | CLASS_NewerVersionExists))
+		{
+			const auto* Key = Table->KeyClass->GetDefaultObject<AVBoRKeyFob>();
+			Forecast.Add(Key);
+			KeyButtons(Key, Table->GetName() + TEXT(" KeyClass ") + Table->KeyClass->GetName());
+		}
+		if (auto* Key = Cast<AVBoRKeyFob>(*It)) { KeyButtons(Key, Key->GetName()); }
+		if (auto* Gate = Cast<AVBoRPoweredPanel>(*It))
+		{
+			ButtonSlot(Gate->GetName(), TEXT("OpenButtonClass"), Gate->OpenButtonClass);
+			ButtonSlot(Gate->GetName(), TEXT("CloseButtonClass"), Gate->CloseButtonClass);
+		}
+		if (auto* Mirror = Cast<AVBoRFoldingMirror>(*It); Mirror && !Cast<AVBoRHingedPanel>(Mirror->GetAttachParentActor()))
+		{ MirrorProblems.Add(FString::Printf(TEXT("%s: not under a door; stays on the car when the door opens (ignore for body-mounted mirrors)"), *Mirror->GetName())); }
+		if (auto* PanelActor = Cast<AVBoRHingedPanel>(*It)) { Panels.Add(PanelActor); }
+		if (auto* Handle = Cast<AVBoRAxisPart>(*It); Handle && Handle->DoorHandleSide != EVBoRDoorHandleSide::None) { Handles.Add(Handle); }
+	}
+	for (const AActor* Default : Forecast)
+	{
+		if (Default->ActorHasTag(TEXT("Car.StartButton")))
+		{
+			if (Default->IsA<AVBoRPokeButton>()) { ++StartButtons; }
+			else { StartProblems.Add(FString::Printf(TEXT("%s: Car.StartButton ignored; need a poke button Actor"), *Default->GetClass()->GetName())); }
+		}
+	}
+	// Read-only counterpart of InitializeFlow validation (preserve Play mutation order, R5 section 3)
+	FString ScenarioProblems;
+	bool bFixedMode = false;
+	if (AlignmentCount != 1) { ScenarioProblems += TEXT("Need 1 alignment component\n"); }
+	if (!Scenario || Scenario->Steps.IsEmpty()) { ScenarioProblems += TEXT("No scenario steps\n"); }
+	else
+	{
+		bFixedMode = Scenario->Steps.ContainsByPredicate([](const FVBoRScenarioStep& Step) { return !Step.PanelTag.IsNone(); });
+		if (bFixedMode && Scenario->Steps[0].PanelTag.IsNone()) { ScenarioProblems += TEXT("first step needs a panel tag in fixed mode\n"); }
+	}
+	if (Scenario) for (const FVBoRScenarioStep& Step : Scenario->Steps)
+	{
+		UObject* Raw = FindP3Tag(GetWorld(), Step.TargetTag, ScenarioProblems, &Forecast);
+		UObject* Target = nullptr;
+		switch (Step.Rule)
+		{
+		case EVBoRStepRule::Confirm: Target = Raw; break;
+		case EVBoRStepRule::Approach: Target = P3Component<UVBoRApproachZoneComponent>(Raw); break;
+		case EVBoRStepRule::Seated: Target = P3Component<UVBoRSeatZoneComponent>(Raw); break;
+		case EVBoRStepRule::ButtonPressed: Target = Cast<AVBoRPokeButton>(P3Actor(Raw)); break;
+		case EVBoRStepRule::DoorUnlocked: case EVBoRStepRule::DoorOpened: case EVBoRStepRule::DoorLatched: Target = Cast<AVBoRHingedDoor>(P3Actor(Raw)); break;
+		case EVBoRStepRule::Viewpoint: Target = P3Component<UVBoRViewpointComponent>(Raw); break;
+		case EVBoRStepRule::KeyHeld: case EVBoRStepRule::KeyUnlockAndLock: Target = Cast<AVBoRKeyFob>(P3Actor(Raw)); break;
+		case EVBoRStepRule::PoweredOpen: case EVBoRStepRule::PoweredClosed: Target = Cast<AVBoRPoweredPanel>(P3Actor(Raw)); break;
+		}
+		if (Step.Rule != EVBoRStepRule::Confirm && !Target) { ScenarioProblems += FString::Printf(TEXT("%s: tag %s type mismatch or missing\n"), *Step.StepId.ToString(), *Step.TargetTag.ToString()); }
+		const FString Id = Step.StepId.ToString(); const int32 Number = FCString::Atoi(*Id);
+		if (Number < 1 || Number > 20 || Number == 17 || Id != FString::Printf(TEXT("%02d"), Number)) { ScenarioProblems += TEXT("Original StepId required (01–16, 18–20)\n"); }
+		UObject* Marker = FindP3Tag(GetWorld(), Step.MarkerTag, ScenarioProblems, &Forecast);
+		USceneComponent* Scene = P3Scene(Marker);
+		if (!Step.MarkerTag.IsNone() && !Scene) { ScenarioProblems += FString::Printf(TEXT("%s: marker tag type mismatch\n"), *Step.StepId.ToString()); }
+		FString PanelProblems;
+		USceneComponent* Anchor = P3Scene(FindP3Tag(GetWorld(), Step.PanelTag, PanelProblems, &Forecast));
+		if (!Step.PanelTag.IsNone() && (!Anchor || !PanelProblems.IsEmpty()))
+		{ ScenarioProblems += FString::Printf(TEXT("%s: panel tag %s type mismatch or missing | %s\n"), *Step.StepId.ToString(), *Step.PanelTag.ToString(), *PanelProblems); }
+		FString RouteProblems;
+		AVBoRFloorRoute* Route = Cast<AVBoRFloorRoute>(FindP3Tag(GetWorld(), Step.RouteTag, RouteProblems, &Forecast));
+		if (!Step.RouteTag.IsNone())
+		{
+			if (!Route || Route->Spline->GetNumberOfSplinePoints() < 2)
+			{ ScenarioProblems += FString::Printf(TEXT("%s: floor route %s — need one route Actor and at least two points | %s\n"), *Step.StepId.ToString(), *Step.RouteTag.ToString(), *RouteProblems); }
+			else
+			{
+				UBoxComponent* Footprint = Cast<UBoxComponent>(FindP3Tag(GetWorld(), TEXT("Car.Footprint"), RouteProblems, &Forecast));
+				if (!Footprint) { ScenarioProblems += FString::Printf(TEXT("%s: floor route %s — need one Car.Footprint box | %s\n"), *Step.StepId.ToString(), *Step.RouteTag.ToString(), *RouteProblems); }
+				else
+				{
+					TArray<FVector> Points = P3RouteSamples(Route);
+					Points.Add(P3RouteEnd(Route) + P3RouteDirection(Route) * PanelDistanceCm);
+					for (const FVector& Point : Points)
+					{
+						const FVector Local = Footprint->GetComponentTransform().InverseTransformPosition(Point), Extent = Footprint->GetUnscaledBoxExtent();
+						if (FMath::Abs(Local.X) <= Extent.X && FMath::Abs(Local.Y) <= Extent.Y)
+						{ ScenarioProblems += FString::Printf(TEXT("%s: floor route %s crosses Car.Footprint body area\n"), *Step.StepId.ToString(), *Step.RouteTag.ToString()); break; }
+					}
+				}
+			}
+		}
+	}
+	TArray<FString> ScenarioLines; ScenarioProblems.ParseIntoArrayLines(ScenarioLines, true);
+	Problems.Insert(ScenarioLines, 0);
+	Problems.Append(StartProblems);
+	if (StartButtons == 0) { Notices.Add(TEXT("No Car.StartButton; operator power only")); }
+	int32 PowerCount = 0; UVBoRVehiclePowerComponent::FindUnique(World, &PowerCount);
+	if (PowerCount == 0) { Notices.Add(TEXT("Vehicle power: no power component; no start-button or mirror integration")); }
+	else if (PowerCount > 1) { Problems.Add(FString::Printf(TEXT("Vehicle power: expected one component, found %d; power disabled"), PowerCount)); }
+	Problems.Append(MirrorProblems);
+	TSet<AVBoRAxisPart*> Claims;
+	for (const AVBoRHingedPanel* PanelActor : Panels)
+	{
+		for (AVBoRAxisPart* Claim : PanelActor->GetHandleClaims()) { Claims.Add(Claim); }
+		const auto Setup = PanelActor->EvaluateSetup();
+		for (const FString& Problem : Setup.Problems) { Problems.Add(PanelActor->GetName() + TEXT(": ") + Problem); }
+		for (const FString& Notice : Setup.Notices) { Notices.Add(PanelActor->GetName() + TEXT(": ") + Notice); }
+	}
+	for (const AVBoRAxisPart* Handle : Handles)
+	{
+		if (!Claims.Contains(Handle))
+		{
+			Problems.Add(Handle->GetName() + (Handle->DoorHandleSide == EVBoRDoorHandleSide::Grip ?
+				TEXT(": unclaimed Grip; grabbing disabled") : TEXT(": unclaimed handle; cannot unlock door")));
+		}
+	}
+	UE_LOG(LogTemp, Log, TEXT("%s setup check: %d problems, %d notices"), *GetName(), Problems.Num(), Notices.Num());
+	for (const FString& Problem : Problems) { UE_LOG(LogTemp, Warning, TEXT("%s setup check: %s"), *GetName(), *Problem); }
+	for (const FString& Notice : Notices) { UE_LOG(LogTemp, Log, TEXT("%s setup check: %s"), *GetName(), *Notice); }
+	TArray<FString> Lines = Problems; Lines.Append(Notices);
+	SetupReport = Lines.IsEmpty() ? TEXT("No issues") : FString::Join(Lines, TEXT("\n"));
 }
 
 bool AVBoRScenarioRunner::InitializeFlow()
