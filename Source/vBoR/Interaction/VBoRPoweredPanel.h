@@ -18,6 +18,12 @@ class UVBoRObstructionBoxComponent;
 
 enum class EVBoRPoweredSound : uint8 { OpenAccepted, CloseAccepted, Warning, Motor, Opened, Closed, Obstructed, Count };
 
+struct FVBoRObstructionShape
+{
+	FVector Center, Extent;
+	FQuat Rotation;
+};
+
 UENUM(BlueprintType)
 enum class EVBoRPoweredState : uint8 { Closed, OpeningWait, Opening, Open, ClosingWait, Closing };
 
@@ -57,6 +63,7 @@ public:
 	FTransform HingePoseAt(double Angle) const;
 	UPROPERTY(EditAnywhere, Transient, Category="Powered Panel|Guide", meta=(DisplayName="Preview (0–1)", ClampMin="0", ClampMax="1", UIMin="0", UIMax="1", ToolTip="Editor pose only. Zero keeps normal editor pose")) float Preview = 0;
 	UPROPERTY(EditAnywhere, Category="Powered Panel|Guide", meta=(DisplayName="Motion guide")) EVBoRMotionGuide MotionGuide = EVBoRMotionGuide::Always;
+	UPROPERTY(EditAnywhere, Category="Powered Panel|Guide", meta=(DisplayName="Judgment guide")) EVBoRMotionGuide JudgmentGuide = EVBoRMotionGuide::Always;
 #if WITH_EDITORONLY_DATA
 	UPROPERTY(VisibleAnywhere, Category="Powered Panel|Guide") TObjectPtr<UVBoRMotionGuideComponent> MotionDisplay;
 #endif
@@ -121,6 +128,7 @@ private:
 
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FR2aTestAccess;
+	friend struct FR2cTestAccess;
 #endif
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FP5rTestAccess;
@@ -141,6 +149,8 @@ private:
 	void AdvanceSounds(double Seconds, bool bIncludeHeld = true);
 	void StopHeldSounds();
 	FTransform MeshPoseAt(float Angle) const;
+	const TCHAR* ObstructionBoxProblem(const UVBoRObstructionBoxComponent* Box) const;
+	FVBoRObstructionShape ObstructionShapeAt(float Angle, const UVBoRObstructionBoxComponent* Box) const;
 	void CollectObstructionBoxes();
 	AVBoRCarryObject* FindObstruction(float FromAngle, float ToAngle) const;
 	AVBoRPokeButton* CreateButton(const FTransform& Relative, TSubclassOf<AVBoRPokeButton> ButtonClass, const TCHAR* Slot);

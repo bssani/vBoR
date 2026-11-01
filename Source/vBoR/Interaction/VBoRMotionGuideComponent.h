@@ -12,7 +12,7 @@ enum class EVBoRMotionGuide : uint8
 	Off
 };
 
-enum class EVBoRGuideShape : uint8 { Axis, Arc, Rest, Travel, Detent, Push };
+enum class EVBoRGuideShape : uint8 { Axis, Arc, Rest, Travel, Detent, Push, GrabBox, GrabMesh, PushFace, PushPlate, Obstruction };
 
 struct FVBoRGuideLine
 {
@@ -61,5 +61,6 @@ public:
 protected:
 	virtual void OnRegister() override;
 private:
+	void AppendJudgmentShapes(TArray<FVBoRGuideLine>& Lines) const;
 	bool ReadSource(FVBoRMotionGuideInput& Input, USceneComponent*& Pivot, double& Preview, double& EditorValue, EVBoRMotionGuide& Mode) const;
 };

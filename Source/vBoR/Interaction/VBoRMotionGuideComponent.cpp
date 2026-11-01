@@ -112,12 +112,7 @@ bool UVBoRMotionGuideComponent::ReadSource(FVBoRMotionGuideInput& Input, USceneC
 		Pivot = HingedPart->HingePivot; Mesh = HingedPart->DoorMesh; Rest = Pivot->GetRelativeTransform();
 		Input.Last = HingedPart->MaxAngleDeg; PreviewValue = HingedPart->Preview; Mode = HingedPart->MotionGuide;
 		Input.PoseAt = [](double Value) { return FTransform(AVBoRHingedPanel::RotationAt(Value, FQuat::Identity)); };
-		FBox FaceBounds = HingedPart->MeshFaceBounds();
-		if (!HingedPart->bPushOnMeshSurface && HingedPart->bUsePushFaceBox && HingedPart->PushFaceBox->GetRelativeRotation().IsNearlyZero())
-		{
-			const FVector Extent = HingedPart->PushFaceBox->GetUnscaledBoxExtent() * HingedPart->PushFaceBox->GetRelativeScale3D().GetAbs();
-			FaceBounds = FBox(HingedPart->PushFaceBox->GetRelativeLocation() - Extent, HingedPart->PushFaceBox->GetRelativeLocation() + Extent);
-		}
+		const FBox FaceBounds = HingedPart->PushFaceBounds();
 		for (int32 Face = 0; Face < 2; ++Face)
 		{
 			const bool Opening = FVBoRDoorMotion::PushOpens(Face);
@@ -186,14 +181,17 @@ bool UVBoRMotionGuideComponent::ReadSource(FVBoRMotionGuideInput& Input, USceneC
 TArray<FVBoRGuideLine> UVBoRMotionGuideComponent::BuildShapes() const
 {
 	if (!GetWorld() || GetWorld()->IsGameWorld()) { return {}; }
-	if (const auto* Part = Cast<AVBoRAxisPart>(GetOwner()); Part && Part->IsDoorGrip()) { return {}; }
 	FVBoRMotionGuideInput Input; USceneComponent* Pivot = nullptr;
 	double PreviewValue = 0, EditorValue = 0; EVBoRMotionGuide Mode = EVBoRMotionGuide::Off;
-	if (!ReadSource(Input, Pivot, PreviewValue, EditorValue, Mode) || Mode == EVBoRMotionGuide::Off) { return {}; }
+	if (!ReadSource(Input, Pivot, PreviewValue, EditorValue, Mode)) { return {}; }
+	bool ShowMotion = Mode != EVBoRMotionGuide::Off;
+	if (const auto* Part = Cast<AVBoRAxisPart>(GetOwner()); Part && Part->IsDoorGrip()) { ShowMotion = false; }
 #if WITH_EDITOR
-	if (Mode == EVBoRMotionGuide::SelectedOnly && !GetOwner()->IsSelected() && !IsSelected()) { return {}; }
+	if (Mode == EVBoRMotionGuide::SelectedOnly && !GetOwner()->IsSelected() && !IsSelected()) { ShowMotion = false; }
 #endif
-	return VBoRMotionGuide::Build(Input);
+	TArray<FVBoRGuideLine> Lines = ShowMotion ? VBoRMotionGuide::Build(Input) : TArray<FVBoRGuideLine>();
+	AppendJudgmentShapes(Lines);
+	return Lines;
 }
 
 void UVBoRMotionGuideComponent::ClearPreview()
