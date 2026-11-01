@@ -38,6 +38,8 @@ class VBOR_API AVBoRScenarioRunner : public AActor
 	GENERATED_BODY()
 public:
 	AVBoRScenarioRunner();
+	UFUNCTION(CallInEditor, Category="Guidance|Setup", meta=(DisplayName="Check setup")) void CheckSetup();
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Transient, Category="Guidance|Setup", meta=(DisplayName="Setup check result", MultiLine="true")) FString SetupReport;
 	virtual void Tick(float DeltaSeconds) override;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Guidance") TObjectPtr<UVBoRScenarioAsset> Scenario;
 	UPROPERTY(VisibleAnywhere, Category="Guidance") TObjectPtr<UWidgetComponent> Panel;
@@ -83,6 +85,7 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void RequestLevelReload(FName LevelName);
 private:
+	friend struct FR5TestAccess;
 	friend struct FP4hTestAccess;
 	friend struct FP3FlowTestAccess;
 	friend struct FP5bTestAccess;

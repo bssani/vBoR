@@ -244,9 +244,17 @@ AVBoRHingedPanel::FSetupAssessment AVBoRHingedPanel::EvaluateSetup() const
 			{
 				Result.Problems.Add(FString::Printf(TEXT("%s slot %s overrides different attached candidates."), Side, *Explicit->GetName()));
 			}
-			if (Explicit->DoorHandleSide == (I == 0 ? EVBoRDoorHandleSide::Inside : EVBoRDoorHandleSide::Outside))
+			if ((I == 0 && Explicit->DoorHandleSide == EVBoRDoorHandleSide::Inside) ||
+				(I == 1 && Explicit->DoorHandleSide == EVBoRDoorHandleSide::Outside))
 			{
 				Result.Problems.Add(FString::Printf(TEXT("%s slot %s has the opposite DoorHandleSide; slot wins."), Side, *Explicit->GetName()));
+			}
+			else if (Explicit->DoorHandleSide != EVBoRDoorHandleSide::None &&
+				Explicit->DoorHandleSide != (I == 0 ? EVBoRDoorHandleSide::Outside : I == 1 ? EVBoRDoorHandleSide::Inside : EVBoRDoorHandleSide::Grip))
+			{
+				const TCHAR* PartSide = Explicit->DoorHandleSide == EVBoRDoorHandleSide::Grip ? TEXT("Grip") :
+					Explicit->DoorHandleSide == EVBoRDoorHandleSide::Inside ? TEXT("Inside") : TEXT("Outside");
+				Result.Problems.Add(FString::Printf(TEXT("%s slot %s has DoorHandleSide %s; slot wins."), Side, *Explicit->GetName(), PartSide));
 			}
 		}
 		else

@@ -98,6 +98,8 @@ protected:
 	virtual bool ReadHand(int32 Hand, FVBoRDoorHand& Input);
 	virtual bool ReadPalmClosed(int32 Hand, bool& bClosed) const;
 private:
+	friend class AVBoRScenarioRunner;
+	friend struct FR5TestAccess;
 	friend class UVBoRMotionGuideComponent;
 
 #if WITH_DEV_AUTOMATION_TESTS
