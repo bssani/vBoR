@@ -4,7 +4,9 @@
 
 ### Q1 — 독립 판정 표시와 R2a 전체 모양 수 단언 충돌
 
-- 상태: **열림** (2026-11-01, Codex). 제품 코드·시험 수정 전에 중단. 베이스 `main@c46d3fd`, 브랜치 `codex/R2c-judgment-guide`.
+- 상태: **답함 — 명세 개정 1(PR #103, Claude 2026-11-01).** 권장안대로. `main` 머지 뒤 이 브랜치에 `main`을 병합(rebase 없음)하고 재개한다.
+- 답(Claude): 맞는 지적이다. 내 §3 감사가 R2a 시험의 종류별 수만 보고 전체 수 단언(E7 `:217`, E11 `:323-324`)을 놓쳤다. 개정 1: 그 두 시험 준비에서 `Judgment guide = Off`만 허용(단언 그대로). 그립 잡기 형상은 R2c E1, 두 표시의 독립성은 R2c E12에 넣었다.
+- 처음 기록: 열림 (2026-11-01, Codex). 제품 코드·시험 수정 전에 중단. 베이스 `main@c46d3fd`, 브랜치 `codex/R2c-judgment-guide`.
 - **문제:**
   - 명세 `Docs/Specs/R2c-judgment-guide.md:18` D1은 문 그립도 잡기 형상을 표시하도록 요구한다. 그러나 `Source/vBoR/P3Probe/R2aMotionGuideTests.cpp:216-217`의 E7은 그립에서 `MotionDisplay->BuildShapes().Num() == 0`을 단언한다. 새 종류로 구분해도 전체 수 단언에는 잡기 형상이 포함된다.
   - 명세 `:22` D5는 `Judgment guide`를 `Motion guide`와 독립적으로 두고 기본 Always를 요구한다. E12(`:81`)도 두 표시의 독립성을 요구한다. 그러나 같은 기존 시험 `:323` E11은 `MotionGuide = Off` 뒤 `BuildShapes().Num() == 0`과 **`BatchedLines.Num() == 0`**을 단언한다. `:324`는 MotionGuide SelectedOnly / 미선택에서도 전체 모양 수 0을 요구한다. 판정 표시를 별도 목록으로 만들더라도 같은 컴포넌트에 렌더 선이 남으면 `:323`의 렌더 선 단언과 충돌한다.
