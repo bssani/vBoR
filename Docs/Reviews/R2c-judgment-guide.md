@@ -1,4 +1,27 @@
-# R2c 판정 경계 표시 — 질문
+# R2c 판정 경계 표시 — 리뷰
+
+| 회차 | 날짜 | 대상 | 리뷰어 | 결과 |
+|---|---|---|---|---|
+| 1 | 2026-11-01 | `b94dd8d` feat: 에디터 판정 경계 표시 | Claude | **열린 항목 없음 — 통과.** 빌드: unity 최신(Codex 최종 트리). `vBoR.*` **663/663**, Fail 0, `EXIT CODE: 0`(`Saved/Logs/ReviewR2cAll.log`). R2c 13/13 |
+
+## 1회차 (2026-11-01, `main...codex/R2c-judgment-guide`)
+
+### 확인한 것
+
+- **AGENTS.md 제약:** 범위 안. 새 컴포넌트 없음(R2a `MotionDisplay`에 선 종류만 추가). 영어 주석. 에디터 작업 없음.
+- **§3 허용 수정만:** `R2aMotionGuideTests.cpp` E7·E11에 시험 준비 `JudgmentGuide = Off` 두 줄. 단언 변경 없음.
+- **D6(판정 함수 공유, 로그 없음):**
+  - 잡기: `VBoRUsesGrabMesh`로 조건만 뽑고 경고는 `ConfigureVBoRGrabCollider`에 남김 → 표시가 경고 수를 늘리지 않음(P2f 10/10, 경고 횟수 단언 그대로).
+  - 밀기 면: `PushFaceBounds`(기존 `SyncSettings` 식 그대로)를 판정·R2a·R2c가 같이 씀. 메시 면 격자는 `QueryMeshFace`(같은 함수, 프레임만 인자로)를 부름.
+  - 끼임: `ObstructionBoxProblem`(로그 없음)·`ObstructionShapeAt`을 `CollectObstructionBoxes`·`FindObstruction`·표시가 같이 씀. 여유·반지름 계산은 `FindObstruction`에 그대로(P4b 12/12, P5zg 9/9).
+- **미리보기 중 메시 면 추적:** R2a 미리보기는 렌더 캐시만 바꾸고 물리 자세는 그대로라서, 격자 추적은 `DoorMesh` 물리 자세에서 프레임을 구해 판정과 같은 면을 찾고, 그린 점만 보이는 자세로 옮긴다. 판정과 표시가 같은 면을 가리킨다.
+- **경고 색:** UCX 없는 `bGrabWithMesh` → 자홍 GrabBox, 메시 면 추적 실패 → 자홍 면, 장애물 상자 없음 → 자홍 경계 상자, `CTF_UseComplexAsSimple` → 자홍 경계 상자(명세 D1 허용).
+
+### 참고 (항목 아님)
+
+1. 에디터에서 Tick마다 다시 계산한다 — 메시 면 모드 문은 8 × 8 × 2 = 128번 면 추적. CAD 문 몇 개면 괜찮지만, 회사 차에서 에디터가 느려지면 "값이 바뀔 때만 다시 계산"으로 바꾸는 작은 수정으로 다룬다(명세 §5 재량).
+2. 리프트게이트 쓸림 영역은 에디터에서 지금 붙어 있는 장애물 상자로 그린다. Play 때는 `BeginPlay`의 목록을 쓴다 — 에디터에서 상자를 고친 뒤 Play하면 같은 목록이 된다.
+3. 뷰포트 실제 렌더·성능·회사 CAD는 사용자 확인(명세 §7, not-tested).
 
 ## 질문
 
