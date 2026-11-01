@@ -131,6 +131,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2dRelatch, "vBoR.P2d.Panel.E4PushClosesAndRel
 bool FP2dRelatch::RunTest(const FString&)
 {
 	FP2dWorld W; AP2cTrackedPanel* Panel = P2dLid(W); Panel->bAllowPalmOpening = false;
+	Panel->NoPushNearHandleCm = 0; // Keep latch/push coverage independent of handle zones (R7 §3)
 	auto* Handle = P2dConsoleHandle(W,Panel); W.Play(); UP2cEventObserver* Observer = P2dObserve(Panel);
 	Panel->Hands[0] = P2dFace(0,0); P2dPress(Handle);
 	Panel->Hands[0] = P2dFace(40,0); Panel->Tick(1);
@@ -235,6 +236,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP2dFreePanel, "vBoR.P2d.Panel.E11LatchDisabled
 bool FP2dFreePanel::RunTest(const FString&)
 {
 	FP2dWorld W; AP2cTrackedPanel* Panel = P2dLid(W); Panel->bUseLatch = false;
+	Panel->NoPushNearHandleCm = 0; // Keep free-panel push coverage (R7 §3)
 	Panel->OnConstruction(Panel->GetActorTransform()); auto* Handle = P2dConsoleHandle(W,Panel,1); W.Play();
 	Panel->Hands[0] = P2dFace(0,-2,30,FVector(0,1,0)); Panel->Tick(0.1f); Panel->Hands[0] = P2dFace(0,2,30,FVector(0,1,0)); Panel->Tick(1);
 	TestTrue(TEXT("Latch-disabled panel accepts closed push"), Panel->GetMotion().AngleDeg > 0);

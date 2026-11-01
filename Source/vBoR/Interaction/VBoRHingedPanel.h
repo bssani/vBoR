@@ -60,6 +60,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Push face", meta=(DisplayName="Use push face box")) bool bUsePushFaceBox = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Push face", meta=(DisplayName="Push on mesh surface")) bool bPushOnMeshSurface = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Push face", meta=(Units="cm", ClampMin="0", DisplayName="Mesh thickness warning threshold")) float PushFaceWarnThicknessCm = 20;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Push face", meta=(Units="cm", ClampMin="0", DisplayName="No push near handle", ToolTip="Extra margin around connected handle GrabBoxes. Zero disables push exclusion")) float NoPushNearHandleCm = 8;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Hinged panel|Push face", meta=(DisplayName="Push face box", ToolTip="Box in HingePivot coordinates. Enable, then adjust position/size/scale. Rotation must be 0 (cm).")) TObjectPtr<UBoxComponent> PushFaceBox;
 	bool BeginGrabFromAxisPart(AVBoRAxisPart* Part);
 	// +Z hinge axis/+X panel edge/+Y closing face. Keep door saved names (P2c D1/D3)
@@ -101,6 +102,7 @@ private:
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FR2aTestAccess;
 	friend struct FR2cTestAccess;
+	friend struct FR7TestAccess;
 #endif
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FP5sTestAccess;
@@ -124,6 +126,12 @@ private:
 		bool bMeshTraceable = false;
 	};
 	FSetupAssessment EvaluateSetup() const;
+	struct FHandlePushZone
+	{
+		FTransform Frame;
+		FBox Bounds;
+	};
+	TArray<FHandlePushZone> HandlePushZones(bool bForDisplay = false) const;
 	void CollectHandleCandidates(TArray<AVBoRAxisPart*> (&Candidates)[3]) const;
 	TArray<AVBoRAxisPart*> GetHandleClaims() const;
 	bool IsHandleShared(const AVBoRAxisPart* Part) const;

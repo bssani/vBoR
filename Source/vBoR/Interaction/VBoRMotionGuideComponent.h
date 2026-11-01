@@ -12,7 +12,7 @@ enum class EVBoRMotionGuide : uint8
 	Off
 };
 
-enum class EVBoRGuideShape : uint8 { Axis, Arc, Rest, Travel, Detent, Push, GrabBox, GrabMesh, PushFace, PushPlate, Obstruction };
+enum class EVBoRGuideShape : uint8 { Axis, Arc, Rest, Travel, Detent, Push, GrabBox, GrabMesh, PushFace, PushPlate, Obstruction, NearHandle };
 
 struct FVBoRGuideLine
 {

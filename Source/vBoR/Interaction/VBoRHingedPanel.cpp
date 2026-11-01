@@ -282,6 +282,27 @@ AVBoRHingedPanel::FSetupAssessment AVBoRHingedPanel::EvaluateSetup() const
 	return Result;
 }
 
+TArray<AVBoRHingedPanel::FHandlePushZone> AVBoRHingedPanel::HandlePushZones(bool bForDisplay) const
+{
+	TArray<FHandlePushZone> Zones;
+	if (NoPushNearHandleCm <= 0) { return Zones; }
+	FSetupAssessment Setup;
+	if (bForDisplay) { Setup = EvaluateSetup(); } // Assessment collects messages without logging (R7 D8)
+	else
+	{
+		Setup.Handles[0] = OutsideAxisHandle; Setup.Handles[1] = InsideAxisHandle; Setup.Handles[2] = GripAxisHandle;
+	}
+	for (const AVBoRAxisPart* Part : Setup.Handles)
+	{
+		// Mesh grabbing disables GrabBox collision but keeps its bounds (R7 D1/E10)
+		if (!IsValid(Part) || !Part->PartMesh->GetStaticMesh() || (!bForDisplay && Part->LinkedDoor != this)) { continue; }
+		const UBoxComponent* Box = Part->GrabBox;
+		const FVector Extent = Box->GetScaledBoxExtent().GetAbs() + FVector(NoPushNearHandleCm);
+		Zones.Add({FTransform(Box->GetComponentQuat(), Box->GetComponentLocation()), FBox(-Extent, Extent)});
+	}
+	return Zones;
+}
+
 void AVBoRHingedPanel::CheckSetup()
 {
 	const FSetupAssessment Setup = EvaluateSetup();
@@ -427,6 +448,21 @@ void AVBoRHingedPanel::Tick(float DeltaSeconds)
 	SyncSettings();
 	FVBoRDoorHand Hands[2];
 	ReadHand(0, Hands[0]); ReadHand(1, Hands[1]);
+	const auto Zones = HandlePushZones();
+	const FTransform Frame = HingeFrame();
+	for (FVBoRDoorHand& Hand : Hands)
+	{
+		Hand.bNearHandle = false;
+		if (!Hand.bTracked) { continue; }
+		for (const FVector& Point : Hand.Points)
+		{
+			const FVector WorldPoint = Frame.TransformPosition(Point);
+			if (Zones.ContainsByPredicate([&](const FHandlePushZone& Zone) { return Zone.Bounds.IsInsideOrOn(Zone.Frame.InverseTransformPosition(WorldPoint)); }))
+			{
+				Hand.bNearHandle = true; break;
+			}
+		}
+	}
 	const double Before = Motion.AngleDeg;
 	const int32 Unlocks = Motion.Metrics.Unlocks, Latches = Motion.Metrics.Latches;
 	const bool bRecovering = Motion.bPaused;
@@ -499,13 +535,13 @@ FString AVBoRHingedPanel::GetMeasurementText(const FVBoRDoorMetrics* Baseline) c
 {
 	const FVBoRDoorMetrics M = Baseline ? Motion.Metrics.Since(*Baseline) : Motion.Metrics;
 	return FString::Printf(TEXT("Unlock=%d latch=%d last unlock=%s\nPush L outside/inside=%d/%d R=%d/%d | moved %.2f deg\n"
-		"Ignored contacts: locked=%d palm direction=%d behind=%d near axis=%d outside=%d tracking Low=%d opening disabled=%d\n"
+		"Ignored contacts: locked=%d palm direction=%d behind=%d near axis=%d outside=%d tracking Low=%d opening disabled=%d near handle=%d\n"
 		"Handle attempts/grabs: L outside=%d/%d inside=%d/%d R outside=%d/%d inside=%d/%d | held %.3f s\n"
 		"Rate capped frames=%d | grab pauses=%d %.3f s | recovery unapplied=%.2f cm | ignored SDK release=%d | push tracking losses=%d\n"
 		"Palm-to-face angle L=%.1f R=%.1f deg (-1: no candidate) | palm axis -Z inferred; not-tested"),
 		M.Unlocks, M.Latches, M.LastUnlockHandle == 0 ? TEXT("outside") : M.LastUnlockHandle == 1 ? TEXT("inside") : TEXT("none"),
 		M.PushStarts[0][0], M.PushStarts[0][1], M.PushStarts[1][0], M.PushStarts[1][1], M.PushedDeg,
-		M.Ignored[0], M.Ignored[1], M.Ignored[2], M.Ignored[3], M.Ignored[4], M.Ignored[5], M.Ignored[6],
+		M.Ignored[0], M.Ignored[1], M.Ignored[2], M.Ignored[3], M.Ignored[4], M.Ignored[5], M.Ignored[6], M.Ignored[7],
 		M.Attempts[0][0], M.Grabs[0][0], M.Attempts[0][1], M.Grabs[0][1], M.Attempts[1][0], M.Grabs[1][0], M.Attempts[1][1], M.Grabs[1][1],
 		M.HeldSeconds, M.RateLimitedFrames, M.Pauses, M.PausedSeconds, M.RecoveryDistanceCm, M.IgnoredReleases, M.PushTrackingLosses, Motion.PalmAngleDeg[0], Motion.PalmAngleDeg[1]);
 }

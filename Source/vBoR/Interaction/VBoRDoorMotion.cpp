@@ -145,6 +145,7 @@ bool FVBoRDoorMotion::FindPush(int32 Hand, const FVBoRDoorHand& Input, int32 Fac
 	const double PalmAngle = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Palm, PushInward(Face)), -1.0, 1.0)));
 	PalmAngleDeg[Hand] = PalmAngle;
 	if (bUseLatch && bLocked) { OutReason = EVBoRDoorIgnore::Locked; }
+	else if (Input.bNearHandle) { OutReason = EVBoRDoorIgnore::NearHandle; }
 	// Keep locked count first. May allow closing face only after unlock (P2d R1 D7)
 	else if (PushOpens(Face) && !bAllowPalmOpening) { OutReason = EVBoRDoorIgnore::OpeningDisabled; }
 	else if (!bCrossing) { OutReason = EVBoRDoorIgnore::Behind; }

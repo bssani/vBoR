@@ -135,6 +135,10 @@ void UVBoRMotionGuideComponent::AppendJudgmentShapes(TArray<FVBoRGuideLine>& Lin
 	}
 	else if (Panel)
 	{
+		for (const auto& Zone : Panel->HandlePushZones(true))
+		{
+			JudgmentBoxLines(Lines, Zone.Bounds, Zone.Frame, FColor(160, 64, 255), EVBoRGuideShape::NearHandle);
+		}
 		const FBox FaceBounds = Panel->PushFaceBounds();
 		const FTransform Frame = Panel->HingePivot->GetComponentTransform();
 		// Preview moves render caches only; trace the unchanged physics pose (R2a D8, R2c D6)
