@@ -1,0 +1,89 @@
+# R8a AxisPart 밀기 면 맞춤 (선바이저·레버 등)
+
+| 항목 | 값 |
+|---|---|
+| 단계 | 구조 보수 R8a(`Docs/Refactor-Plan.md` §4, 요구 8). 자유모드 실내 조작(U-09·U-11) — Quest 확인 전 `not-tested` |
+| 결정 근거 | **사용자(2026-11-01):** "button 누를 때 버튼을 손이 통과하지 않잖아. 근데 sunvisor 같은 거 밀 때는 손가락이 통과해서 밀고 당기기같이 표현 돼."<br>**원인(계획 §2.5):**<br>① AxisPart 밀기 면은 **메시 경계 상자에서 만든 판**이다(`PushGeometry` `VBoRAxisPart.cpp`). 축 막대·클립이 섞인 merge 메시면 판의 면이 실제 표면보다 앞이나 뒤에 생겨, 손이 닿기 전에 움직이거나 한참 파고든 뒤에 움직인다.<br>② 판정점은 손가락 **관절 중심**(`ReadRawPalmAndTips`)이라 판정이 맞아도 손가락 살 두께만큼 파고든다.<br>③ 손 모델을 면에 멈추게 하는 것은 R8c(이번 범위 밖).<br>**문은 이미 ①을 푸는 옵션이 있다:** `Use push face box` + `PushFaceBox`(`VBoRHingedPanel.cpp:37-41`·`:63-73`·`:89-93`) |
+| 베이스 브랜치 | `main` (**R7 머지 뒤**) |
+| 작업 브랜치 | `codex/R8a-axis-push-face` |
+| 리뷰 파일 | `Docs/Reviews/R8a-axis-push-face.md` (첫 리뷰 때 생김) |
+| 상태 | 명세 작성 |
+| 에디터 작업 | **없음** |
+
+## 0. 결정
+
+| # | 결정 | 내용 |
+|---|---|---|
+| D1 | **AxisPart에 밀기 면 상자** | 문과 같은 방식으로 `Use push face box`(기본 꺼짐)와 `PushFaceBox`(`AxisPivot` 밑, 충돌 없음, 게임에서 숨김)를 더한다. 켜면 `PushGeometry`가 **메시 경계 대신 이 상자**(AxisPivot 좌표의 축 정렬 상자 = 상자의 상대 위치 ± 크기 × 스케일)로 판(`Bounds`·`Radial`·`Normal`)을 만든다. 꺼져 있으면 지금처럼 메시 경계 |
+| D2 | **상자 초기값** | 꺼져 있는 동안 `OnConstruction`에서 `PushFaceBox`를 메시 경계(지금 판의 원본)에 맞춰 둔다(문 `:89-93`과 같음). 켜는 순간 지금 판과 같은 자리에서 시작해 사용자가 줄이면 된다 |
+| D3 | **상자 회전은 0** | 상자 상대 회전이 0이 아니면 경고 한 줄(Play 때 한 번)하고 메시 경계로 돌아간다(문 `SyncSettings`의 `IsNearlyZero` 조건과 같음). 표시(R2c)는 경고 색 |
+| D4 | **손끝 닿음 여유** | `Push contact offset`(cm, 기본 **0.8**). 판정점이 면에서 이 거리 **앞**에 오면 닿은 것으로 본다 — 밀기 판정(`FindPush`의 깊이)과 밀린 각 계산(`AdvancePush`의 `Plane`) 둘 다 면을 바깥쪽으로 이만큼 옮긴 것으로 계산한다. 그래서 손가락 살이 면에 닿을 때 움직이기 시작하고, 미는 동안 관절 중심이 면에서 이만큼 떨어져 있다. 0이면 지금과 같다 |
+| D5 | **표시는 따라온다** | R2a 밀기 화살표·R2c 밀기 판이 `PushGeometry`를 쓰므로 D1을 켜면 표시도 상자 기준으로 바뀐다. R2c 판은 D4 여유를 **넣지 않은** 면을 그린다(판정 면 = 상자/메시 면). 별도 표시 코드는 필요하면만 |
+| D6 | **나머지 그대로** | 밀기 방향(`PushAngularDirection`), 같은 손·같은 면 유지, 추적 복구 때 새 교차 아님(P5m D3), detent·nudge, 잡기, `PushMinAxisDistanceCm`·`PushMarginCm`의 뜻 |
+
+## 1. 왜 하는가
+
+merge한 회사 선바이저·레버의 밀기 면을 실제 표면에 맞출 수 있게 한다(D1). 관절 중심 판정 때문에 늘 생기는 파고듦을 줄인다(D4). 손 모델 자체를 면에 멈추게 하는 R8c는 이것을 Quest에서 써 본 뒤 정한다.
+
+## 2. 범위
+
+### 만들 것
+
+- `AVBoRAxisPart`의 D1–D4, 프로퍼티(Category `Axis part|Push face` — 문과 같은 이름 체계).
+- 시험 `vBoR.R8a.*`, §3의 허용 수정.
+
+### 범위 밖 — 하지 말 것
+
+| 하지 말 것 | 이유 |
+|---|---|
+| AxisPart 메시 면 추적(문 `Push on mesh surface`와 같은 것) | 상자로 시작. 곡면이 심해 상자로 안 되면 따로 |
+| 손 모델을 면에 멈추기 | R8c |
+| 문(HingedPanel) 밀기 여유 | 문은 판정점이 다르고(손바닥 기준 팔 길이) 이번 요구 밖. 필요하면 따로 |
+| 상자 여러 개 | 하나로 시작 |
+| 기존 BP·레벨의 값 변경 | 에디터 작업 없음. 회사 선바이저 BP는 사용자가 켠다 |
+
+## 3. 지켜야 할 조건 (바꾸면 안 되는 것)
+
+- `Use push face box = false`이고 `Push contact offset = 0`이면 지금과 똑같다.
+- 새 상자는 충돌 없음·게임에서 숨김. 잡기 상자(`GrabBox`)·잡기 충돌 선택(`VBoRUsesGrabMesh`)과 상관없다.
+- 컴포넌트 이름 `PushFaceBox`(문과 같은 이름, 이름에 `Pivot` 없음 — `P4iComponents`가 BP와 부모를 이름으로 짝짓는다 `P4iCarBlueprintTests.cpp:84`).
+- **기존 시험 감사(Claude 2026-11-01, `bAllowPush` 검색):** `P3Probe/P5mLeverTests.cpp`, `P3Probe/P5pSunVisorTests.cpp`, `P3Probe/R2aMotionGuideTests.cpp`(E6 밀기 방향), `P3Probe/R2cJudgmentGuideTests.cpp`(E9 밀기 판), `P2Probe/P2dLatchedPanelTests.cpp`, `P2Probe/P5zeDoorGripTests.cpp`.
+  - D1은 기본 꺼짐이라 영향 없다.
+  - D4 기본 0.8 cm 때문에 **밀린 각·시작 프레임을 정확히 단언하는 시험**이 실패할 수 있다. **유일한 허용 수정:** 그 시험이 여유를 시험하려는 것이 아니면 시험 준비에서 `Push contact offset = 0`으로 둔다(단언·손 위치 그대로). 어느 시험인지 보고 ③에 적는다.
+  - 그 밖의 수정이 필요하면 멈추고 리뷰 파일 "질문"에 적는다.
+
+## 4. 시험 — `vBoR.R8a.*`
+
+기존 밀기 시험(`P5mLeverTests`·`P5pSunVisorTests`)의 손 입력 주입 방식을 쓴다.
+
+| ID | 상황 | 확인 |
+|---|---|---|
+| E1 | 막대가 섞여 경계가 큰 메시(예: 판 + 축 방향으로 긴 막대) + `Use push face box`, 상자를 판 부분에만 맞춤 | 판정 판(`PushGeometry`) = 상자에서 만든 판. 상자 면에 닿을 때 밀리기 시작하고, 막대 쪽 경계 면에서는 안 밀림 |
+| E2 | 상자 꺼짐 | 판 = 메시 경계(지금과 같음) |
+| E3 | 상자 회전 ≠ 0 | 경고 한 줄, 판 = 메시 경계 |
+| E4 | 꺼진 상태에서 `OnConstruction` | `PushFaceBox` 위치·크기 = 메시 경계(D2) |
+| E5 | 상자 `Axis` X·Y·Z × `bReverse` | 판의 `Radial`·`Normal`이 상자 기준으로 정해지고, 밀기 방향은 R2a E6과 같은 방법으로 화살표와 일치 |
+| E6 | `Push contact offset` 0.8: 판정점이 면 앞 0.5 cm에서 면 쪽으로 이동 | 그 프레임에 밀기 시작(여유 안). 앞 1.0 cm면 시작 안 함 |
+| E7 | 0.8로 미는 중 | 밀린 각 = 판정점이 (면 + 0.8 cm) 위에 오도록 한 각(0.1°) — 0일 때보다 덜 돌아감 |
+| E8 | 0 | E6·E7 상황에서 지금과 같은 결과 |
+| E9 | 바깥 면·안쪽 면 둘 다 | 여유가 각 면의 바깥쪽으로 적용(안쪽 면은 반대 방향) |
+| E10 | R2c 표시 | 밀기 판 모양 = 상자 기준 판(D4 여유 없음). R2a 밀기 화살표 위치가 상자 면 가운데 |
+
+## 5. 구현자가 정할 것
+
+- `PushGeometry`에 상자를 넣는 방법(입력 경계를 바꾸는 함수 인자 등).
+- D4를 `FindPush`·`AdvancePush`에 넣는 방법(면 Y 값을 옮긴 값으로 한곳에서 계산 권장).
+- D3 경고 문구와 때(Play 때 한 번).
+
+## 6. 완료 조건
+
+1. D1–D6 구현, §3 조건 지킴.
+2. `vBoR.R8a.E1`–`E10` 통과, 기존 시험 통과(§3의 허용 수정만).
+3. non-unity(`-Module=vBoR`)·unity 빌드 성공, `vBoR.*` 전체 통과(작업 끝에 한 번).
+4. 새 주석·표시 이름·로그 영어(AGENTS.md).
+
+## 7. 로컬에서 확인할 것
+
+- 빌드: 위 3.
+- 에디터(사용자): 회사 선바이저 BP에서 `Use push face box`를 켜고 상자를 선바이저 판 표면에 맞춘다. R2c 파란 판·R2a 화살표가 그 상자를 따라오는지 본다.
+- Quest 3(`not-tested`): ① 선바이저 표면에 손가락이 닿을 때 움직이기 시작함(공중에서 먼저 움직이지 않음) ② 미는 동안 손가락이 덜 파고듦 ③ "밀고 당기기처럼" 보이던 것이 줄었는지 ④ 0.8 cm가 많거나 적으면 값을 알려 주기. 남은 파고듦이 거슬리면 R8c(손 모델 멈추기) 여부를 정한다.
