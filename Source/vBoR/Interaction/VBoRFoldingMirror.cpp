@@ -6,6 +6,7 @@
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Templates/UnrealTemplate.h"
 #include "UObject/ConstructorHelpers.h"
 
 AVBoRFoldingMirror::AVBoRFoldingMirror()
@@ -49,10 +50,13 @@ void AVBoRFoldingMirror::OnConstruction(const FTransform& Transform)
 
 void AVBoRFoldingMirror::BeginPlay()
 {
+	// Super marks HasActorBegunPlay before derived initialization ends (R3 D3/D4)
+	TGuardValue<bool> InitializingPlay(bInitializingPlay, true);
 	Super::BeginPlay();
 	if (auto* Door = Cast<AVBoRHingedPanel>(GetAttachParentActor()))
 	{ AttachToComponent(Door->HingePivot, FAttachmentTransformRules::KeepWorldTransform); }
 	ResetMirror();
+	if (!bFollowVehiclePower) { return; }
 	Power = UVBoRVehiclePowerComponent::FindUnique(GetWorld());
 	if (Power)
 	{
@@ -79,15 +83,36 @@ void AVBoRFoldingMirror::ResetMirror()
 {
 	for (int32 I = 0; I < 4; ++I) { SoundPlayback[I].Reset(SoundAudio[I], true); }
 	AngleDeg = FMath::Clamp(FoldAngleDeg, -170.f, 170.f);
-	State = EVBoRFoldingMirrorState::Folded; ApplyAngle();
+	ApplyAngle();
+	SetState(EVBoRFoldingMirrorState::Folded);
+	if (HasActorBegunPlay() && !bInitializingPlay) { OnReset.Broadcast(this); }
 }
 
 void AVBoRFoldingMirror::HandlePowerChanged(bool bOn)
 {
+	RequestMotion(bOn);
+}
+
+bool AVBoRFoldingMirror::Fold() { return RequestMotion(false); }
+bool AVBoRFoldingMirror::Unfold() { return RequestMotion(true); }
+
+bool AVBoRFoldingMirror::RequestMotion(bool bUnfold)
+{
+	const auto MovingState = bUnfold ? EVBoRFoldingMirrorState::Unfolding : EVBoRFoldingMirrorState::Folding;
+	const auto EndState = bUnfold ? EVBoRFoldingMirrorState::Unfolded : EVBoRFoldingMirrorState::Folded;
+	if (State == MovingState || State == EndState) { return false; }
 	if (State == EVBoRFoldingMirrorState::Unfolding) { SoundPlayback[0].EndHeld(UnfoldMotorCue, SoundAudio[0]); }
 	if (State == EVBoRFoldingMirrorState::Folding) { SoundPlayback[1].EndHeld(FoldMotorCue, SoundAudio[1]); }
-	SoundPlayback[bOn ? 0 : 1].BeginHeld(bOn ? UnfoldMotorCue : FoldMotorCue, SoundAudio[bOn ? 0 : 1], SoundFrame);
-	State = bOn ? EVBoRFoldingMirrorState::Unfolding : EVBoRFoldingMirrorState::Folding;
+	SoundPlayback[bUnfold ? 0 : 1].BeginHeld(bUnfold ? UnfoldMotorCue : FoldMotorCue, SoundAudio[bUnfold ? 0 : 1], SoundFrame);
+	SetState(MovingState);
+	return true;
+}
+
+void AVBoRFoldingMirror::SetState(EVBoRFoldingMirrorState NewState)
+{
+	if (State == NewState) { return; }
+	State = NewState;
+	if (HasActorBegunPlay() && !bInitializingPlay) { OnStateChanged.Broadcast(this, State); }
 }
 
 void AVBoRFoldingMirror::Tick(float DeltaSeconds)
@@ -101,9 +126,9 @@ void AVBoRFoldingMirror::Tick(float DeltaSeconds)
 	ApplyAngle();
 	if (AngleDeg == Target)
 	{
-		State = bUnfold ? EVBoRFoldingMirrorState::Unfolded : EVBoRFoldingMirrorState::Folded;
 		SoundPlayback[bUnfold ? 0 : 1].EndHeld(bUnfold ? UnfoldMotorCue : FoldMotorCue, SoundAudio[bUnfold ? 0 : 1]);
 		SoundPlayback[bUnfold ? 2 : 3].Queue(bUnfold ? UnfoldedCue : FoldedCue, SoundAudio[bUnfold ? 2 : 3], SoundFrame);
+		SetState(bUnfold ? EVBoRFoldingMirrorState::Unfolded : EVBoRFoldingMirrorState::Folded);
 	}
 }
 

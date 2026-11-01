@@ -10,9 +10,13 @@
 class UAudioComponent;
 class UStaticMeshComponent;
 class UVBoRVehiclePowerComponent;
+class AVBoRFoldingMirror;
 
 UENUM(BlueprintType)
 enum class EVBoRFoldingMirrorState : uint8 { Folded, Unfolding, Unfolded, Folding };
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FVBoRFoldingMirrorStateEvent, AVBoRFoldingMirror*, Mirror, EVBoRFoldingMirrorState, State);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FVBoRFoldingMirrorEvent, AVBoRFoldingMirror*, Mirror);
 
 UCLASS(Blueprintable)
 class VBOR_API AVBoRFoldingMirror : public AActor, public IVBoRSpectatorPart
@@ -52,8 +56,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding") FTransform MeshRestFromRoot = FTransform(FQuat::Identity, FVector(40,-100,100), FVector(.16,.24,.1));
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding", meta=(Units="deg", ClampMin="-170", ClampMax="170")) float FoldAngleDeg = -65;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding", meta=(Units="deg/s", ClampMin="0.1")) float SpeedDegPerSecond = 30;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding", meta=(DisplayName="Follow vehicle power", ToolTip="Subscribe to vehicle power at Play start")) bool bFollowVehiclePower = true;
+	UPROPERTY(BlueprintAssignable, Category="Mirror folding") FVBoRFoldingMirrorStateEvent OnStateChanged;
+	UPROPERTY(BlueprintAssignable, Category="Mirror folding") FVBoRFoldingMirrorEvent OnReset;
 	UFUNCTION(BlueprintPure, Category="Mirror folding") EVBoRFoldingMirrorState GetState() const { return State; }
 	UFUNCTION(BlueprintPure, Category="Mirror folding") float GetAngleDeg() const { return AngleDeg; }
+	UFUNCTION(BlueprintCallable, Category="Mirror folding") bool Fold();
+	UFUNCTION(BlueprintCallable, Category="Mirror folding") bool Unfold();
 	UFUNCTION(BlueprintCallable, Category="Mirror folding") void ResetMirror();
 protected:
 	virtual void BeginPlay() override;
@@ -75,6 +84,9 @@ private:
 	UPROPERTY() TObjectPtr<UVBoRVehiclePowerComponent> Power;
 	EVBoRFoldingMirrorState State = EVBoRFoldingMirrorState::Unfolded;
 	float AngleDeg = 0;
+	bool bInitializingPlay = false;
 	UFUNCTION() void HandlePowerChanged(bool bOn);
+	bool RequestMotion(bool bUnfold);
+	void SetState(EVBoRFoldingMirrorState NewState);
 	void ApplyAngle();
 };

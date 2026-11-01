@@ -14,6 +14,7 @@
 #include "IsdkContentAssetPaths.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundBase.h"
+#include "Templates/UnrealTemplate.h"
 #include "UObject/ConstructorHelpers.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogPoweredPanel, Log, All);
@@ -93,6 +94,8 @@ AVBoRPokeButton* AVBoRPoweredPanel::CreateButton(const FTransform& Relative, TSu
 
 void AVBoRPoweredPanel::BeginPlay()
 {
+	// Super marks HasActorBegunPlay before initial ResetPanel (R3 D4)
+	TGuardValue<bool> InitializingPlay(bInitializingPlay, true);
 	Super::BeginPlay();
 	ResetPanel();
 	CollectObstructionBoxes();
@@ -143,6 +146,7 @@ void AVBoRPoweredPanel::ResetPanel(bool bClearCounts)
 	for (int32 I = 0; I < SoundAudio.Num(); ++I) { SoundPlayback[I].Reset(SoundAudio[I], bClearCounts); }
 	ApplyAngle();
 	PublishState();
+	if (HasActorBegunPlay() && !bInitializingPlay) { OnReset.Broadcast(this); }
 }
 
 void AVBoRPoweredPanel::ApplyAngle()

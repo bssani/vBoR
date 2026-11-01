@@ -41,22 +41,30 @@ void AVBoRFoldingSeat::OnConstruction(const FTransform& Transform)
 bool AVBoRFoldingSeat::Fold()
 {
 	if (State != EVBoRFoldingSeatState::Standing) { return false; }
-	State = EVBoRFoldingSeatState::Folding;
+	SetState(EVBoRFoldingSeatState::Folding);
 	return true;
 }
 
 bool AVBoRFoldingSeat::Unfold()
 {
 	if (State != EVBoRFoldingSeatState::Folded) { return false; }
-	State = EVBoRFoldingSeatState::Unfolding;
+	SetState(EVBoRFoldingSeatState::Unfolding);
 	return true;
 }
 
 void AVBoRFoldingSeat::ResetSeat()
 {
-	State = EVBoRFoldingSeatState::Standing;
 	AngleDeg = 0;
 	ApplyAngle();
+	SetState(EVBoRFoldingSeatState::Standing);
+	if (HasActorBegunPlay()) { OnReset.Broadcast(this); }
+}
+
+void AVBoRFoldingSeat::SetState(EVBoRFoldingSeatState NewState)
+{
+	if (State == NewState) { return; }
+	State = NewState;
+	if (HasActorBegunPlay()) { OnStateChanged.Broadcast(this, State); }
 }
 
 void AVBoRFoldingSeat::ApplyAngle()
@@ -74,7 +82,7 @@ void AVBoRFoldingSeat::Tick(float DeltaSeconds)
 	const float Target = bFolding ? Limit : 0;
 	AngleDeg = FMath::Clamp(FMath::FInterpConstantTo(AngleDeg, Target, FMath::Max(0.0f, DeltaSeconds), FMath::Max(0.1f, SpeedDegPerSecond)), 0.0f, Limit);
 	ApplyAngle();
-	if (AngleDeg == Target) { State = bFolding ? EVBoRFoldingSeatState::Folded : EVBoRFoldingSeatState::Standing; }
+	if (AngleDeg == Target) { SetState(bFolding ? EVBoRFoldingSeatState::Folded : EVBoRFoldingSeatState::Standing); }
 }
 
 FTransform AVBoRFoldingSeat::HingePoseAt(double Angle) const

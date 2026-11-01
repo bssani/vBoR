@@ -116,6 +116,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Input") FKey OpenKey = EKeys::PageUp;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Input") FKey CloseKey = EKeys::PageDown;
 	UPROPERTY(BlueprintAssignable, Category = "Powered Panel") FVBoRPoweredStateEvent OnStateChanged;
+	UPROPERTY(BlueprintAssignable, Category = "Powered Panel") FVBoRPoweredEvent OnReset;
 	UPROPERTY(BlueprintAssignable, Category = "Powered Panel") FVBoRPoweredEvent OnOpened;
 	UPROPERTY(BlueprintAssignable, Category = "Powered Panel") FVBoRPoweredEvent OnClosed;
 	UPROPERTY(BlueprintAssignable, Category = "Powered Panel") FVBoRPoweredObstructionEvent OnObstructed;
@@ -135,6 +136,7 @@ private:
 #endif
 	FVBoRPoweredMotion Motion;
 	bool bPendingCommand = false;
+	bool bInitializingPlay = false;
 	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
 	FVBoRSoundPlayback SoundPlayback[static_cast<int32>(EVBoRPoweredSound::Count)];
 	uint64 SoundFrame = 0;
