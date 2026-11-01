@@ -110,6 +110,9 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Axis part") TObjectPtr<USceneComponent> AxisPivot;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Axis part") TObjectPtr<UStaticMeshComponent> PartMesh;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Axis part") TObjectPtr<UBoxComponent> GrabBox;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Axis part|Push face") TObjectPtr<UBoxComponent> PushFaceBox;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Push face", meta=(DisplayName="Use push face box")) bool bUsePushFaceBox = false;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Push face", meta=(DisplayName="Push contact offset", Units="cm", ClampMin="0")) float PushContactOffsetCm = 0.8f;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Axis part") TObjectPtr<UIsdkGrabbableComponent> Grabbable;
 	UPROPERTY(VisibleAnywhere, Category="Axis part") TObjectPtr<UVBoRAxisGrabComponent> GrabComponent;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Axis part|Input", meta=(DisplayName="Grab with mesh collision")) bool bGrabWithMesh = false;
@@ -167,6 +170,7 @@ private:
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FR2aTestAccess;
 	friend struct FR2cTestAccess;
+	friend struct FR8aTestAccess;
 #endif
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FP5sTestAccess;
@@ -226,6 +230,7 @@ private:
 	FTransform ValueTransform() const;
 	FTransform ValueTransform(double AtValue) const;
 	void PushGeometry(FBox& Bounds, FVector& Radial, FVector& Normal) const;
+	double PushPlane(int32 Face) const;
 	static double PushAngularDirection(int32 Face) { return Face == 0 ? 1 : -1; }
 	void AcceptTransform(const FTransform& Transform);
 	void EvaluateState();
