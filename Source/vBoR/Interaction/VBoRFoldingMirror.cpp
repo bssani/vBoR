@@ -13,6 +13,10 @@ AVBoRFoldingMirror::AVBoRFoldingMirror()
 	PrimaryActorTick.bCanEverTick = true;
 	SpectatorName = FText::FromString(TEXT("Side Mirror"));
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("VehicleOrigin")));
+#if WITH_EDITORONLY_DATA
+	MotionDisplay = CreateEditorOnlyDefaultSubobject<UVBoRMotionGuideComponent>(TEXT("MotionDisplay"));
+	if (MotionDisplay) { MotionDisplay->SetupAttachment(RootComponent); }
+#endif
 	HingePivot = CreateDefaultSubobject<USceneComponent>(TEXT("HingePivot")); HingePivot->SetupAttachment(RootComponent);
 	MirrorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MirrorMesh")); MirrorMesh->SetupAttachment(HingePivot);
 	MirrorMesh->SetMobility(EComponentMobility::Movable);
@@ -29,11 +33,18 @@ AVBoRFoldingMirror::AVBoRFoldingMirror()
 
 void AVBoRFoldingMirror::OnConstruction(const FTransform& Transform)
 {
+#if WITH_EDITORONLY_DATA
+	if (MotionDisplay) { MotionDisplay->ClearPreview(); }
+#endif
 	Super::OnConstruction(Transform);
 	AngleDeg = 0; State = EVBoRFoldingMirrorState::Unfolded;
 	const FTransform RestHinge(HingeRotation, HingeLocationCm);
 	HingePivot->SetRelativeTransform(RestHinge);
 	MirrorMesh->SetRelativeTransform(MeshRestFromRoot.GetRelativeTransform(RestHinge));
+
+#if WITH_EDITORONLY_DATA
+	if (MotionDisplay) { MotionDisplay->Refresh(); }
+#endif
 }
 
 void AVBoRFoldingMirror::BeginPlay()
@@ -60,7 +71,7 @@ void AVBoRFoldingMirror::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void AVBoRFoldingMirror::ApplyAngle()
 {
-	const FQuat Rotation = HingeRotation.Quaternion() * FQuat(FVector::ZAxisVector, FMath::DegreesToRadians(AngleDeg));
+	const FQuat Rotation = HingePoseAt(AngleDeg).GetRotation();
 	HingePivot->SetRelativeLocationAndRotation(HingeLocationCm, Rotation);
 }
 
@@ -102,4 +113,9 @@ void AVBoRFoldingMirror::AdvanceSounds(double Seconds)
 	SoundPlayback[1].Advance(FoldMotorCue, SoundAudio[1], Seconds, SoundFrame);
 	SoundPlayback[2].Advance(UnfoldedCue, SoundAudio[2], Seconds, SoundFrame);
 	SoundPlayback[3].Advance(FoldedCue, SoundAudio[3], Seconds, SoundFrame);
+}
+
+FTransform AVBoRFoldingMirror::HingePoseAt(double Angle) const
+{
+	return FTransform(HingeRotation.Quaternion() * FQuat(FVector::ZAxisVector, FMath::DegreesToRadians(Angle)), HingeLocationCm);
 }

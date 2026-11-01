@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "VBoRSpectatorPart.h"
 #include "VBoRSoundCue.h"
+#include "VBoRMotionGuideComponent.h"
 #include "VBoRFoldingMirror.generated.h"
 
 class UAudioComponent;
@@ -19,6 +20,13 @@ class VBOR_API AVBoRFoldingMirror : public AActor, public IVBoRSpectatorPart
 	GENERATED_BODY()
 public:
 	AVBoRFoldingMirror();
+	FTransform HingePoseAt(double Angle) const;
+	UPROPERTY(EditAnywhere, Transient, Category="Mirror folding|Guide", meta=(DisplayName="Preview (0–1)", ClampMin="0", ClampMax="1", UIMin="0", UIMax="1", ToolTip="Editor pose only. Zero keeps normal editor pose")) float Preview = 0;
+	UPROPERTY(EditAnywhere, Category="Mirror folding|Guide", meta=(DisplayName="Motion guide")) EVBoRMotionGuide MotionGuide = EVBoRMotionGuide::Always;
+#if WITH_EDITORONLY_DATA
+	UPROPERTY(VisibleAnywhere, Category="Mirror folding|Guide") TObjectPtr<UVBoRMotionGuideComponent> MotionDisplay;
+#endif
+
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding|Sound") FVBoRHeldSoundCue UnfoldMotorCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding|Sound") FVBoRHeldSoundCue FoldMotorCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Mirror folding|Sound") FVBoRSoundCue UnfoldedCue;
@@ -51,6 +59,11 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 private:
+	friend class UVBoRMotionGuideComponent;
+
+#if WITH_DEV_AUTOMATION_TESTS
+	friend struct FR2aTestAccess;
+#endif
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FP5sTestAccess;
 #endif

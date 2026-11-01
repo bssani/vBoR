@@ -48,6 +48,8 @@ struct FVBoRDoorMotion
 	bool ReleaseGrab(bool bTracked);
 	void Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSeconds);
 	void Reset(); // Keep totals (P2 E18)
+	static bool PushOpens(int32 Face) { return Face == 1; }
+	static FVector PushInward(int32 Face) { return FVector(0, Face == 0 ? -1 : 1, 0); }
 	FVector ToDoor(const FVector& HingePoint) const;
 private:
 	FVBoRDoorHand Previous[2];

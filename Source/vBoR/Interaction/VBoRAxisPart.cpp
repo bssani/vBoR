@@ -139,6 +139,10 @@ AVBoRAxisPart::AVBoRAxisPart()
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PostUpdateWork;
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("PartOrigin")));
+#if WITH_EDITORONLY_DATA
+	MotionDisplay = CreateEditorOnlyDefaultSubobject<UVBoRMotionGuideComponent>(TEXT("MotionDisplay"));
+	if (MotionDisplay) { MotionDisplay->SetupAttachment(RootComponent); }
+#endif
 	AxisPivot = CreateDefaultSubobject<USceneComponent>(TEXT("AxisPivot")); AxisPivot->SetupAttachment(RootComponent);
 	PartMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("PartMesh")); PartMesh->SetupAttachment(AxisPivot);
 	PartMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -169,6 +173,9 @@ AVBoRAxisPart::AVBoRAxisPart()
 
 void AVBoRAxisPart::OnConstruction(const FTransform& Transform)
 {
+#if WITH_EDITORONLY_DATA
+	if (MotionDisplay) { MotionDisplay->ClearPreview(); }
+#endif
 	Super::OnConstruction(Transform);
 	Value = 0;
 	RestPivot = AxisPivot->GetRelativeTransform();
@@ -185,10 +192,17 @@ void AVBoRAxisPart::OnConstruction(const FTransform& Transform)
 		UE_LOG(LogAxisPart, Warning, TEXT("%s: No part mesh; grabbing disabled"), *GetName());
 		GrabBox->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
+
+#if WITH_EDITORONLY_DATA
+	if (MotionDisplay) { MotionDisplay->Refresh(); }
+#endif
 }
 
 void AVBoRAxisPart::PreInitializeComponents()
 {
+#if WITH_EDITORONLY_DATA
+	if (MotionDisplay) { MotionDisplay->ClearPreview(); }
+#endif
 	RestPivot = AxisPivot->GetRelativeTransform();
 	if (!IsDoorGrip() && Release == EVBoRAxisRelease::Detent)
 	{
@@ -289,7 +303,11 @@ void AVBoRAxisPart::EvaluateDetent()
 FVector AVBoRAxisPart::LocalAxis() const { return Axis == EAxis::Y ? FVector::YAxisVector : Axis == EAxis::Z ? FVector::ZAxisVector : FVector::XAxisVector; }
 FTransform AVBoRAxisPart::ValueTransform() const
 {
-	const double SignedValue = Value * (bReverse ? -1 : 1);
+	return ValueTransform(Value);
+}
+FTransform AVBoRAxisPart::ValueTransform(double AtValue) const
+{
+	const double SignedValue = AtValue * (bReverse ? -1 : 1);
 	return Movement == EVBoRAxisMovement::Rotate ? FTransform(FQuat(LocalAxis(), FMath::DegreesToRadians(SignedValue))) : FTransform(LocalAxis() * SignedValue);
 }
 void AVBoRAxisPart::AcceptTransform(const FTransform& Transform)
@@ -361,19 +379,7 @@ void AVBoRAxisPart::ConfigurePush()
 	if (bAllowPush && Movement != EVBoRAxisMovement::Rotate)
 	{ UE_LOG(LogAxisPart,Warning,TEXT("%s: Push requires Rotate; push disabled"),*GetName()); }
 	if (!bPushEnabled) { ClearPush(); return; }
-	const FBox Bounds = PartMesh->GetStaticMesh()->GetBoundingBox().TransformBy(PartMesh->GetRelativeTransform());
-	// Longer bounds axis perpendicular to rotation = lever length (rest bounds, not mesh pivot, P5m D3)
-	const int32 A = Axis == EAxis::Y ? 1 : Axis == EAxis::Z ? 2 : 0;
-	const int32 B = (A+1)%3, C = (A+2)%3;
-	const int32 R = Bounds.GetExtent()[B] >= Bounds.GetExtent()[C] ? B : C;
-	PushRadial = FVector::ZeroVector; PushRadial[R] = Bounds.GetCenter()[R] < 0 ? -1 : 1;
-	PushNormal = FVector::CrossProduct(LocalAxis(),PushRadial);
-	PushBounds = FBox(ForceInit);
-	for (int32 Corner=0; Corner<8; ++Corner)
-	{
-		const FVector P(Corner&1 ? Bounds.Max.X : Bounds.Min.X,Corner&2 ? Bounds.Max.Y : Bounds.Min.Y,Corner&4 ? Bounds.Max.Z : Bounds.Min.Z);
-		PushBounds += FVector(FVector::DotProduct(P,PushRadial),FVector::DotProduct(P,PushNormal),FVector::DotProduct(P,LocalAxis()));
-	}
+	PushGeometry(PushBounds, PushRadial, PushNormal);
 	ClearPush();
 }
 
@@ -448,7 +454,7 @@ void AVBoRAxisPart::AdvancePush(const FVBoRDoorHand (&Input)[2])
 			const double Target = FMath::RadiansToDegrees(FMath::Atan2(N,R)-FMath::Asin(Plane/Radius));
 			const double Delta = FMath::FindDeltaAngleDegrees(Current,Target);
 			// Push along first contact normal only. Commit detents through grab path (P5m D3/D4, deg)
-			const double Angle = Current + (PushFace == 0 ? FMath::Max(0.,Delta) : FMath::Min(0.,Delta));
+			const double Angle = Current + (PushAngularDirection(PushFace) > 0 ? FMath::Max(0.,Delta) : FMath::Min(0.,Delta));
 			AcceptTransform(FTransform(FQuat(LocalAxis(),FMath::DegreesToRadians(Angle))));
 			AxisPivot->SetRelativeTransform(ValueTransform()*RestPivot);
 		}
@@ -677,4 +683,21 @@ void AVBoRAxisPart::AdvanceSounds(double Seconds)
 	SoundPlayback[1].Advance(ClosedCue, SoundAudio[1], Seconds, SoundFrame);
 	SoundPlayback[2].Advance(DetentCue, SoundAudio[2], Seconds, SoundFrame);
 	SoundPlayback[3].Advance(NudgeCue, SoundAudio[3], Seconds, SoundFrame);
+}
+
+void AVBoRAxisPart::PushGeometry(FBox& Bounds, FVector& Radial, FVector& Normal) const
+{
+	const FBox MeshBounds = PartMesh->GetStaticMesh()->GetBoundingBox().TransformBy(PartMesh->GetRelativeTransform());
+	// Longer bounds axis perpendicular to rotation = lever length (rest bounds, not mesh pivot, P5m D3)
+	const int32 A = Axis == EAxis::Y ? 1 : Axis == EAxis::Z ? 2 : 0;
+	const int32 B = (A+1)%3, C = (A+2)%3;
+	const int32 R = MeshBounds.GetExtent()[B] >= MeshBounds.GetExtent()[C] ? B : C;
+	Radial = FVector::ZeroVector; Radial[R] = MeshBounds.GetCenter()[R] < 0 ? -1 : 1;
+	Normal = FVector::CrossProduct(LocalAxis(),Radial);
+	Bounds = FBox(ForceInit);
+	for (int32 Corner=0; Corner<8; ++Corner)
+	{
+		const FVector P(Corner&1 ? MeshBounds.Max.X : MeshBounds.Min.X,Corner&2 ? MeshBounds.Max.Y : MeshBounds.Min.Y,Corner&4 ? MeshBounds.Max.Z : MeshBounds.Min.Z);
+		Bounds += FVector(FVector::DotProduct(P,Radial),FVector::DotProduct(P,Normal),FVector::DotProduct(P,LocalAxis()));
+	}
 }

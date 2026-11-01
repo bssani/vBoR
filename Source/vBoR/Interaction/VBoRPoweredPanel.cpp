@@ -25,6 +25,10 @@ AVBoRPoweredPanel::AVBoRPoweredPanel()
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PostUpdateWork;
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("VehicleOrigin")));
+#if WITH_EDITORONLY_DATA
+	MotionDisplay = CreateEditorOnlyDefaultSubobject<UVBoRMotionGuideComponent>(TEXT("MotionDisplay"));
+	if (MotionDisplay) { MotionDisplay->SetupAttachment(RootComponent); }
+#endif
 	HingePivot = CreateDefaultSubobject<USceneComponent>(TEXT("HingePivot"));
 	HingePivot->SetupAttachment(RootComponent);
 	PanelMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ApproximatePoweredPanel"));
@@ -54,12 +58,19 @@ AVBoRPoweredPanel::AVBoRPoweredPanel()
 
 void AVBoRPoweredPanel::OnConstruction(const FTransform& Transform)
 {
+#if WITH_EDITORONLY_DATA
+	if (MotionDisplay) { MotionDisplay->ClearPreview(); }
+#endif
 	Super::OnConstruction(Transform);
 	HingePivot->SetRelativeLocationAndRotation(HingeLocationCm, FRotator::ZeroRotator);
 	PanelMesh->SetRelativeTransform(MeshRestFromRoot.GetRelativeTransform(FTransform(HingeLocationCm)));
 	Motion.AngleDeg = bStartOpen ? FMath::Clamp(OpenAngleDeg, 1.0f, 170.0f) : 0;
 	Motion.State = bStartOpen ? EVBoRPoweredState::Open : EVBoRPoweredState::Closed;
 	ApplyAngle();
+
+#if WITH_EDITORONLY_DATA
+	if (MotionDisplay) { MotionDisplay->Refresh(); }
+#endif
 }
 
 AVBoRPokeButton* AVBoRPoweredPanel::CreateButton(const FTransform& Relative, TSubclassOf<AVBoRPokeButton> ButtonClass, const TCHAR* Slot)
@@ -137,12 +148,12 @@ void AVBoRPoweredPanel::ResetPanel(bool bClearCounts)
 void AVBoRPoweredPanel::ApplyAngle()
 {
 	// Positive +Y rotation lifts closed panel bottom toward trunk outside -X (P4b D8, deg)
-	HingePivot->SetRelativeRotation(FQuat(FVector::YAxisVector, FMath::DegreesToRadians(Motion.AngleDeg)));
+	HingePivot->SetRelativeRotation(HingePoseAt(Motion.AngleDeg).GetRotation());
 }
 
 FTransform AVBoRPoweredPanel::MeshPoseAt(float Angle) const
 {
-	const FTransform Hinge(FQuat(FVector::YAxisVector, FMath::DegreesToRadians(Angle)), HingeLocationCm);
+	const FTransform Hinge = HingePoseAt(Angle);
 	return PanelMesh->GetRelativeTransform() * Hinge * GetActorTransform();
 }
 
@@ -343,4 +354,9 @@ void AVBoRPoweredPanel::Tick(float DeltaSeconds)
 		if (bOpening) { OnOpened.Broadcast(this); } else { OnClosed.Broadcast(this); }
 	}
 	AdvanceSounds(FMath::Max(0.0, Remaining - Used), false);
+}
+
+FTransform AVBoRPoweredPanel::HingePoseAt(double Angle) const
+{
+	return FTransform(FQuat(FVector::YAxisVector, FMath::DegreesToRadians(Angle)), HingeLocationCm);
 }

@@ -20,6 +20,10 @@ AVBoRHingedPanel::AVBoRHingedPanel()
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.TickGroup = TG_PostUpdateWork;
 	SetRootComponent(CreateDefaultSubobject<USceneComponent>(TEXT("DoorOrigin")));
+#if WITH_EDITORONLY_DATA
+	MotionDisplay = CreateEditorOnlyDefaultSubobject<UVBoRMotionGuideComponent>(TEXT("MotionDisplay"));
+	if (MotionDisplay) { MotionDisplay->SetupAttachment(RootComponent); }
+#endif
 	HingePivot = CreateDefaultSubobject<USceneComponent>(TEXT("HingePivot"));
 	HingePivot->SetupAttachment(RootComponent);
 	DoorMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("DoorMesh"));
@@ -81,6 +85,9 @@ void AVBoRHingedPanel::SyncSettings()
 
 void AVBoRHingedPanel::OnConstruction(const FTransform& Transform)
 {
+#if WITH_EDITORONLY_DATA
+	if (MotionDisplay) { MotionDisplay->ClearPreview(); }
+#endif
 	Super::OnConstruction(Transform);
 	DoorMesh->SetRelativeTransform(MeshRestFromRoot.GetRelativeTransform(HingePivot->GetRelativeTransform()));
 	ConfigurePushCollision();
@@ -91,6 +98,10 @@ void AVBoRHingedPanel::OnConstruction(const FTransform& Transform)
 		PushFaceBox->SetBoxExtent(Bounds.GetExtent());
 	}
 	SyncSettings();
+
+#if WITH_EDITORONLY_DATA
+	if (MotionDisplay) { MotionDisplay->Refresh(); }
+#endif
 }
 
 void AVBoRHingedPanel::SetAxisHandle(int32 Handle, AVBoRAxisPart* Part)
@@ -326,6 +337,9 @@ bool AVBoRHingedPanel::BeginAxisGrab(AVBoRAxisPart* Part, const FVBoRDoorHand& I
 
 void AVBoRHingedPanel::PreInitializeComponents()
 {
+#if WITH_EDITORONLY_DATA
+	if (MotionDisplay) { MotionDisplay->ClearPreview(); }
+#endif
 	ConfigurePushCollision();
 	SyncSettings();
 	ClosedHingeRotation = HingePivot->GetRelativeRotation().Quaternion();
@@ -434,7 +448,7 @@ void AVBoRHingedPanel::Tick(float DeltaSeconds)
 
 void AVBoRHingedPanel::ApplyState(double BeforeAngle, int32 BeforeUnlocks, int32 BeforeLatches)
 {
-	HingePivot->SetRelativeRotation(ClosedHingeRotation * FQuat(FVector::UpVector, FMath::DegreesToRadians(Motion.AngleDeg)));
+	HingePivot->SetRelativeRotation(RotationAt(Motion.AngleDeg, ClosedHingeRotation));
 	if (Motion.Metrics.Unlocks != BeforeUnlocks) { SoundPlayback[0].Queue(UnlockedCue, SoundAudio[0], SoundFrame); NotifyUnlocked(); }
 	if (Motion.Metrics.Latches != BeforeLatches) { CancelSelections(TEXT("latch")); SoundPlayback[1].Queue(LatchedCue, SoundAudio[1], SoundFrame); NotifyLocked(); }
 	if (GripAxisHandle) { GripAxisHandle->RefreshGripInput(); }
@@ -502,4 +516,9 @@ void AVBoRHingedPanel::AdvanceSounds(double Seconds)
 {
 	SoundPlayback[0].Advance(UnlockedCue, SoundAudio[0], Seconds, SoundFrame);
 	SoundPlayback[1].Advance(LatchedCue, SoundAudio[1], Seconds, SoundFrame);
+}
+
+FQuat AVBoRHingedPanel::RotationAt(double Angle, const FQuat& Rest)
+{
+	return Rest * FQuat(FVector::UpVector, FMath::DegreesToRadians(Angle));
 }

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "VBoRMotionGuideComponent.h"
 #include "VBoRFoldingSeat.generated.h"
 
 class UStaticMeshComponent;
@@ -15,6 +16,13 @@ class VBOR_API AVBoRFoldingSeat : public AActor
 	GENERATED_BODY()
 public:
 	AVBoRFoldingSeat();
+	FTransform HingePoseAt(double Angle) const;
+	UPROPERTY(EditAnywhere, Transient, Category="Seat folding|Guide", meta=(DisplayName="Preview (0–1)", ClampMin="0", ClampMax="1", UIMin="0", UIMax="1", ToolTip="Editor pose only. Zero keeps normal editor pose")) float Preview = 0;
+	UPROPERTY(EditAnywhere, Category="Seat folding|Guide", meta=(DisplayName="Motion guide")) EVBoRMotionGuide MotionGuide = EVBoRMotionGuide::Always;
+#if WITH_EDITORONLY_DATA
+	UPROPERTY(VisibleAnywhere, Category="Seat folding|Guide") TObjectPtr<UVBoRMotionGuideComponent> MotionDisplay;
+#endif
+
 	virtual void OnConstruction(const FTransform& Transform) override;
 	virtual void Tick(float DeltaSeconds) override;
 	UFUNCTION(BlueprintCallable, Category="Seat folding") bool Fold();
@@ -30,6 +38,11 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Seat folding", meta=(Units="deg", ClampMin="1", ClampMax="170")) float FoldAngleDeg = 80;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Seat folding", meta=(Units="deg/s", ClampMin="0.1")) float SpeedDegPerSecond = 45;
 private:
+	friend class UVBoRMotionGuideComponent;
+
+#if WITH_DEV_AUTOMATION_TESTS
+	friend struct FR2aTestAccess;
+#endif
 	EVBoRFoldingSeatState State = EVBoRFoldingSeatState::Standing;
 	float AngleDeg = 0;
 	void ApplyAngle();
