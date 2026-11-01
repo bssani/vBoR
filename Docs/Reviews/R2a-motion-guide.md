@@ -1,6 +1,25 @@
-# R2a 움직임 방향 표시 + 미리보기 — 질문
+# R2a 움직임 방향 표시 + 미리보기 — 리뷰
 
-첫 리뷰 결과가 아니라 구현 전 질문만 기록한다(2026-11-01, Codex).
+| 회차 | 날짜 | 대상 | 리뷰어 | 결과 |
+|---|---|---|---|---|
+| 1 | 2026-11-01 | `ca6615b` feat: 에디터 움직임 방향 표시와 미리보기 | Claude | **열린 항목 없음 — 통과.** 빌드: unity 최신(Codex 최종 트리). `vBoR.*` **650/650**, Fail 0, `EXIT CODE: 0`(`Saved/Logs/ReviewR2aAll.log`). R2a 11/11 |
+
+## 1회차 (2026-11-01, `main...codex/R2a-motion-guide`)
+
+### 확인한 것
+
+- **AGENTS.md 제약:** 범위 안. 에디터 모듈·자체 렌더 프록시·머티리얼 없음. 영어 주석. 기존 시험·에셋 변경 없음.
+- **그리는 방법(§5 재량):** 권장한 `UDebugDrawComponent` 대신 엔진 `ULineBatchComponent` 파생. 엔진 프록시를 그대로 쓰므로 §5의 "자체 프록시를 만들지 않는다"에 맞다. `bIsEditorOnly`, `CreateEditorOnlyDefaultSubobject`, `WITH_EDITORONLY_DATA`로 패키지에서 빠진다. `BatchedLines`는 UPROPERTY가 아니라 PIE 복제에 따라가지 않고, 게임 월드에서는 `Refresh`·`BuildShapes`가 바로 끝난다.
+- **D6(같은 식):** 표시와 동작이 같은 함수를 쓰도록 기존 식을 뽑아냈다 — `AVBoRHingedPanel::RotationAt`(`ApplyState`), `HingePoseAt`(리프트게이트 `ApplyAngle`·`MeshPoseAt`, 미러, 등받이), `AxisPart::ValueTransform(double)`, `PushGeometry`(`ConfigurePush`에서 옮김), `FVBoRDoorMotion::PushOpens`·`PushInward`(`FindPush`의 `Face == 1`·`(0,-Sign,0)`과 같은 값 — `VBoRDoorMotion.cpp:89` `Sign = Face == 0 ? 1 : -1`), `PushAngularDirection`(`PushFace == 0`과 같은 값). 동작 식은 그대로이고 기존 시험 639개가 통과한다. E6은 표시된 화살표 자리·방향으로 실제 `Advance`·`AdvancePush`를 돌려 값 변화 방향을 비교한다.
+- **D8(저장 값 보존):** 미리보기는 피벗의 `ComponentToWorld` 캐시만 바꾸고(`SetComponentToWorld`) 상대 변환은 건드리지 않는다. 미리보기 중 사용자가 피벗을 뷰포트에서 돌려도 미리보기 각이 저장 값에 섞이지 않는지 확인했다 — 에디터 기즈모는 컴포넌트 회전을 **상대 회전에 더한다**(`Editor/UnrealEd/Private/Elements/Component/ComponentElementEditorViewportInteractionCustomization.cpp:173-184` `SetRelativeRotationExact(Rot + DeltaRot)`). 상대 값이 바뀌면 캐시가 다시 계산되고 다음 Tick에 미리보기가 다시 적용된다. `OnConstruction`·`PreInitializeComponents` 앞에서 `ClearPreview`로 캐시를 되돌린다.
+- **D7·D9(개정 1):** `Preview = 0`이면 `EditorValue`(리프트게이트 `bStartOpen` 열림, 나머지 0)로 지금 표시 그대로. 게임 월드는 부품별 기존 시작 상태(E10이 미러 -65°·`bStartOpen`·시작 detent ≠ 0 포함).
+- **D10:** `Selected only`는 `AActor::IsSelected()`(에디터)로 구현.
+
+### 참고 (항목 아님)
+
+1. 선은 `SDPG_World`(깊이 우선순위 0)로 그린다. 축 선이나 미는 면 화살표가 메시 안쪽에 묻히면 안 보일 수 있다. 회사 차에서 써 보고 가려지면 앞쪽 그리기(`SDPG_Foreground`)로 바꾸는 작은 수정으로 다룬다.
+2. 에디터에서 부품마다 매 Tick `Refresh`로 모양을 다시 계산한다(바뀐 경우만 렌더 갱신). 문 메시 면 모드(`bPushOnMeshSurface`)는 Tick마다 면 추적 2번. 에디터 전용이고 부품 수가 적어 문제없다.
+3. Outliner로 문 밑에 붙인 손잡이 Actor가 미리보기에서 같이 움직이는지는 자동 시험 밖(Codex 보고 not-tested). `UpdateChildTransforms`가 붙은 Actor의 루트까지 갱신하므로 따라올 것으로 보이지만, 에디터에서 확인한다(명세 §7 ③).
 
 ## 질문
 
