@@ -7,7 +7,8 @@
 | 베이스 브랜치 | `main` (R0 머지 뒤) |
 | 작업 브랜치 | `codex/R2a-motion-guide` |
 | 리뷰 파일 | `Docs/Reviews/R2a-motion-guide.md` (첫 리뷰 때 생김) |
-| 상태 | 명세 작성 |
+| 상태 | 명세 개정 1 |
+| 개정 | **1 (2026-11-01, Claude):** Codex Q1 — D9·E10의 "Play는 각 0에서 시작"이 기존 부품별 시작 상태(미러 접힘 `FoldAngleDeg` `VBoRFoldingMirror.cpp:44`·`:70-71`, 리프트게이트 `bStartOpen` `VBoRPoweredPanel.cpp:60`·`:127-128`, detent `DetentStartIndex` `VBoRAxisPart.cpp:219-222`)와 기존 시험(`P5qPowerMirrorTests.cpp:138-139`)에 어긋남. D7·D9·E8·E10을 "기존 시작 상태·에디터 표시 그대로, `Preview`는 그 위에 얹는 것"으로 고침 |
 | 에디터 작업 | **없음**(C++ 부모에 컴포넌트를 더하므로 자식 BP는 다시 열면 자동으로 받는다) |
 | 다음 명세 | R2c 판정 경계 표시 — 이 명세의 표시 컴포넌트에 모양을 더한다 |
 
@@ -21,9 +22,9 @@
 | D4 | **이동 표시** | AxisPart `Movement = Translate`: 시작점(쉬는 자리)에서 실제 이동 방향으로 **직선 화살표**(초록), 길이 = `MaxTravelCm`. 쉬는 자리에 빨간 짧은 가로선 |
 | D5 | **손바닥 밀기 표시** | 밀기가 가능한 면마다 그 면 가운데에 **"이 면을 밀면" 화살표**(면 안쪽으로 향함). 색은 그 밀기의 결과로 정한다 — 열림 쪽이면 초록, 닫힘 쪽이면 빨강. 밀기가 꺼진 면은 그리지 않는다. HingedPanel: 바깥 면(face 0)·안쪽 면(face 1), `bAllowPalmOpening = false`면 여는 쪽 면 생략(`VBoRDoorMotion.cpp:149`). AxisPart: `bAllowPush = true`일 때만, 두 면 |
 | D6 | **방향은 판정 코드와 같은 식에서 낸다** | 표시용으로 축·부호를 따로 다시 적지 않는다. 각 부품이 실제로 쓰는 자세 함수(`ValueTransform`·`ApplyAngle`의 회전 식·`MeshPoseAt` 등)와 밀기 판정 규칙에서 방향을 얻는다. 그래야 `bReverse`·`HingeRotation`을 바꾸면 표시가 같이 바뀌고, 표시와 실제가 어긋나지 않는다(§4 E1–E6이 이것을 시험) |
-| D7 | **`Preview (0–1)` 슬라이더** | 부품마다 `Preview` 프로퍼티(0~1, 기본 0, `Transient` — 저장하지 않음). 0 = 닫힘·쉬는 자리, 1 = 최대(D3·D4의 끝). 에디터 뷰포트에서 **보이는 움직이는 부분(메시와 같이 도는 자식들)을 그 자세로** 보인다. Detent 부품은 첫 detent → 마지막 detent 사이를 0~1로 |
+| D7 | **`Preview (0–1)` 슬라이더** | 부품마다 `Preview` 프로퍼티(0~1, 기본 0, `Transient` — 저장하지 않음).<br>- **`Preview = 0`이면 미리보기 없음** — 에디터 표시는 지금과 똑같다(예: `bStartOpen` 리프트게이트는 지금처럼 열려 보이고, 미러는 지금처럼 펼친 각 0으로 보임 `VBoRFoldingMirror.cpp:33`).<br>- **`Preview > 0`이면** 각·이동 = `Preview` × D3·D4의 끝 값(0 → 끝). Detent 부품은 첫 detent → 마지막 detent 사이를 보간. 0에서 0보다 조금 큰 값으로 넘어갈 때 표시가 건너뛰어도 된다(예: `bStartOpen` 리프트게이트).<br>- 에디터 뷰포트에서 **보이는 움직이는 부분(메시와 같이 도는 자식들)을 그 자세로** 보인다 |
 | D8 | **미리보기는 저장된 값을 바꾸지 않는다** | 사용자가 맞춘 `HingePivot`·`AxisPivot`의 상대 변환, `MeshRestFromRoot`, `PushFaceBox`, 장애물 상자 등 **저장되는 값은 미리보기 전후로 같다.** 저장된 쉬는 자세는 Play 시작(`PreInitializeComponents` 등)에서 읽히므로(예: `ClosedHingeRotation` `VBoRHingedPanel.cpp:331`) 미리보기가 그 값을 건드리면 Play가 열린 채 시작한다. 방법은 §5 |
-| D9 | **Play에서는 미리보기 무시** | 게임 월드에서는 `Preview` 값과 상관없이 지금처럼 0에서 시작하고, Play 중에 바꿔도 아무 일도 없다. 미리보기는 이벤트·소리·끼임 검사·시나리오 판정을 일으키지 않는다 |
+| D9 | **Play에서는 미리보기 무시** | 게임 월드에서는 `Preview` 값과 상관없이 **부품마다 지금 쓰는 시작 상태 그대로** 시작한다 — 문·콘솔 닫힘(잠금 설정 그대로), 리프트게이트 `bStartOpen`에 따라 닫힘/열림, 미러 접힘(`FoldAngleDeg`), 등받이 세움, AxisPart 쉬는 자리 또는 `DetentStartIndex`. Play 중에 `Preview`를 바꿔도 아무 일도 없다. 미리보기는 이벤트·소리·끼임 검사·시나리오 판정을 일으키지 않는다 |
 | D10 | **표시 켜고 끄기** | 부품마다 `Motion guide` 선택: `Always`(기본) / `Selected only` / `Off`. `Selected only`가 단순하게 안 되면(§5) `Always`/`Off` 두 값만 두고 보고 ③에 적는다 |
 
 **색 정리:** 열림·열리는 밀기 = 초록, 닫힘 자리·닫히는 밀기 = 빨강, 축 = 노랑, detent = 흰색.
@@ -81,9 +82,9 @@
 | E5 | AxisPart Detent(`DetentAnglesDeg = {-20,0,20}`, 시작 1) | 눈금 3개가 각 detent 자세 위치, 시작 눈금 표시. 호 범위 = 첫 → 마지막 detent |
 | E6 | **밀기 방향 일관성:** HingedPanel 바깥·안쪽 면, AxisPart(`bAllowPush`) 두 면 | 각 화살표 색(열림/닫힘)이 **실제 밀기 판정으로 그 면을 밀었을 때 값이 변하는 방향**과 같다(기존 밀기 시험의 손 입력 방식으로 한 프레임 밀어 비교). `bAllowPalmOpening = false`면 여는 쪽 화살표 없음, `bAllowPush = false`면 AxisPart 화살표 없음 |
 | E7 | 그립(`IsDoorGrip()`)·메시 없는 부품 | 그립은 표시 없음. 메시 없으면 축 선 20 cm, 호 반지름 5 cm, 오류 없음 |
-| E8 | **미리보기 자세:** 5종 각각 `Preview` = 0, 0.5, 1 | 보이는 메시의 월드 변환 = 같은 각·이동을 Play 코드 경로로 줬을 때의 메시 월드 변환(0.1 cm·0.1°). Detent는 첫~마지막 detent 보간 |
+| E8 | **미리보기 자세:** 5종 각각 `Preview` = 0.5, 1, 그리고 0 | 0.5·1: 보이는 메시의 월드 변환 = 같은 각·이동을 Play 코드 경로로 줬을 때의 메시 월드 변환(0.1 cm·0.1°). Detent는 첫~마지막 detent 보간. **0: 미리보기 기능이 없을 때(지금 `main`)와 같은 에디터 표시** — `bStartOpen` 리프트게이트는 열림 그대로 |
 | E9 | **D8:** `Preview` 1로 바꿨다가 0으로 | 저장 대상 값(`HingePivot`/`AxisPivot` 상대 변환, `MeshRestFromRoot`, `PushFaceBox` 변환·크기)이 처음과 같다. `Preview` 1인 채 위치·`MaxAngleDeg`를 바꿔도 미리보기가 새 값으로 다시 계산되고 저장 값은 사용자가 바꾼 것만 바뀜 |
-| E10 | **D9:** `Preview` 1인 채 게임 월드에서 시작(BeginPlay) | 각·값 0, 닫힘 상태, 문 잠금(`bUseLatch`) 지금과 같음. 게임 중 `Preview` 바꿔도 각 그대로, 이벤트 없음 |
+| E10 | **D9:** 5종 각각 `Preview` 0과 1로 게임 월드에서 시작(BeginPlay) — 미러 기본 접힘(-65°), `bStartOpen = true` 리프트게이트, 시작 각이 0이 아닌 detent(`DetentStartIndex` 0, 각 -20°) 포함 | `Preview` 0과 1의 시작 상태·각·값·자세·이벤트 수가 같고, 각 부품의 지금 시작 상태와 같다(문 잠금 `bUseLatch` 포함). 게임 중 `Preview`를 바꿔도 상태·자세 그대로, 이벤트 없음. 기존 시험 단언은 그대로 |
 | E11 | 표시 컴포넌트 속성 | 게임 월드에서 숨김, 충돌 없음, editor-only. `Motion guide = Off`면 모양 0개 |
 
 ## 5. 구현자가 정할 것
