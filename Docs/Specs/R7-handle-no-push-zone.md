@@ -54,7 +54,7 @@
   - 다음은 손잡이가 연결된 패널에서 손 입력을 넣는다: `P2Probe/P2ePartAssemblyTests.cpp`(밀기 기록 `:322`), `P2Probe/P5zeDoorGripTests.cpp`(`:134`), `P3Probe/P5xPanelHandlesTests.cpp`(`:143`), `P3Probe/P5aGloveboxTests.cpp`(`:187`), `P2Probe/P2dLatchedPanelTests.cpp`(`P2dFace` 손 `:104-119`), `P2Probe/P2cHingedPanelTests.cpp`(`:117-132`). Claude는 각 손 위치가 손잡이 GrabBox + 8 cm 안인지까지는 확인하지 않았다.
   - **고쳐도 되는 단언(유일한 허용):** 위 시험이 기본 8 cm 때문에 실패하고, 그 시험이 **금지 범위를 시험하려는 것이 아니라면**, 그 시험 준비에서 `No push near handle = 0`으로 두어 원래 의도를 지킨다(단언·손 위치는 바꾸지 않는다). 어느 시험을 그렇게 했는지 보고 ③에 적는다.
   - 그 밖의 수정이 필요하면 멈추고 리뷰 파일 "질문"에 적는다.
-- R2a·R2c 표시 모양 수 단언: `NearHandle` 범위는 새 모양 종류로 넣어 기존 종류 수를 바꾸지 않는다.
+- R2a·R2c 표시 모양 수 단언: `NearHandle` 범위는 새 모양 종류로 넣어 기존 종류 수를 바꾸지 않는다. **R2c 시험에 종류가 아닌 전체 모양 수 단언이 있고 손잡이가 연결될 패널이 나와 실패하면**, 그 시험 준비에서 `No push near handle = 0`으로 둔다(R2c 개정 1과 같은 방식). 단언은 바꾸지 않고 보고 ③에 적는다. Claude는 R2c 시험이 아직 없어 미리 감사하지 못했다.
 
 ## 4. 시험 — `vBoR.R7.*`
 
