@@ -17,7 +17,7 @@
 |---|---|---|
 | D1 | **손잡이마다 밀기 금지 범위** | `AVBoRHingedPanel`(문·콘솔·글러브박스)에 연결된 손잡이(바깥·안쪽·그립 — `OutsideAxisHandle`·`InsideAxisHandle`·`GripAxisHandle`, Play 때 연결된 것)마다, 그 손잡이 **GrabBox의 월드 상자를 사방으로 `No push near handle`(cm)만큼 키운 상자**가 금지 범위다. GrabBox는 메시 잡기 모드에서도 메시 경계 + 여유로 맞춰져 있다(`VBoRAxisPart.cpp` `OnConstruction`). 손잡이가 문에 붙어 같이 돌므로 범위도 매 프레임 지금 자세로 본다 |
 | D2 | **범위 안의 손은 밀지 않는다** | 한 손의 판정점 5개(손바닥·손가락 끝 4) 중 **하나라도** 어떤 금지 범위 안이면 그 프레임에 그 손은 밀기를 시작하지도 이어가지도 않는다. 무시 이유는 새 값 `NearHandle`로 센다(한 번 들어간 동안 1번 — 기존 무시 이유와 같은 방식 `VBoRDoorMotion.cpp:83`). 다른 손은 상관없다 |
-| D3 | **잠김이 먼저** | 문이 잠겨 있으면(`bUseLatch && bLocked`) 지금처럼 `Locked`로 센다 — 금지 범위보다 먼저(`VBoRDoorMotion.cpp:147` 주석 "Keep locked count first") |
+| D3 | **잠김이 먼저** | 문이 잠겨 있으면(`bUseLatch && bLocked`) 지금처럼 `Locked`로 센다 — 금지 범위보다 먼저(`VBoRDoorMotion.cpp:148` 주석 "Keep locked count first") |
 | D4 | **밀던 손이 범위에 들어가면** | 그 손의 밀기는 손을 뗀 것과 같은 길로 끝난다(지금 밀기가 끝날 때의 관성·색·기록 그대로). 범위를 나가면 기존 규칙대로 다시 밀 수 있다 — 이미 면 안으로 들어가 있으면 기존 "뒤에서 닿음(Behind)" 규칙(P5w)이 막는다 |
 | D5 | **놓은 뒤** | 손잡이를 놓은 손이 아직 범위 안이면 밀지 않는다(D2). 범위를 벗어난 뒤부터 밀 수 있다. 따로 타이머를 두지 않는다 |
 | D6 | **잡기는 그대로** | 잡기·손잡이 연결·잠금 해제·잡기 > 밀기 순서는 바꾸지 않는다. 금지 범위는 밀기만 막는다 |
