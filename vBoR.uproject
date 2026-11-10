@@ -21,6 +21,11 @@
 			"Enabled": true
 		},
 		{
+			"Name": "OpenCV",
+			"Enabled": true,
+			"PlatformAllowList": ["Win64"]
+		},
+		{
 			"Name": "ModelingToolsEditorMode",
 			"Enabled": true,
 			"TargetAllowList": [

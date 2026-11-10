@@ -10,7 +10,13 @@ public class vBoR : ModuleRules
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "EnhancedInput", "OculusInteraction", "OculusInteractionPrebuilts" });
 
-		PrivateDependencyModuleNames.AddRange(new string[] { "OculusXRInput", "HeadMountedDisplay", "XRBase", "Json", "UMG", "Slate", "SlateCore", "GameplayTags", "RenderCore", "PhysicsCore" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "OculusXRInput", "HeadMountedDisplay", "XRBase", "Json", "UMG", "Slate", "SlateCore", "GameplayTags", "RenderCore", "PhysicsCore", "MRUtilityKit" });
+		// Anchor headers included by the public MRUK subsystem header
+		PrivateDependencyModuleNames.Add("OculusXRAnchors");
+		if (Target.Platform == UnrealTargetPlatform.Win64)
+		{
+			PrivateDependencyModuleNames.AddRange(new string[] { "OpenCVHelper", "OpenCV", "RHI" });
+		}
 
 		// Uncomment if you are using Slate UI
 		// PrivateDependencyModuleNames.AddRange(new string[] { "Slate", "SlateCore" });
