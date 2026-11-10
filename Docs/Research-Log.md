@@ -11,6 +11,34 @@
 
 ---
 
+## 2026-11-11 — 마커 정렬 — Quest 카메라·OpenCV (M1)
+
+사용자 질문: Unity에서 하는 마커·카메라 기반 캘리브레이션을 Unreal에서도 할 수 있나, 실물 Buck 볼트 4개(= `BP_Car_Core` 정렬점 1–4, 사용자 확인)에 마커를 붙여 정렬할 수 있나. **결론: 된다. 학습은 필요 없다**(인쇄 마커는 정해진 무늬 인식). 사용자 결정: 새 레벨에서 먼저 시험하고 통과하면 main에 넣는다 → 명세 M1.
+
+**카메라(MRUK Passthrough Camera Access, Meta XR 1.205.0, 헤더·소스로 확인):**
+- `UMRUKPassthroughCameraAccess`·`…Subsystem`·`…Texture` — `Plugins/MetaXR/Source/MRUtilityKit/Public/MRUKPassthroughCameraAccess.h`. 영상, 보정값(초점거리·주점·센서 해상도·렌즈 위치/방향, **왜곡 계수 없음** `:33-47`), `GetCameraPose`, `GetTimestamp`, `ViewportPointToWorldSpaceRay`·`WorldToViewportPoint`.
+- `GetCameraPose`는 **영상 시각의 헤드셋 자세** + 렌즈 위치(`MRUKPassthroughCameraAccess.cpp:218-241`). TrackingToWorld를 곱하지 않는다(레이캐스트는 곱함 `MRUtilityKitSubsystem.cpp:917-943`) → 추적 공간 좌표로 보인다. vBoR Stage와 같은지는 기기로 확인(M1 Q2).
+- Win64(Link)는 CPU 이미지를 받아 텍스처에 올린다(`:417-427`), Android는 Vulkan 네이티브 텍스처(`:129-176`, 권한 `horizonos.permission.HEADSET_CAMERA` 검사는 Android만 `:120-127`). 텍스처 형식 `PF_R8G8B8A8`.
+- 텍스처 리소스는 `RenderTargetTextureRHI`를 채우지 않는다(`:704-734`) → `FRenderTarget::ReadPixels` 대신 `GetTexture2DRHI()` + `RHICmdList.ReadSurfaceData`(`RHICommandList.h:4850`).
+- Meta 문서(MRUK Features, Unreal): "Meta Horizon Link supports the Passthrough Camera API starting from v201", 패스스루 기능이 켜져 있어야 함(표시와 별개). 성능(Unity PCA 문서): 지연 20–40 ms, 60 Hz, 메모리 약 45 MB, 해상도는 목록에서 골라야 함(가장 큰 것을 무조건 고르지 말 것).
+- Passthrough over Link 문서는 하드웨어로 USB-C 케이블(2 Gbps 이상)만 적는다. **Air Link는 언급 없음** → 기기로 확인(M1 Q9). 같은 문서: 영상은 호스트 PC 밖으로 나가지 않는다.
+- 사용자 PC(2026-11-11 스크린샷): Link v208, 개발자 런타임·Link 패스스루·패스스루 카메라 API 권한 켬. Link 앱에 NVIDIA 드라이버(591.86 이후) 멈춤 경고가 떠 있음.
+- **MRUK World Lock:** `UMRUKSubsystem::Tick`이 `EnableWorldLock`이면 `GetWorldLockOffset` 성공 시 Pawn 위치를 덮어쓴다(`MRUtilityKitSubsystem.cpp:1081-1097`). 기본값 true(`OculusXRHMDRuntimeSettings.h:275`). 지금까지 Pawn이 덮어써지지 않은 것은 장면을 불러오지 않아 오프셋이 없어서로 보인다(미확인). 런타임 값 `UMRUKSubsystem::EnableWorldLock`(`MRUtilityKitSubsystem.h:131-132`)으로 끌 수 있다.
+
+**마커 인식(엔진 OpenCV, `C:/Program Files/Epic Games/UE_5.7/Engine/Plugins/Runtime/OpenCV`):**
+- OpenCV 4.5.5, 모듈 `OpenCVHelper`(Win64·Linux·Mac), 기본 꺼짐. `aruco` 헤더에는 `DICT_APRILTAG_36h11`이 있지만 **도우미 `FOpenCVHelper::IdentifyArucoMarkers`의 `EArucoDictionary`는 ArUco 사전만**(`OpenCVHelper.h:48-68`). `SolvePnP`(`:165`)는 UE 좌표 카메라 자세를 돌려준다. → M1은 ArUco `DICT_4X4_50`.
+- 인쇄본 `Docs/Markers/vBoR_markers_aruco4x4_ID1-4.pdf`: Claude가 Python OpenCV 4.10으로 비트를 뽑아 벡터 PDF로 그림(검은 사각형 60 mm 4장 + 80 mm 4장, 흰 여백 1칸, 볼트 중심 맞춤 눈금, 100 mm 배율 확인 선). 300 dpi로 다시 그려 인식: ID 1–4 모두 인식, 한 변 60.0·80.0 mm.
+
+**채택하지 않은 것:**
+- AprilTag 36h11: 오검출에 더 강하지만 도우미에 없음 → OpenCV 직접 호출이 필요. 마커 4장에는 ArUco로 충분.
+- 학습 모델(마커 없이 실차 인식)·CAD 기반 자세 추정(FoundationPose 등): 데이터·GPU·라이선스(NVIDIA 조건 미확인)·정확도 근거 없음.
+- UE NNE: `NNERuntimeORT`는 Win64·Linux·Mac만(Android 없음). PCVR이면 PC에서 돌릴 수 있지만 마커 방식에는 필요 없음.
+- Meta `tapedeck`(OpenXR 입력 녹화·재생): APK에 넣는 방식이라 PCVR(Link)에는 맞지 않음.
+
+**다른 헤드셋(참고):** 엔진 Marketplace에 `VarjoOpenXR` 1.2.7(Win64)이 있고 자체 마커 API(`UVarjoMarkersEvent` — ID·위치·회전·크기)가 있다. Vision Pro 메인 카메라는 엔터프라이즈 권한 필요(Apple 문서), UE 5.7 visionOS 지원 범위는 미확인. 맞추기 계산(`FitPoints`)·차량·평가 로직은 공유 가능하고, 카메라·마커·손 입력은 장비별로 연결해야 한다.
+
+---
+
 ## 2026-10-21 — 상자 대신 메시로 잡기·밀기(P2f·P2g)
 
 사용자 요청: 잡기·밀기를 상자가 아니라 메시 모양으로 하고 싶다. 확인한 사실과 채택한 방식이다.
