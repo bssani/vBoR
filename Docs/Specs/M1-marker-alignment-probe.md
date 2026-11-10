@@ -7,7 +7,7 @@
 | 베이스 브랜치 | `main` |
 | 작업 브랜치 | `codex/M1-marker-alignment-probe` |
 | 리뷰 파일 | `Docs/Reviews/M1-marker-alignment-probe.md` (첫 리뷰 때 생김) |
-| 상태 | 명세 작성 |
+| 상태 | **보류 — [M1a 스파이크](M1a-camera-spike.md) 결과로 개정한 뒤 구현**(사용자 2026-11-11). 카메라 모델·축 변환·기본값은 M1a 실측으로 바뀔 수 있다 |
 | 에디터 작업 | **있음** — §6 레벨 하나(Codex가 MCP로). `L_Main`·`Content/Main` 에셋은 고치지 않는다 |
 
 ## 0. 결정
