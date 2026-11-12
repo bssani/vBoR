@@ -13,6 +13,8 @@
 #include "VBoRKeyFob.h"
 #include "VBoRKeyTable.h"
 #include "VBoRAxisPart.h"
+#include "VBoRButtonLabelWidget.h"
+#include "VBoRGuidanceWidget.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/ArrowComponent.h"
 #include "Components/BoxComponent.h"
@@ -33,6 +35,9 @@
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Layout/SBorder.h"
 #include "UObject/ConstructorHelpers.h"
+#if WITH_EDITOR
+#include "UObject/UnrealType.h"
+#endif
 
 namespace
 {
@@ -113,6 +118,29 @@ namespace
 		return SNew(SBorder).Padding(24).BorderImage(FCoreStyle::Get().GetBrush("WhiteBrush"))
 			.BorderBackgroundColor(FLinearColor(0.95, 0.95, 0.95, 1))[Text];
 	}
+
+	template <typename WidgetType>
+	WidgetType* CreateR9Widget(UWorld* World, TSubclassOf<WidgetType> WidgetClass)
+	{
+		if (!WidgetClass) { return nullptr; }
+		WidgetType* Widget = CreateWidget<WidgetType>(World, WidgetClass);
+		if (!Widget) { return nullptr; }
+		if (const TCHAR* Missing = Widget->FindMissingBinding())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("Guidance widget %s is missing %s; using the Slate plate"), *WidgetClass->GetName(), Missing);
+			return nullptr;
+		}
+		return Widget;
+	}
+
+	void SetR9Widget(UWidgetComponent* Component, UUserWidget* Widget)
+	{
+		if (Component->GetBlendMode() == EWidgetBlendMode::Opaque)
+		{
+			Component->SetBlendMode(EWidgetBlendMode::Masked);
+		}
+		Component->SetWidget(Widget);
+	}
 }
 
 AVBoRScenarioRunner::AVBoRScenarioRunner()
@@ -144,14 +172,38 @@ AVBoRScenarioRunner::AVBoRScenarioRunner()
 	}
 }
 
+#if WITH_EDITOR
+void AVBoRScenarioRunner::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	const FName Member = PropertyChangedEvent.GetMemberPropertyName();
+	if (Member == GET_MEMBER_NAME_CHECKED(AVBoRScenarioRunner, PanelStylePreset) && PanelStylePreset != EVBoRPanelStylePreset::Custom)
+	{
+		PanelStyle = FVBoRPanelStyle::FromPreset(PanelStylePreset);
+	}
+	else if (Member == GET_MEMBER_NAME_CHECKED(AVBoRScenarioRunner, PanelStyle))
+	{
+		PanelStylePreset = EVBoRPanelStylePreset::Custom;
+	}
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+}
+#endif
+
 void AVBoRScenarioRunner::BeginPlay()
 {
 	Super::BeginPlay();
 	int32 PowerCount = 0;
 	VehiclePower = UVBoRVehiclePowerComponent::FindUnique(GetWorld(), &PowerCount);
 	if (PowerCount == 0) { UE_LOG(LogTemp, Warning, TEXT("Vehicle power: expected one component, found 0; power disabled")); }
-	PanelText = SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold", 40)).ColorAndOpacity(FLinearColor::Black).AutoWrapText(true);
-	PanelBorder = P3TextPlate(PanelText.ToSharedRef()); Panel->SetSlateWidget(PanelBorder);
+	if (auto* Widget = CreateR9Widget(GetWorld(), GuidanceWidgetClass))
+	{
+		Widget->ApplyStyle(PanelStyle);
+		SetR9Widget(Panel, Widget);
+	}
+	else
+	{
+		PanelText = SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold", 40)).ColorAndOpacity(FLinearColor::Black).AutoWrapText(true);
+		PanelBorder = P3TextPlate(PanelText.ToSharedRef()); Panel->SetSlateWidget(PanelBorder);
+	}
 	Panel->SetWorldScale3D(FVector(1, PanelSizeCm.X / 1000.0, PanelSizeCm.Y / 640.0));
 	OperatorText = SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold", 24)).ColorAndOpacity(FLinearColor::Black).AutoWrapText(true);
 	OperatorPanel->SetSlateWidget(P3TextPlate(OperatorText.ToSharedRef())); OperatorPanel->SetWorldScale3D(FVector(1, 0.05, 0.05));
@@ -164,8 +216,19 @@ void AVBoRScenarioRunner::BeginPlay()
 		if (I == 0) { ConfirmButton = Button; Button->OnButtonPressed.AddUniqueDynamic(this, &AVBoRScenarioRunner::HandleConfirmPoke); }
 		else { ActionButton = Button; Button->OnButtonPressed.AddUniqueDynamic(this, &AVBoRScenarioRunner::HandleActionPoke); }
 		SetP3ButtonVisible(Button, false);
-		TSharedRef<STextBlock> Label = SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold", 32)).ColorAndOpacity(FLinearColor::Black).AutoWrapText(true);
-		ButtonLabelTexts.Add(Label); ButtonLabels[I]->SetSlateWidget(P3TextPlate(Label)); ButtonLabels[I]->SetWorldScale3D(FVector(1, 0.04, 0.04));
+		if (auto* Widget = CreateR9Widget(GetWorld(), ButtonLabelWidgetClass))
+		{
+			Widget->SetLabel(FText::GetEmpty(), I == 0);
+			Widget->ApplyStyle(PanelStyle);
+			SetR9Widget(ButtonLabels[I], Widget);
+			ButtonLabelTexts.Add(nullptr);
+		}
+		else
+		{
+			TSharedRef<STextBlock> Label = SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold", 32)).ColorAndOpacity(FLinearColor::Black).AutoWrapText(true);
+			ButtonLabelTexts.Add(Label); ButtonLabels[I]->SetSlateWidget(P3TextPlate(Label));
+		}
+		ButtonLabels[I]->SetWorldScale3D(FVector(1, 0.04, 0.04));
 	}
 	if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
 	{
@@ -893,6 +956,10 @@ FString AVBoRScenarioRunner::ActionLabel() const
 void AVBoRScenarioRunner::RefreshPanel()
 {
 	if (PanelText) { PanelText->SetText(FText::FromString(GetPanelText())); }
+	else if (auto* Widget = Cast<UVBoRGuidanceWidget>(Panel->GetUserWidgetObject()))
+	{
+		Widget->SetInstruction(FText::FromString(GetPanelText()));
+	}
 	const FString Operator = GetOperatorText();
 	if (OperatorText) { OperatorText->SetText(FText::FromString(Operator)); }
 	Panel->SetHiddenInGame(bPanelPlacementPending || GetPanelText().IsEmpty());
@@ -907,7 +974,14 @@ void AVBoRScenarioRunner::RefreshPanel()
 	{
 		AVBoRPokeButton* Button = I == 0 ? ConfirmButton.Get() : ActionButton.Get();
 		ButtonLabels[I]->SetHiddenInGame(!Button || Button->IsHidden());
-		if (ButtonLabelTexts.IsValidIndex(I)) { ButtonLabelTexts[I]->SetText(FText::FromString(I == 0 ? FString(TEXT("Confirm")) : ActionLabel())); }
+		if (auto* Widget = Cast<UVBoRButtonLabelWidget>(ButtonLabels[I]->GetUserWidgetObject()))
+		{
+			Widget->SetLabel(FText::FromString(I == 0 ? FString(TEXT("Confirm")) : ActionLabel()), I == 0);
+		}
+		else if (ButtonLabelTexts.IsValidIndex(I) && ButtonLabelTexts[I])
+		{
+			ButtonLabelTexts[I]->SetText(FText::FromString(I == 0 ? FString(TEXT("Confirm")) : ActionLabel()));
+		}
 	}
 }
 

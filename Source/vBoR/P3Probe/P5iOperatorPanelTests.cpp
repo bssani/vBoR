@@ -130,10 +130,10 @@ namespace
 			Test.TestEqual(S.Label,W.Runner->EvaluateOperatorButton(S.Button).bAccepted,bExpected);
 		}
 	}
-	constexpr auto Flags = EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter;
+	constexpr auto P5iFlags = EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE1,"vBoR.P5i.E1NoAutomationWindow",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE1,"vBoR.P5i.E1NoAutomationWindow",P5iFlags)
 bool FP5iE1::RunTest(const FString&)
 {
 	FP5iWorld W; W.Runner->ShowOperatorWindow(); TestFalse(TEXT("Headless automation cannot create a window"),W.Runner->HasOperatorWindow());
@@ -141,7 +141,7 @@ bool FP5iE1::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE2,"vBoR.P5i.E2ButtonsEqualGameKeys",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE2,"vBoR.P5i.E2ButtonsEqualGameKeys",P5iFlags)
 bool FP5iE2::RunTest(const FString&)
 {
 	FP5iWorld W;
@@ -159,11 +159,11 @@ bool FP5iE2::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE3,"vBoR.P5i.E3BeforeStart",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE3,"vBoR.P5i.E3BeforeStart",P5iFlags)
 bool FP5iE3::RunTest(const FString&)
 { FP5iWorld W(false); Enabled(*this,W,{B::Ignore,B::Reapply,B::Info}); W.NeedsCheck(); Enabled(*this,W,{B::Ignore,B::Reapply,B::Info}); return true; }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE4,"vBoR.P5i.E4ConfirmRulePermissionAndLock",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE4,"vBoR.P5i.E4ConfirmRulePermissionAndLock",P5iFlags)
 bool FP5iE4::RunTest(const FString&)
 {
 	FP5iWorld W;
@@ -178,13 +178,13 @@ bool FP5iE4::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE5,"vBoR.P5i.E5DuringSeatFade",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE5,"vBoR.P5i.E5DuringSeatFade",P5iFlags)
 bool FP5iE5::RunTest(const FString&) { FP5iWorld W; W.Button(B::Passenger); Enabled(*this,W,{B::Info}); return true; }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE6,"vBoR.P5i.E6FreeMode",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE6,"vBoR.P5i.E6FreeMode",P5iFlags)
 bool FP5iE6::RunTest(const FString&) { FP5iWorld W; W.Free(); Enabled(*this,W,{B::Driver,B::Passenger,B::Rear,B::Restart,B::Reload,B::Reapply,B::Info,B::FoldSeat}); return true; }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE7,"vBoR.P5i.E7DecisionAndDispatch",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE7,"vBoR.P5i.E7DecisionAndDispatch",P5iFlags)
 bool FP5iE7::RunTest(const FString&)
 {
 	for (int32 State = 0; State < 7; ++State)
@@ -207,7 +207,7 @@ bool FP5iE7::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE8,"vBoR.P5i.E8EnglishStatus",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE8,"vBoR.P5i.E8EnglishStatus",P5iFlags)
 bool FP5iE8::RunTest(const FString&)
 {
 	FP5iWorld W(false); auto S = W.Runner->GetOperatorStatus();
@@ -223,14 +223,14 @@ bool FP5iE8::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE9,"vBoR.P5i.E9ButtonAndKeySameFrame",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE9,"vBoR.P5i.E9ButtonAndKeySameFrame",P5iFlags)
 bool FP5iE9::RunTest(const FString&)
 {
 	FP5iWorld W; FP5iTestAccess::NewFrame(W.Runner); W.Runner->PressOperatorButton(B::Confirm); FP5iTestAccess::Key(W.Runner,EKeys::SpaceBar);
 	W.Runner->ProcessFlow(0); TestEqual(TEXT("One step"),W.Runner->GetStepIndex(),1); TestEqual(TEXT("Second input stale"),W.Runner->StaleDiscards,1); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE10,"vBoR.P5i.E10FocusedWindowKey",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE10,"vBoR.P5i.E10FocusedWindowKey",P5iFlags)
 bool FP5iE10::RunTest(const FString&)
 {
 	FP5iWorld W; const auto Widget = SNew(SVBoROperatorPanel).Runner(W.Runner);
@@ -242,7 +242,7 @@ bool FP5iE10::RunTest(const FString&)
 	W.Runner->ProcessFlow(0); TestEqual(TEXT("One advance"),W.Runner->GetStepIndex(),1); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE11,"vBoR.P5i.E11PlacementAcrossTravel",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE11,"vBoR.P5i.E11PlacementAcrossTravel",P5iFlags)
 bool FP5iE11::RunTest(const FString&)
 {
 	const auto Original = FVBoROperatorPlacement::Session();
@@ -252,7 +252,7 @@ bool FP5iE11::RunTest(const FString&)
 	FVBoROperatorPlacement::Session() = Original; return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE13,"vBoR.P5i.E13IgnoredAlignmentSeats",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE13,"vBoR.P5i.E13IgnoredAlignmentSeats",P5iFlags)
 bool FP5iE13::RunTest(const FString&)
 {
 	FP5iWorld W(false); W.Button(B::Ignore); W.Ready();
@@ -260,10 +260,10 @@ bool FP5iE13::RunTest(const FString&)
 	TestEqual(TEXT("Runner transition discards"),W.Runner->TransitionDiscards,3); TestEqual(TEXT("Component discards retained"),W.Alignment->SwitchDiscards,3); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE14,"vBoR.P5i.E14ReloadDisablesEverything",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE14,"vBoR.P5i.E14ReloadDisablesEverything",P5iFlags)
 bool FP5iE14::RunTest(const FString&) { FP5iWorld W; W.Free(); W.Button(B::Reload); Enabled(*this,W,{}); return true; }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE15,"vBoR.P5i.E15ReapplyRecoversWithoutChangingStep",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE15,"vBoR.P5i.E15ReapplyRecoversWithoutChangingStep",P5iFlags)
 bool FP5iE15::RunTest(const FString&)
 {
 	FP5iWorld W; W.Button(B::Next); W.NeedsCheck(); const auto Token = W.Runner->GetToken(); int32 Moves = 0;
@@ -278,14 +278,14 @@ bool FP5iE15::RunTest(const FString&)
 	W.Alignment->OnPawnMoved.Clear(); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE16,"vBoR.P5i.E16ReapplyStartsWaitingFlow",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE16,"vBoR.P5i.E16ReapplyStartsWaitingFlow",P5iFlags)
 bool FP5iE16::RunTest(const FString&)
 {
 	FP5iWorld W(false); W.NeedsCheck(); FString Reason; TestTrue(TEXT("Setup saved"),FVBoRBuckAlignmentStore::Save(W.Path,W.Saved,Reason));
 	W.Button(B::Reapply); W.FinishSwitch(); TestTrue(TEXT("Flow started"),W.Runner->IsRunning()); TestEqual(TEXT("First step"),W.Runner->GetStepIndex(),0); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4cReapplyStart,"vBoR.P4c.E8ReapplyStartAttempt",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4cReapplyStart,"vBoR.P4c.E8ReapplyStartAttempt",P5iFlags)
 bool FP4cReapplyStart::RunTest(const FString&)
 {
 	struct FStartRecords : FOutputDevice
@@ -327,7 +327,7 @@ bool FP4cReapplyStart::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE17,"vBoR.P5i.E17ReapplyFailureUnfades",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE17,"vBoR.P5i.E17ReapplyFailureUnfades",P5iFlags)
 bool FP5iE17::RunTest(const FString&)
 {
 	{ FP5iWorld W; W.Head->Bounds.X += 10; W.NeedsCheck(); W.Button(B::Reapply); W.FinishSwitch();
@@ -339,7 +339,7 @@ bool FP5iE17::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE18,"vBoR.P5i.E18ReapplyRefusedAwayOrDuringFade",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE18,"vBoR.P5i.E18ReapplyRefusedAwayOrDuringFade",P5iFlags)
 bool FP5iE18::RunTest(const FString&)
 {
 	for (B Seat : {B::Passenger,B::Rear})
@@ -349,7 +349,7 @@ bool FP5iE18::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE19,"vBoR.P5i.E19ReapplyUsesSetupNotHead",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE19,"vBoR.P5i.E19ReapplyUsesSetupNotHead",P5iFlags)
 bool FP5iE19::RunTest(const FString&)
 {
 	FP5iWorld W; W.Head->LocalHead.AddToTranslation(FVector(30,0,0));
@@ -361,7 +361,7 @@ bool FP5iE19::RunTest(const FString&)
 	TestTrue(TEXT("Free mode and generation unchanged"),W.Runner->IsFreeMode() && W.Runner->GetToken().Generation == Token.Generation); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE20,"vBoR.P5i.E20OtherCommandsDuringReapply",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE20,"vBoR.P5i.E20OtherCommandsDuringReapply",P5iFlags)
 bool FP5iE20::RunTest(const FString&)
 {
 	FP5iWorld W; W.Button(B::Reapply);
@@ -369,7 +369,7 @@ bool FP5iE20::RunTest(const FString&)
 	TestEqual(TEXT("Transition discards"),W.Runner->TransitionDiscards,4); TestEqual(TEXT("Same step"),W.Runner->GetStepIndex(),0); W.FinishSwitch(); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE21,"vBoR.P5i.E21ButtonStyles",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE21,"vBoR.P5i.E21ButtonStyles",P5iFlags)
 bool FP5iE21::RunTest(const FString&)
 {
 	FP5iWorld W;
@@ -384,7 +384,7 @@ bool FP5iE21::RunTest(const FString&)
 	TestTrue(TEXT("Reload danger"),W.Runner->GetOperatorStyle(B::Reload) == EVBoROperatorStyle::Danger); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE22,"vBoR.P5i.E22SrgbPalette",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE22,"vBoR.P5i.E22SrgbPalette",P5iFlags)
 bool FP5iE22::RunTest(const FString&)
 {
 	for (const TCHAR* Hex : {TEXT("0b0f17"),TEXT("131a26"),TEXT("1c2534"),TEXT("2e3a4e"),TEXT("66748a"),TEXT("eef2f7"),TEXT("9aa6b8"),TEXT("5b8cff"),TEXT("0d2a66"),TEXT("ffffff"),TEXT("3cc285"),TEXT("f2b544"),TEXT("ff7a72")})
@@ -393,7 +393,7 @@ bool FP5iE22::RunTest(const FString&)
 	TestTrue(TEXT("Actual primary brush uses palette"),Primary.Normal.TintColor.GetSpecifiedColor().Equals(VBoROperator::Color(TEXT("5b8cff")))); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE23,"vBoR.P5i.E23SlateTextFits",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE23,"vBoR.P5i.E23SlateTextFits",P5iFlags)
 bool FP5iE23::RunTest(const FString&)
 {
 	FP5iWorld W; const auto Widget = SNew(SVBoROperatorPanel).Runner(W.Runner); Widget->SlatePrepass(1);
@@ -418,7 +418,7 @@ bool FP5iE23::RunTest(const FString&)
 	Visit(Widget); TestEqual(TEXT("Actual alignment text found"),EllipsisCount,1); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE24,"vBoR.P5i.E24AlphabetShortcuts",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iE24,"vBoR.P5i.E24AlphabetShortcuts",P5iFlags)
 bool FP5iE24::RunTest(const FString&)
 {
 	FP5iWorld W;
@@ -429,7 +429,7 @@ bool FP5iE24::RunTest(const FString&)
 	W.Free(); TestTrue(TEXT("R restart shown"),W.Runner->GetOperatorText().Contains(TEXT("R Restart"))); TestFalse(TEXT("F5 absent"),W.Runner->GetOperatorText().Contains(TEXT("F5"))); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iR1Close,"vBoR.P5i.R1ExternalWindowClose",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iR1Close,"vBoR.P5i.R1ExternalWindowClose",P5iFlags)
 bool FP5iR1Close::RunTest(const FString&)
 {
 	TGuardValue<FVBoROperatorPlacement> Placement(FVBoROperatorPlacement::Session(),FVBoROperatorPlacement{});
@@ -452,7 +452,7 @@ bool FP5iR1Close::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iR1Ignore,"vBoR.P5i.R1IgnoreDuringTransitions",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iR1Ignore,"vBoR.P5i.R1IgnoreDuringTransitions",P5iFlags)
 bool FP5iR1Ignore::RunTest(const FString&)
 {
 	{
@@ -485,7 +485,7 @@ bool FP5iR1Ignore::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iR1Snapshot,"vBoR.P5i.R1OneSnapshotPerFrame",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5iR1Snapshot,"vBoR.P5i.R1OneSnapshotPerFrame",P5iFlags)
 bool FP5iR1Snapshot::RunTest(const FString&)
 {
 	for (int32 State = 0; State < 8; ++State)
@@ -531,7 +531,7 @@ namespace
 	};
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE1,"vBoR.P3c.E1DisabledKeys",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE1,"vBoR.P3c.E1DisabledKeys",P5iFlags)
 bool FP3cE1::RunTest(const FString&)
 {
 	FP3cEnabled Setting; Setting.Variable->Set(0, ECVF_SetByConsole);
@@ -549,7 +549,7 @@ bool FP3cE1::RunTest(const FString&)
 	W.Alignment->OnPawnMoved.Remove(Handle); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE2,"vBoR.P3c.E2CarDirectionAndFade",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE2,"vBoR.P3c.E2CarDirectionAndFade",P5iFlags)
 bool FP3cE2::RunTest(const FString&)
 {
 	FP3cEnabled Setting; FP5iWorld W;
@@ -568,7 +568,7 @@ bool FP3cE2::RunTest(const FString&)
 	W.Alignment->OnPawnMoved.Remove(Handle); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE3,"vBoR.P3c.E3AccumulateAndReset",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE3,"vBoR.P3c.E3AccumulateAndReset",P5iFlags)
 bool FP3cE3::RunTest(const FString&)
 {
 	FP3cEnabled Setting; FP5iWorld W; W.Car->SetActorRotation(FRotator(0,30,0));
@@ -588,7 +588,7 @@ bool FP3cE3::RunTest(const FString&)
 	TestTrue(TEXT("Editable step in cm"),W.Alignment->GetHomeShiftCm() == FVector2D(0,75)); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE4,"vBoR.P3c.E4FocusedWindowRepeat",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE4,"vBoR.P3c.E4FocusedWindowRepeat",P5iFlags)
 bool FP3cE4::RunTest(const FString&)
 {
 	FP3cEnabled Setting; FP5iWorld W; const auto Widget = SNew(SVBoROperatorPanel).Runner(W.Runner);
@@ -603,7 +603,7 @@ bool FP3cE4::RunTest(const FString&)
 	TestFalse(TEXT("Unrelated key unhandled"),W.Runner->HandleOperatorKey(EKeys::NumPadNine)); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE5,"vBoR.P3c.E5TransitionRejection",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE5,"vBoR.P3c.E5TransitionRejection",P5iFlags)
 bool FP3cE5::RunTest(const FString&)
 {
 	FP3cEnabled Setting;
@@ -625,7 +625,7 @@ bool FP3cE5::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE6,"vBoR.P3c.E6SeatAbsolutePose",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE6,"vBoR.P3c.E6SeatAbsolutePose",P5iFlags)
 bool FP3cE6::RunTest(const FString&)
 {
 	FP3cEnabled Setting; FP5iWorld W;
@@ -640,7 +640,7 @@ bool FP3cE6::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE7,"vBoR.P3c.E7ReapplyClearsOffset",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE7,"vBoR.P3c.E7ReapplyClearsOffset",P5iFlags)
 bool FP3cE7::RunTest(const FString&)
 {
 	FP3cEnabled Setting; FP5iWorld W; const FTransform Expected = W.Pawn->GetActorTransform();
@@ -652,7 +652,7 @@ bool FP3cE7::RunTest(const FString&)
 	TestTrue(TEXT("Direct alignment also clears offset"),W.Alignment->GetHomeShiftCm().IsZero()); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE8,"vBoR.P3c.E8RestartAtBase",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE8,"vBoR.P3c.E8RestartAtBase",P5iFlags)
 bool FP3cE8::RunTest(const FString&)
 {
 	FP3cEnabled Setting; FP5iWorld W; const FTransform Expected = W.Pawn->GetActorTransform(); W.Button(B::Next);
@@ -663,7 +663,7 @@ bool FP3cE8::RunTest(const FString&)
 	TestEqual(TEXT("Retry counted once"),W.Runner->RetryCount,1); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE9,"vBoR.P3c.E9WithoutAppliedAlignment",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE9,"vBoR.P3c.E9WithoutAppliedAlignment",P5iFlags)
 bool FP3cE9::RunTest(const FString&)
 {
 	FP3cEnabled Setting;
@@ -681,7 +681,7 @@ bool FP3cE9::RunTest(const FString&)
 	return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE10,"vBoR.P3c.E10OperatorStatus",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP3cE10,"vBoR.P3c.E10OperatorStatus",P5iFlags)
 bool FP3cE10::RunTest(const FString&)
 {
 	FP3cEnabled Setting; FP5iWorld W;
@@ -692,7 +692,7 @@ bool FP3cE10::RunTest(const FString&)
 	TestTrue(TEXT("Turning off does not move Pawn"),W.Alignment->GetHomeShiftCm() == FVector2D(200,-100)); return true;
 }
 
-IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5oSeatViews,"vBoR.P5o.E1E2SeatViewsFoundAtStart",Flags)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5oSeatViews,"vBoR.P5o.E1E2SeatViewsFoundAtStart",P5iFlags)
 bool FP5oSeatViews::RunTest(const FString&)
 {
 	FP5iWorld W;
