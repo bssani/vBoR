@@ -12,6 +12,7 @@
 #include "../Interaction/VBoRHandRigPawn.h"
 
 #if defined(WITH_OPENCV) && WITH_OPENCV
+#include "IXRTrackingSystem.h"
 #include "OpenCVHelper.h"
 #include "RenderingThread.h"
 #include "RHICommandList.h"
@@ -33,8 +34,8 @@ void ShowM1aMessage(const FString& Message, int32 Key = INDEX_NONE, float Second
 }
 
 #if defined(WITH_OPENCV) && WITH_OPENCV
-bool SolveMarkerCorners(const FVector2f (&Pixels)[4], double SideMm, const FTransform& CameraStage,
-	const FVector2D& FocalPx, const FVector2D& PrincipalPx, FVector& CenterStage, FVector (&CornersStage)[4])
+bool SolveMarkerCorners(const FVector2f (&Pixels)[4], double SideMm, const FTransform& CameraPose,
+	const FVector2D& FocalPx, const FVector2D& PrincipalPx, FVector& Center, FVector (&Corners)[4])
 {
 	if (!FMath::IsFinite(SideMm) || SideMm <= 0.0 || FocalPx.ContainsNaN() ||
 		FocalPx.X <= 0.0 || FocalPx.Y <= 0.0 || PrincipalPx.ContainsNaN())
@@ -62,22 +63,22 @@ bool SolveMarkerCorners(const FVector2f (&Pixels)[4], double SideMm, const FTran
 	}
 
 	// OpenCV (right, down, forward) to MRUK projection axes (forward, right, down)
-	const auto ToStage = [&CameraStage](const cv::Vec3d& Point)
+	const auto ToPoseSpace = [&CameraPose](const cv::Vec3d& Point)
 	{
-		return CameraStage.TransformPosition(FVector(Point[2], Point[0], Point[1]));
+		return CameraPose.TransformPosition(FVector(Point[2], Point[0], Point[1]));
 	};
-	CenterStage = ToStage(Translation);
-	if (Translation[2] <= 0.0 || CenterStage.ContainsNaN())
+	Center = ToPoseSpace(Translation);
+	if (Translation[2] <= 0.0 || Center.ContainsNaN())
 	{
 		return false;
 	}
 
 	cv::Matx33d MarkerRotation;
 	cv::Rodrigues(Rotation, MarkerRotation);
-	for (int32 Index = 0; Index < UE_ARRAY_COUNT(CornersStage); ++Index)
+	for (int32 Index = 0; Index < UE_ARRAY_COUNT(Corners); ++Index)
 	{
-		CornersStage[Index] = ToStage(MarkerRotation * cv::Vec3d(ObjectCorners[Index]) + Translation);
-		if (CornersStage[Index].ContainsNaN())
+		Corners[Index] = ToPoseSpace(MarkerRotation * cv::Vec3d(ObjectCorners[Index]) + Translation);
+		if (Corners[Index].ContainsNaN())
 		{
 			return false;
 		}
@@ -210,6 +211,7 @@ void AM1aCameraSpike::ToggleCamera()
 	UE_LOG(LogM1a, Log, TEXT("Camera Play succeeded (left eye, requested %dx%d, actual %dx%d)"),
 		Resolution.X, Resolution.Y, Camera->ResolutionWidth, Camera->ResolutionHeight);
 	const FMRUKCameraIntrinsics Intrinsics = Camera->GetCameraIntrinsics();
+	LensOffset = FTransform(Intrinsics.LensOffsetOrientation, Intrinsics.LensOffsetPosition);
 	UE_LOG(LogM1a, Log, TEXT("Camera intrinsics: focal px %s | principal px %s | sensor px %s | lens offset cm %s | lens orientation %s"),
 		*Intrinsics.FocalLength.ToString(), *Intrinsics.PrincipalPoint.ToString(), *Intrinsics.SensorResolution.ToString(),
 		*Intrinsics.LensOffsetPosition.ToString(), *Intrinsics.LensOffsetOrientation.ToString());
@@ -231,7 +233,9 @@ void AM1aCameraSpike::ToggleCamera()
 
 	FramesRead = 0;
 	FramesWithMarkers = 0;
+	IgnoredMarkerCounts.Reset();
 	bSawNonBlackFrame = false;
+	bHasStagePoseInInterval = false;
 	bHasMarker = false;
 	NextSummary = GetWorld()->GetRealTimeSeconds() + 1.0;
 	ShowM1aMessage(TEXT("Left camera started"));
@@ -281,20 +285,53 @@ void AM1aCameraSpike::TickCamera(double Now)
 		{
 			return Pixel.R != 0 || Pixel.G != 0 || Pixel.B != 0;
 		});
-		FQuat Orientation;
-		Camera->GetCameraPose(CameraStageCm, Orientation);
+		FQuat CameraMrukOrientation;
+		FVector CameraMrukCm;
+		Camera->GetCameraPose(CameraMrukCm, CameraMrukOrientation);
+		const FTransform CameraMruk(CameraMrukOrientation, CameraMrukCm);
+
+		FQuat HmdStageOrientation;
+		FVector HmdStageCm;
+		const auto& XR = GEngine->XRSystem;
+		// Current UE pose for Stage (M1a rev 1, hold head still for T)
+		const bool bHasStagePose = CameraMrukOrientation.IsNormalized() && !CameraMrukCm.ContainsNaN()
+			&& XR.IsValid() && XR->GetCurrentPose(IXRTrackingSystem::HMDDeviceId, HmdStageOrientation, HmdStageCm)
+			&& HmdStageOrientation.IsNormalized() && !HmdStageCm.ContainsNaN();
+		FTransform CameraStage;
+		if (bHasStagePose)
+		{
+			const FTransform HmdStage(HmdStageOrientation, HmdStageCm);
+			CameraStage = LensOffset * HmdStage;
+			const FTransform HmdMruk = LensOffset.Inverse() * CameraMruk;
+			MrukToStage = HmdMruk.Inverse() * HmdStage;
+			CameraStageCm = CameraStage.GetLocation();
+			bHasStagePoseInInterval = true;
+		}
 
 		TArray<FArucoMarker> Markers;
-		if (FOpenCVHelper::IdentifyArucoMarkers(Pixels, Size, EArucoDictionary::DICT_4X4_50, Markers))
+		FOpenCVHelper::IdentifyArucoMarkers(Pixels, Size, EArucoDictionary::DICT_4X4_50, Markers);
+		const FArucoMarker* Marker = nullptr;
+		for (const FArucoMarker& Candidate : Markers)
+		{
+			if (Candidate.MarkerID < 1 || Candidate.MarkerID > 4)
+			{
+				++IgnoredMarkerCounts.FindOrAdd(Candidate.MarkerID);
+			}
+			else if (!Marker)
+			{
+				Marker = &Candidate;
+			}
+		}
+		if (Marker)
 		{
 			++FramesWithMarkers;
-			if (Orientation.IsNormalized() && !CameraStageCm.ContainsNaN())
+			if (bHasStagePose)
 			{
 				FVector Origin, TopLeft, BottomRight;
 				Camera->ViewportPointToWorldSpaceRay(FVector2D(0, 0), Origin, TopLeft);
 				Camera->ViewportPointToWorldSpaceRay(FVector2D(1, 1), Origin, BottomRight);
-				TopLeft = Orientation.UnrotateVector(TopLeft);
-				BottomRight = Orientation.UnrotateVector(BottomRight);
+				TopLeft = CameraMrukOrientation.UnrotateVector(TopLeft);
+				BottomRight = CameraMrukOrientation.UnrotateVector(BottomRight);
 
 				// MRUK rays include the sensor crop (M1 D5)
 				const FVector2D TopLeftSlope(TopLeft.Y / TopLeft.X, TopLeft.Z / TopLeft.X);
@@ -303,24 +340,24 @@ void AM1aCameraSpike::TickCamera(double Now)
 				const FVector2D FocalPx = ImageSize / (BottomRightSlope - TopLeftSlope);
 				const FVector2D PrincipalPx = -TopLeftSlope * FocalPx;
 
-				FVector Center;
-				FVector CornersStage[4];
-				const FArucoMarker& Marker = Markers[0];
-				if (SolveMarkerCorners(Marker.Corners, MarkerSizeMm, FTransform(Orientation, CameraStageCm),
-					FocalPx, PrincipalPx, Center, CornersStage))
+				FVector CenterMruk;
+				FVector CornersMruk[4];
+				if (SolveMarkerCorners(Marker->Corners, MarkerSizeMm, CameraMruk,
+					FocalPx, PrincipalPx, CenterMruk, CornersMruk))
 				{
 					double ErrorPx = 0.0;
-					for (int32 Index = 0; Index < UE_ARRAY_COUNT(CornersStage); ++Index)
+					for (int32 Index = 0; Index < UE_ARRAY_COUNT(CornersMruk); ++Index)
 					{
-						const FVector2D ProjectedPx = Camera->WorldToViewportPoint(CornersStage[Index]) * ImageSize;
-						ErrorPx += FVector2D::Distance(ProjectedPx, FVector2D(Marker.Corners[Index]));
+						const FVector2D ProjectedPx = Camera->WorldToViewportPoint(CornersMruk[Index]) * ImageSize;
+						ErrorPx += FVector2D::Distance(ProjectedPx, FVector2D(Marker->Corners[Index]));
 					}
 					if (FMath::IsFinite(ErrorPx))
 					{
 						bHasMarker = true;
-						MarkerId = Marker.MarkerID;
-						MarkerStageCm = Center;
-						ReprojectionPx = ErrorPx / UE_ARRAY_COUNT(CornersStage);
+						MarkerId = Marker->MarkerID;
+						const FVector CenterCamera = CameraMruk.InverseTransformPosition(CenterMruk);
+						MarkerStageCm = CameraStage.TransformPosition(CenterCamera);
+						ReprojectionPx = ErrorPx / UE_ARRAY_COUNT(CornersMruk);
 					}
 				}
 			}
@@ -334,10 +371,30 @@ void AM1aCameraSpike::TickCamera(double Now)
 	const FString MarkerText = bHasMarker
 		? FString::Printf(TEXT("last marker %d Stage cm %s | reprojection %.2f px"), MarkerId, *MarkerStageCm.ToString(), ReprojectionPx)
 		: TEXT("no marker pose");
-	const FString CameraText = FramesRead > 0 ? CameraStageCm.ToString() : TEXT("no new frame");
+	const FString CameraText = bHasStagePoseInInterval ? CameraStageCm.ToString() : TEXT("unavailable");
 	const FString Summary = FString::Printf(TEXT("Frames %d | recognized %d | %s | camera Stage cm %s"),
 		FramesRead, FramesWithMarkers, *MarkerText, *CameraText);
-	UE_LOG(LogM1a, Log, TEXT("%s"), *Summary);
+	FString Diagnostics = TEXT(" | D unavailable");
+	if (bHasStagePoseInInterval)
+	{
+		const FRotator Rotation = MrukToStage.Rotator();
+		Diagnostics = FString::Printf(TEXT(" | D cm %s Yaw %.3f Pitch %.3f Roll %.3f deg"),
+			*MrukToStage.GetLocation().ToString(), Rotation.Yaw, Rotation.Pitch, Rotation.Roll);
+	}
+	if (const APawn* Pawn = UGameplayStatics::GetPlayerPawn(this, 0))
+	{
+		Diagnostics += FString::Printf(TEXT(" | Pawn cm %s Yaw %.3f deg"),
+			*Pawn->GetActorLocation().ToString(), Pawn->GetActorRotation().Yaw);
+	}
+	else
+	{
+		Diagnostics += TEXT(" | Pawn unavailable");
+	}
+	for (const auto& Entry : IgnoredMarkerCounts)
+	{
+		Diagnostics += FString::Printf(TEXT(" | ignored id %d count %d"), Entry.Key, Entry.Value);
+	}
+	UE_LOG(LogM1a, Log, TEXT("%s%s"), *Summary, *Diagnostics);
 	ShowM1aMessage(Summary, 0x4d3161, 1.1f);
 	if (FramesRead > 0 && !bSawNonBlackFrame)
 	{
@@ -347,7 +404,9 @@ void AM1aCameraSpike::TickCamera(double Now)
 	}
 	FramesRead = 0;
 	FramesWithMarkers = 0;
+	IgnoredMarkerCounts.Reset();
 	bSawNonBlackFrame = false;
+	bHasStagePoseInInterval = false;
 	NextSummary = Now + 1.0;
 #endif
 }

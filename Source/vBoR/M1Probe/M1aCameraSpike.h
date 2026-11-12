@@ -44,8 +44,12 @@ private:
 	double NextSummary = 0.0;
 	int32 FramesRead = 0;
 	int32 FramesWithMarkers = 0;
+	TMap<int32, int32> IgnoredMarkerCounts;
 	bool bSawNonBlackFrame = false;
+	FTransform LensOffset = FTransform::Identity;
+	bool bHasStagePoseInInterval = false;
 	FVector CameraStageCm = FVector::ZeroVector;
+	FTransform MrukToStage = FTransform::Identity;
 	bool bHasMarker = false;
 	int32 MarkerId = INDEX_NONE;
 	FVector MarkerStageCm = FVector::ZeroVector;
