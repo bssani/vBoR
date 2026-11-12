@@ -4,6 +4,7 @@
 #include "GameFramework/Actor.h"
 #include "VBoRScenarioAsset.h"
 #include "VBoROperatorPanel.h"
+#include "VBoRPanelStyle.h"
 #include "Interaction/Pointable/IsdkInteractionPointerEvent.h"
 #include "VBoRScenarioRunner.generated.h"
 
@@ -20,6 +21,8 @@ class SBorder;
 class AVBoRFloorRoute;
 class AVBoRKeyFob;
 class UVBoRVehiclePowerComponent;
+class UVBoRGuidanceWidget;
+class UVBoRButtonLabelWidget;
 
 enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel, ReapplyAlignment, FoldSeat, UnfoldSeat, CapturePoint, SavePoints, CancelPoints, Power };
 enum class EVBoRCommandSource : uint8 { Participant, Operator };
@@ -51,6 +54,13 @@ public:
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float ButtonBelowCm;
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="s", ClampMin="0")) float ConfirmLockSeconds;
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="s", ClampMin="0.01")) float SeatedPanelSeconds;
+	UPROPERTY(EditAnywhere, Category="Guidance|Style") TSubclassOf<UVBoRGuidanceWidget> GuidanceWidgetClass;
+	UPROPERTY(EditAnywhere, Category="Guidance|Style") TSubclassOf<UVBoRButtonLabelWidget> ButtonLabelWidgetClass;
+	UPROPERTY(EditAnywhere, Category="Guidance|Style") EVBoRPanelStylePreset PanelStylePreset = EVBoRPanelStylePreset::Graphite;
+	UPROPERTY(EditAnywhere, Category="Guidance|Style") FVBoRPanelStyle PanelStyle;
+#if WITH_EDITOR
+	void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
 	bool InitializeFlow();
 	void QueueCommand(const FVBoRFlowCommand& Command);
 	void ProcessFlow(double DeltaSeconds);
@@ -85,6 +95,7 @@ protected:
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void RequestLevelReload(FName LevelName);
 private:
+	friend struct FR9TestAccess;
 	friend struct FR5TestAccess;
 	friend struct FP4hTestAccess;
 	friend struct FP3FlowTestAccess;
