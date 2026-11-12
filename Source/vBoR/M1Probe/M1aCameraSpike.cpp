@@ -12,6 +12,7 @@
 #include "../Interaction/VBoRHandRigPawn.h"
 
 #if defined(WITH_OPENCV) && WITH_OPENCV
+#include "Algo/Sort.h"
 #include "IXRTrackingSystem.h"
 #include "OpenCVHelper.h"
 #include "RenderingThread.h"
@@ -129,7 +130,7 @@ void AM1aCameraSpike::BeginPlay()
 		InputComponent->BindKey(EKeys::M, IE_Pressed, this, &AM1aCameraSpike::ToggleCamera);
 		InputComponent->BindKey(EKeys::T, IE_Pressed, this, &AM1aCameraSpike::StartTipSample);
 	}
-	ShowM1aMessage(TEXT("M: Toggle left camera   T: Sample left index tip"));
+	ShowM1aMessage(TEXT("M: Toggle left camera   T: Record reference point with left index tip"));
 }
 
 void AM1aCameraSpike::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -233,6 +234,7 @@ void AM1aCameraSpike::ToggleCamera()
 
 	FramesRead = 0;
 	FramesWithMarkers = 0;
+	GoodMarkerFrames.Reset();
 	IgnoredMarkerCounts.Reset();
 	bSawNonBlackFrame = false;
 	bHasStagePoseInInterval = false;
@@ -293,7 +295,7 @@ void AM1aCameraSpike::TickCamera(double Now)
 		FQuat HmdStageOrientation;
 		FVector HmdStageCm;
 		const auto& XR = GEngine->XRSystem;
-		// Current UE pose for Stage (M1a rev 1, hold head still for T)
+		// Current UE pose for Stage (M1a rev 1, hold head still during measurement)
 		const bool bHasStagePose = CameraMrukOrientation.IsNormalized() && !CameraMrukCm.ContainsNaN()
 			&& XR.IsValid() && XR->GetCurrentPose(IXRTrackingSystem::HMDDeviceId, HmdStageOrientation, HmdStageCm)
 			&& HmdStageOrientation.IsNormalized() && !HmdStageCm.ContainsNaN();
@@ -358,6 +360,10 @@ void AM1aCameraSpike::TickCamera(double Now)
 						const FVector CenterCamera = CameraMruk.InverseTransformPosition(CenterMruk);
 						MarkerStageCm = CameraStage.TransformPosition(CenterCamera);
 						ReprojectionPx = ErrorPx / UE_ARRAY_COUNT(CornersMruk);
+						if (ReprojectionPx <= 1.0)
+						{
+							GoodMarkerFrames.Add(FGoodMarkerFrame{MarkerStageCm, CenterCamera.Size()});
+						}
 					}
 				}
 			}
@@ -372,8 +378,32 @@ void AM1aCameraSpike::TickCamera(double Now)
 		? FString::Printf(TEXT("last marker %d Stage cm %s | reprojection %.2f px"), MarkerId, *MarkerStageCm.ToString(), ReprojectionPx)
 		: TEXT("no marker pose");
 	const FString CameraText = bHasStagePoseInInterval ? CameraStageCm.ToString() : TEXT("unavailable");
-	const FString Summary = FString::Printf(TEXT("Frames %d | recognized %d | %s | camera Stage cm %s"),
+	FString Summary = FString::Printf(TEXT("Frames %d | recognized %d | %s | camera Stage cm %s"),
 		FramesRead, FramesWithMarkers, *MarkerText, *CameraText);
+	if (bHasReferencePoint)
+	{
+		const int32 GoodFrameCount = GoodMarkerFrames.Num();
+		if (GoodFrameCount == 0)
+		{
+			Summary += TEXT(" | marker minus reference: no good frame");
+		}
+		else
+		{
+			const auto Median = [this, GoodFrameCount](const auto& Project)
+			{
+				Algo::SortBy(GoodMarkerFrames, Project);
+				return (Project(GoodMarkerFrames[(GoodFrameCount - 1) / 2]) +
+					Project(GoodMarkerFrames[GoodFrameCount / 2])) * 0.5;
+			};
+			const double X = Median([](const FGoodMarkerFrame& Frame) { return Frame.CenterStageCm.X; });
+			const double Y = Median([](const FGoodMarkerFrame& Frame) { return Frame.CenterStageCm.Y; });
+			const double Z = Median([](const FGoodMarkerFrame& Frame) { return Frame.CenterStageCm.Z; });
+			const double DistanceCm = Median([](const FGoodMarkerFrame& Frame) { return Frame.CameraDistanceCm; });
+			const FVector DeltaMm = (FVector(X, Y, Z) - ReferencePointStageCm) * 10.0;
+			Summary += FString::Printf(TEXT(" | marker minus reference: XY %.1f mm | Z %+.1f mm | 3D %.1f mm | delta mm %s | good frames %d | camera-marker distance %.1f cm"),
+				DeltaMm.Size2D(), DeltaMm.Z, DeltaMm.Size(), *DeltaMm.ToString(), GoodFrameCount, DistanceCm);
+		}
+	}
 	FString Diagnostics = TEXT(" | D unavailable");
 	if (bHasStagePoseInInterval)
 	{
@@ -404,6 +434,7 @@ void AM1aCameraSpike::TickCamera(double Now)
 	}
 	FramesRead = 0;
 	FramesWithMarkers = 0;
+	GoodMarkerFrames.Reset();
 	IgnoredMarkerCounts.Reset();
 	bSawNonBlackFrame = false;
 	bHasStagePoseInInterval = false;
@@ -413,17 +444,11 @@ void AM1aCameraSpike::TickCamera(double Now)
 
 void AM1aCameraSpike::StartTipSample()
 {
-	if (!bHasMarker)
-	{
-		UE_LOG(LogM1a, Log, TEXT("T skipped: no marker pose"));
-		ShowM1aMessage(TEXT("No marker pose for fingertip comparison"));
-		return;
-	}
 	bSamplingTip = true;
 	TipSampleEnd = GetWorld()->GetRealTimeSeconds() + 1.0;
 	TipSumStageCm = FVector::ZeroVector;
 	TipSamples = 0;
-	ShowM1aMessage(TEXT("Hold left index tip on the marker"), INDEX_NONE, 1.0f);
+	ShowM1aMessage(TEXT("Hold left index tip at the reference point"), INDEX_NONE, 1.0f);
 }
 
 void AM1aCameraSpike::TickTipSample(double Now)
@@ -434,7 +459,7 @@ void AM1aCameraSpike::TickTipSample(double Now)
 	{
 		bSamplingTip = false;
 		UE_LOG(LogM1a, Log, TEXT("T canceled: left index tracking unavailable"));
-		ShowM1aMessage(TEXT("Fingertip comparison canceled: left index tracking unavailable"));
+		ShowM1aMessage(TEXT("Reference point recording canceled: left index tracking unavailable"));
 		return;
 	}
 
@@ -443,18 +468,10 @@ void AM1aCameraSpike::TickTipSample(double Now)
 	if (Now >= TipSampleEnd)
 	{
 		bSamplingTip = false;
-		if (!bHasMarker)
-		{
-			UE_LOG(LogM1a, Log, TEXT("T canceled: no marker pose"));
-			ShowM1aMessage(TEXT("Fingertip comparison canceled: no marker pose"));
-			return;
-		}
-		const FVector TipStageCm = TipSumStageCm / TipSamples;
-		const FVector DeltaMm = (MarkerStageCm - TipStageCm) * 10.0;
-		const FString Result = FString::Printf(
-			TEXT("T: marker %d minus left tip | XY %.1f mm | Z %+.1f mm | 3D %.1f mm | delta mm %s | tip Stage cm %s | marker Stage cm %s | %d samples"),
-			MarkerId, DeltaMm.Size2D(), DeltaMm.Z, DeltaMm.Size(), *DeltaMm.ToString(), *TipStageCm.ToString(),
-			*MarkerStageCm.ToString(), TipSamples);
+		ReferencePointStageCm = TipSumStageCm / TipSamples;
+		bHasReferencePoint = true;
+		const FString Result = FString::Printf(TEXT("T: reference point Stage cm %s | %d samples"),
+			*ReferencePointStageCm.ToString(), TipSamples);
 		UE_LOG(LogM1a, Log, TEXT("%s"), *Result);
 		ShowM1aMessage(Result);
 	}

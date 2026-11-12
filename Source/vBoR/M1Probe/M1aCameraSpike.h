@@ -55,6 +55,15 @@ private:
 	FVector MarkerStageCm = FVector::ZeroVector;
 	double ReprojectionPx = 0.0;
 
+	struct FGoodMarkerFrame
+	{
+		FVector CenterStageCm;
+		double CameraDistanceCm;
+	};
+	TArray<FGoodMarkerFrame> GoodMarkerFrames;
+	bool bHasReferencePoint = false;
+	FVector ReferencePointStageCm = FVector::ZeroVector;
+
 	bool bSamplingTip = false;
 	double TipSampleEnd = 0.0;
 	FVector TipSumStageCm = FVector::ZeroVector;
