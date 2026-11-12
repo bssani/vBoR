@@ -7,7 +7,7 @@
 | 베이스 브랜치 | `main` (**R2c 머지 뒤** — 금지 범위를 R2c 판정 경계 표시에 그린다) |
 | 작업 브랜치 | `codex/R7-handle-no-push-zone` |
 | 리뷰 파일 | `Docs/Reviews/R7-handle-no-push-zone.md` (첫 리뷰 때 생김) |
-| 상태 | 명세 작성 |
+| 상태 | 머지 끝(PR #106). **D4는 [R7b](R7b-keep-push-near-handle.md)로 바뀜**(2026-11-12 — 이미 밀던 손은 범위에 들어가도 이어 민다) |
 | 에디터 작업 | **없음** |
 | 앞 명세 | [R2c-judgment-guide.md](R2c-judgment-guide.md) |
 
