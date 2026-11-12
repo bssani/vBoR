@@ -39,3 +39,23 @@
 
 - 사용자: 이 브랜치(`codex/M1a-camera-spike`, 지금 작업 폴더에 체크아웃됨)로 빌드된 에디터에서 `L_M1a_CameraSpike` VR Preview → 메모 §4 Q1–Q3. `Saved/Logs/vBoR.log`의 `LogM1a` 줄을 Claude에 넘긴다.
 - Claude: 로그로 축·좌표계(카메라 − 손끝 차이)를 판단하고 M1 명세를 개정한다.
+
+## 2회차 — 개정 1 (2026-11-12, `f5235ba`) — 통과
+
+**판정:** 개정 1의 1–4를 모두 충족한다. 바뀐 파일은 `Source/vBoR/M1Probe/M1aCameraSpike.h/.cpp`뿐이고, 금지 사항(§2)을 어기지 않았다.
+
+- **변환 순서:** UE `FTransform`의 `A * B`는 A를 먼저 적용한다. MRUK는 `Position = Head + HeadRot·LensPos`, `Orientation = HeadRot·LensRot`으로 계산한다(`MRUKPassthroughCameraAccess.cpp:239-240`). 이것은 `LensOffset * Head`와 같다. 따라서 아래 세 식이 모두 맞다.
+  - `CameraStage = LensOffset * HmdStage`
+  - `HmdMruk = LensOffset⁻¹ * CameraMruk`
+  - `D = HmdMruk⁻¹ * HmdStage`(MRUK 점 → 머리 기준 → Stage)
+  - 마커는 `CameraMruk⁻¹`로 카메라 기준 좌표가 된 뒤 `CameraStage`로 옮겨진다.
+- **재투영:** 오차는 MRUK 공간 안에서 왕복해 계산한다. 이전과 같은 의미다(축과 투영 확인용).
+- **ID:** 1–4만 받는다. 그 밖의 ID는 개수로만 기록한다. ID 1–4 중 여러 개가 보이면 처음 찾은 것을 쓴다. 메모는 마커 1장 시험이므로 문제없다.
+- **로그:** `D`, Pawn 위치·Yaw, 무시한 ID가 같은 요약 줄에 찍힌다(1회차 참고 2 해결).
+- **빌드·시험:** non-unity 재시도와 unity 모두 성공했다. `PoseFromCorners` 1/1. Codex가 고친 C2662 오류는 첫 non-unity 빌드에서 잡힌 것이다.
+- **참고:** `D`는 "지금" 헤드셋 자세와 영상 시각의 MRUK 자세를 비교한다. 그래서 머리를 움직이는 동안에는 지연만큼 흔들린다. 메모 Q2′의 "천천히 회전" 단계가 바로 이것을 보려는 것이다. 판정할 때는 머리를 멈춘 구간의 `D`끼리 비교한다.
+
+### 다음
+
+- 사용자: 메모 개정 1 "사용자가 다시 (Q2′)". 끝나면 `Saved/Logs/vBoR.log`를 복사해 두고 Claude에 알린다.
+- `main` 머지: 50% 전에는 하지 않는다(1회차 참고 4).
