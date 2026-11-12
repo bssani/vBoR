@@ -40,3 +40,31 @@
 | Q3 | Q2 1회를 Air Link(Puppis)로 | 카메라가 켜지는지 |
 
 결과 로그(`Saved/Logs/vBoR.log`의 `LogM1a`)를 Claude에 넘기면 M1을 개정한다. 시험 상태는 `not-tested`(스파이크).
+
+## 개정 1 (Claude 2026-11-12) — Q1·Q2 1차 결과: MRUK 카메라 자세가 Stage가 아니다
+
+**사용자 Quest 3 결과(케이블 Link, 모니터에 띄운 마커, 약 20 cm, 2회 Play, `LogM1a`):**
+- 카메라 시작 성공(1280×960, intrinsics 정상). 마커를 볼 때 영상마다 인식. 재투영 오차는 머리를 멈췄을 때 0.18–0.76 px, 움직일 때 3–6 px.
+- 계산한 카메라–마커 거리(약 21–23 cm)가 실제(약 20 cm)와 맞는다 → 크기·PnP는 맞다.
+- **`T` 3회 모두 마커 − 손끝 ≈ X −8.15 m, Y −5.1~−5.2 m, Z +6.1~+6.3 m.** 손끝 Stage는 (33–35, 17–19, 72–74) cm로 정상. 그런데 "camera Stage cm"는 (−770, −515, 688) 근처로, 높이 6.9 m라 Stage일 수 없다.
+- 원인: `UMRUKPassthroughCameraAccessSubsystem::GetCameraPose`는 `MRUKShared::GetHeadsetPoseAtTime`의 자세에 렌즈 오프셋을 더한다(`Plugins/MetaXR/Source/MRUtilityKit/Private/MRUKPassthroughCameraAccess.cpp:229-240`). 이 자세는 **MRUK 런타임 공간**이지 UE OpenXR Stage가 아니다. 스파이크는 이를 Stage로 가정했다(`M1aCameraSpike.cpp:285`, `SolveMarkerCorners(…, FTransform(Orientation, CameraStageCm), …)`).
+  - 재투영 오차가 작게 나온 건 같은 MRUK 공간 안에서 왕복했기 때문이다(`WorldToViewportPoint`도 같은 자세를 씀). 축과 투영은 맞다.
+  - 두 번의 Play에서 차이가 거의 같았다 → 기준 공간의 고정 차이일 가능성이 크다. 이번 개정으로 확인한다.
+- 그 밖: 방 안의 무언가가 **ID 17**로 잘못 인식됐다(0.18–0.84 px). 손가락이 마커를 가리는 순간 마커 Z가 27 cm 튄 프레임이 하나 있었다(1.23 px).
+
+### 할 것 (같은 브랜치 `codex/M1a-camera-spike`, 새 커밋)
+
+1. **Stage 변환.** 마커는 카메라 기준 상대 위치로만 MRUK 값을 쓰고, Stage 위치는 UE 헤드셋 자세로 만든다.
+   - `MarkerCam = CamPose_MRUK⁻¹ · Marker_MRUK`(지금 풀이 결과를 카메라 기준으로).
+   - `CamPose_Stage = HmdPose_Stage · LensOffset`. `HmdPose_Stage`는 `GEngine->XRSystem->GetCurrentPose(IXRTrackingSystem::HMDDeviceId, …)`(`Engine/Source/Runtime/HeadMountedDisplay/Public/IXRTrackingSystem.h:137`, 이 프로젝트에서 이미 Stage로 쓰는 값 — `VBoRVehicleAlignmentComponent.cpp:317`). `LensOffset`은 intrinsics의 `LensOffsetPosition`·`LensOffsetOrientation`(MRUK가 `GetCameraPose`에서 붙이는 방식과 같게).
+   - `Marker_Stage = CamPose_Stage · MarkerCam`. `T` 비교와 VR 구는 이 값을 쓴다.
+   - 영상 시각과 "지금" 자세 사이의 지연이 있다. 측정은 머리를 멈추고 하므로 이번에는 보정하지 않는다.
+2. **기준 차이 로그(1초 요약에 추가).** `D = HmdPose_Stage · HmdPose_MRUK⁻¹`. `HmdPose_MRUK`는 `CamPose_MRUK · LensOffset⁻¹`. 위치(cm)와 Yaw·Pitch·Roll(deg)을 쓴다. Pawn 위치·Yaw도 같은 줄에 쓴다(리뷰 참고 2).
+3. **ID 거르기.** ID 1–4만 받는다. 그 밖의 ID는 1초 요약에 "ignored id N" 개수로만 쓴다.
+4. 하지 말 것은 §2 그대로다. 시험은 `vBoR.M1a.PoseFromCorners` 그대로 두고, 새 자동 시험은 만들지 않는다. 빌드(non-unity·unity)와 이 시험 하나만 한 번 돌린다. 전체 `vBoR.*`는 돌리지 않는다(Interaction 코드 변경 없음).
+
+### 사용자가 다시 (Q2′)
+
+- 같은 방법(모니터 마커, `Marker Size Mm` = 잰 값). 20 cm와 50 cm에서 각각 `T` 5회. 머리를 멈추고 한다.
+- 그 사이 머리를 천천히 좌우로 돌리며 10초 동안 마커를 본다 → `D`가 일정한지 본다.
+- 판정(Claude): `D`가 1 cm·0.5° 안에서 일정하고 `T` 차이가 1 cm 안팎이면 M1을 이 방식으로 개정한다. `D`가 머리 움직임에 따라 흔들리면 시각 보정(영상 시각의 UE 자세)이 따로 필요하다.
