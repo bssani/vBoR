@@ -63,10 +63,11 @@ bool SolveMarkerCorners(const FVector2f (&Pixels)[4], double SideMm, const FTran
 		return false;
 	}
 
-	// OpenCV (right, down, forward) to MRUK projection axes (forward, right, down)
+	// OpenCV (right, down, forward) to UE camera (forward, right, up). MRUK pose is Z up,
+	// but MRUK ray/projection helpers use +Z = image down (MRUKPassthroughCameraAccess.cpp:310-313, 341-343) -> mirrored height (M1a rev 3)
 	const auto ToPoseSpace = [&CameraPose](const cv::Vec3d& Point)
 	{
-		return CameraPose.TransformPosition(FVector(Point[2], Point[0], Point[1]));
+		return CameraPose.TransformPosition(FVector(Point[2], Point[0], -Point[1]));
 	};
 	Center = ToPoseSpace(Translation);
 	if (Translation[2] <= 0.0 || Center.ContainsNaN())
@@ -335,7 +336,7 @@ void AM1aCameraSpike::TickCamera(double Now)
 				TopLeft = CameraMrukOrientation.UnrotateVector(TopLeft);
 				BottomRight = CameraMrukOrientation.UnrotateVector(BottomRight);
 
-				// MRUK rays include the sensor crop (M1 D5)
+				// MRUK rays include the sensor crop (M1 D5). Pixel intrinsics only; its Z sign is image down
 				const FVector2D TopLeftSlope(TopLeft.Y / TopLeft.X, TopLeft.Z / TopLeft.X);
 				const FVector2D BottomRightSlope(BottomRight.Y / BottomRight.X, BottomRight.Z / BottomRight.X);
 				const FVector2D ImageSize(Size.X, Size.Y);
@@ -347,10 +348,13 @@ void AM1aCameraSpike::TickCamera(double Now)
 				if (SolveMarkerCorners(Marker->Corners, MarkerSizeMm, CameraMruk,
 					FocalPx, PrincipalPx, CenterMruk, CornersMruk))
 				{
+					// Own Z-up projection (MRUK WorldToViewportPoint is mirrored, M1a rev 3)
 					double ErrorPx = 0.0;
 					for (int32 Index = 0; Index < UE_ARRAY_COUNT(CornersMruk); ++Index)
 					{
-						const FVector2D ProjectedPx = Camera->WorldToViewportPoint(CornersMruk[Index]) * ImageSize;
+						const FVector Local = CameraMruk.InverseTransformPosition(CornersMruk[Index]);
+						const FVector2D ProjectedPx(PrincipalPx.X + FocalPx.X * Local.Y / Local.X,
+							PrincipalPx.Y - FocalPx.Y * Local.Z / Local.X);
 						ErrorPx += FVector2D::Distance(ProjectedPx, FVector2D(Marker->Corners[Index]));
 					}
 					if (FMath::IsFinite(ErrorPx))
@@ -494,7 +498,8 @@ bool FM1aPoseFromCornersTest::RunTest(const FString& Parameters)
 	};
 	const FQuat MarkerTilt = FRotator(10.0, -20.0, 8.0).Quaternion();
 	const FVector CornerOffsets[] = {
-		FVector(0, -3, -3), FVector(0, 3, -3), FVector(0, 3, 3), FVector(0, -3, 3),
+		// Image order TL, TR, BR, BL in Z-up camera (rev 3)
+		FVector(0, -3, 3), FVector(0, 3, 3), FVector(0, 3, -3), FVector(0, -3, -3),
 	};
 
 	for (int32 PoseIndex = 0; PoseIndex < UE_ARRAY_COUNT(Cameras); ++PoseIndex)
@@ -503,9 +508,10 @@ bool FM1aPoseFromCornersTest::RunTest(const FString& Parameters)
 		for (int32 CornerIndex = 0; CornerIndex < UE_ARRAY_COUNT(Pixels); ++CornerIndex)
 		{
 			const FVector Point = LocalCenter + MarkerTilt.RotateVector(CornerOffsets[CornerIndex]);
+			// UE camera is Z up, image y is down (M1a rev 3)
 			Pixels[CornerIndex] = FVector2f(
 				PrincipalPx.X + FocalPx.X * Point.Y / Point.X,
-				PrincipalPx.Y + FocalPx.Y * Point.Z / Point.X);
+				PrincipalPx.Y - FocalPx.Y * Point.Z / Point.X);
 		}
 
 		const FTransform& Camera = Cameras[PoseIndex];
@@ -516,6 +522,29 @@ bool FM1aPoseFromCornersTest::RunTest(const FString& Parameters)
 		{
 			const double ErrorMm = FVector::Distance(Center, Camera.TransformPosition(LocalCenter)) * 10.0;
 			TestTrue(FString::Printf(TEXT("Pose %d center error %.3f mm <= 1 mm"), PoseIndex, ErrorMm), ErrorMm <= 1.0);
+		}
+	}
+
+	// Above optical axis -> smaller image y -> solved back above (rev 3 mirror guard)
+	{
+		const FVector Above(80.0, 0.0, 12.0);
+		FVector2f Pixels[4];
+		for (int32 CornerIndex = 0; CornerIndex < UE_ARRAY_COUNT(Pixels); ++CornerIndex)
+		{
+			const FVector Point = Above + MarkerTilt.RotateVector(CornerOffsets[CornerIndex]);
+			Pixels[CornerIndex] = FVector2f(
+				PrincipalPx.X + FocalPx.X * Point.Y / Point.X,
+				PrincipalPx.Y - FocalPx.Y * Point.Z / Point.X);
+		}
+		TestTrue(TEXT("Above axis projects above principal point"), Pixels[0].Y < PrincipalPx.Y);
+		FVector Center;
+		FVector Corners[4];
+		if (TestTrue(TEXT("Solve above axis"),
+			SolveMarkerCorners(Pixels, 60.0, FTransform::Identity, FocalPx, PrincipalPx, Center, Corners)))
+		{
+			TestTrue(FString::Printf(TEXT("Solved Z %.2f cm > 0"), Center.Z), Center.Z > 0.0);
+			TestTrue(FString::Printf(TEXT("Above center error %.3f mm <= 1 mm"), FVector::Distance(Center, Above) * 10.0),
+				FVector::Distance(Center, Above) * 10.0 <= 1.0);
 		}
 	}
 	return true;
