@@ -46,6 +46,7 @@ bool FVBoRDoorMotion::BeginGrab(int32 Hand, int32 Handle, const FVBoRDoorHand& I
 	GrabHand = Hand; GrabHandle = Handle;
 	ClearCoast();
 	PushHand = PushFace = INDEX_NONE;
+	bKeepPushNearHandle[0] = bKeepPushNearHandle[1] = false;
 	for (int32 H = 0; H < 2; ++H) { bContactNear[H] = false; ContactFace[H] = PushSide[H] = INDEX_NONE; LastIgnored[H] = EVBoRDoorIgnore::Count; }
 	RebaseGrab(Input.Points[0]);
 	if (Handle == 2) { ++Metrics.GripGrabs[Hand]; }
@@ -145,7 +146,7 @@ bool FVBoRDoorMotion::FindPush(int32 Hand, const FVBoRDoorHand& Input, int32 Fac
 	const double PalmAngle = FMath::RadiansToDegrees(FMath::Acos(FMath::Clamp(FVector::DotProduct(Palm, PushInward(Face)), -1.0, 1.0)));
 	PalmAngleDeg[Hand] = PalmAngle;
 	if (bUseLatch && bLocked) { OutReason = EVBoRDoorIgnore::Locked; }
-	else if (Input.bNearHandle) { OutReason = EVBoRDoorIgnore::NearHandle; }
+	else if (Input.bNearHandle && !(bKeepPushNearHandle[Hand] && PushSide[Hand] == Face)) { OutReason = EVBoRDoorIgnore::NearHandle; }
 	// Keep locked count first. May allow closing face only after unlock (P2d R1 D7)
 	else if (PushOpens(Face) && !bAllowPalmOpening) { OutReason = EVBoRDoorIgnore::OpeningDisabled; }
 	else if (!bCrossing) { OutReason = EVBoRDoorIgnore::Behind; }
@@ -178,6 +179,7 @@ void FVBoRDoorMotion::MoveTo(double Desired, double DeltaSeconds, bool bPushing)
 		AngleDeg = 0; bLocked = true; bLatchArmed = false;
 		++Metrics.Latches;
 		GrabHand = GrabHandle = PushHand = PushFace = INDEX_NONE;
+		bKeepPushNearHandle[0] = bKeepPushNearHandle[1] = false;
 	}
 	if (bPushing) { Metrics.PushedDeg += FMath::Abs(AngleDeg - Before); }
 	if (bCoast && ((bUseLatch && bLocked) || AngleDeg <= 0 || AngleDeg >= MaxAngleDeg)) { ClearCoast(); }
@@ -225,6 +227,10 @@ void FVBoRDoorMotion::Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSecon
 	if (!bCoast) { ClearCoast(); } // Runtime off must discard old momentum (P5za D9)
 	PalmAngleDeg[0] = PalmAngleDeg[1] = -1;
 	// ── 1) Tracking loss/recovery ──
+	for (int32 H = 0; H < 2; ++H)
+	{
+		if (!Hands[H].bTracked) { bKeepPushNearHandle[H] = false; }
+	}
 	const int32 Driver = GrabHand;
 	if (Driver != INDEX_NONE && !Hands[Driver].bTracked)
 	{
@@ -284,8 +290,17 @@ void FVBoRDoorMotion::Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSecon
 				RecordIgnore(H, EVBoRDoorIgnore::Count);
 				continue;
 			}
-			if (PushHand != H && PushSide[H] != INDEX_NONE && HasLeftPushSide(Hands[H], PushSide[H])) { PushSide[H] = INDEX_NONE; }
-			if (bFound) { bContactNear[H] = false; ContactFace[H] = INDEX_NONE; RecordIgnore(H, EVBoRDoorIgnore::Count); continue; }
+			if (PushHand != H && PushSide[H] != INDEX_NONE && HasLeftPushSide(Hands[H], PushSide[H]))
+			{
+				PushSide[H] = INDEX_NONE;
+				bKeepPushNearHandle[H] = false;
+			}
+			if (bFound && !Hands[H].bNearHandle)
+			{
+				bContactNear[H] = false; ContactFace[H] = INDEX_NONE;
+				RecordIgnore(H, EVBoRDoorIgnore::Count);
+				continue;
+			}
 			int32 Face = ContactFace[H];
 			if (PushHand == H) { Face = PushFace; }
 			else if (PushSide[H] != INDEX_NONE) { Face = PushSide[H]; }
@@ -301,8 +316,20 @@ void FVBoRDoorMotion::Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSecon
 			double Target = AngleDeg;
 			EVBoRDoorIgnore Reason;
 			const bool bPush = FindPush(H, Hands[H], Face, Target, Reason);
+			if (bFound)
+			{
+				// Count other hand's zone rejection without changing push priority (R7b D4)
+				bContactNear[H] = false; ContactFace[H] = INDEX_NONE; PalmAngleDeg[H] = -1;
+				RecordIgnore(H, Reason == EVBoRDoorIgnore::NearHandle ? Reason : EVBoRDoorIgnore::Count);
+				continue;
+			}
 			RecordIgnore(H, Reason);
-			if (!bPush) { continue; }
+			if (!bPush)
+			{
+				// One frame of full withdrawal ends bypass before the next crossing (R7b D3)
+				if (PushHand == H && bKeepPushNearHandle[H] && HasLeftPushSide(Hands[H], PushSide[H])) { bKeepPushNearHandle[H] = false; }
+				continue;
+			}
 			const bool bOpposite = bCoast && (Face == 1 ? CoastSpeed < 0 : CoastSpeed > 0);
 			if (bOpposite) { ClearCoast(); } // Block current momentum before measuring new direction (P5za D4)
 			const double CoastTarget = AngleDeg + (bCoast ? CoastDelta(DeltaSeconds) : 0);
@@ -318,6 +345,7 @@ void FVBoRDoorMotion::Advance(const FVBoRDoorHand (&Hands)[2], double DeltaSecon
 			PushHand = H; PushFace = Face; PushSide[H] = Face;
 			const double Before = AngleDeg;
 			MoveTo(Target, DeltaSeconds, true);
+			if (PushHand == H && AngleDeg != Before) { bKeepPushNearHandle[H] = true; }
 			if (!bOpposite) { MeasureCoast(Before, DeltaSeconds); }
 			bFound = true;
 		}
@@ -338,6 +366,7 @@ void FVBoRDoorMotion::Reset()
 	AngleDeg = 0; bLocked = bUseLatch; bLatchArmed = bPaused = false;
 	GrabHand = GrabHandle = PushHand = PushFace = INDEX_NONE;
 	bHavePrevious[0] = bHavePrevious[1] = false;
+	bKeepPushNearHandle[0] = bKeepPushNearHandle[1] = false;
 	for (int32 H = 0; H < 2; ++H) { bContactNear[H] = false; ContactFace[H] = PushSide[H] = INDEX_NONE; LastIgnored[H] = EVBoRDoorIgnore::Count; }
 	PalmAngleDeg[0] = PalmAngleDeg[1] = -1;
 }

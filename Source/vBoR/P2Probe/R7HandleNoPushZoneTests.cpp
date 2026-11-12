@@ -119,26 +119,28 @@ R7_TEST(3, "AnyOfFivePoints")
 	return true;
 }
 
-R7_TEST(4, "EndPushLikeWithdrawal")
+namespace
 {
-	for (bool Coast : {false, true})
+	void TestR7PushContinuesNearHandle(FAutomationTestBase& Test)
 	{
-		FR7World W; W.AddHandle(); W.Door->bCoastAfterRelease = Coast; W.Play(); W.Cross(50);
-		TestEqual(TEXT("Push active before entering zone"), W.Door->GetMotion().PushHand, 0);
-		const double Before = W.Door->GetMotion().AngleDeg;
-		FVBoRDoorMotion Withdrawn = W.Door->GetMotion();
-		FVBoRDoorHand Hands[2] = {R7Hand(200, 200), {}}; Withdrawn.Advance(Hands, R7Dt);
-		W.Step(R7Hand(W.NearX(), -3, Before));
-		const auto& State = W.Door->GetMotion();
-		TestEqual(TEXT("Push ends in entering frame"), State.PushHand, INDEX_NONE);
-		TestEqual(TEXT("Same angle as withdrawal"), State.AngleDeg, Withdrawn.AngleDeg);
-		TestEqual(TEXT("Same momentum as withdrawal"), State.CoastSpeed, Withdrawn.CoastSpeed);
-		TestEqual(TEXT("Same push travel as withdrawal"), State.Metrics.PushedDeg, Withdrawn.Metrics.PushedDeg);
-		TestEqual(TEXT("No extra push start"), State.Metrics.PushStarts[0][1], 1);
-		TestEqual(TEXT("No interaction color driver"), W.Door->IsSpectatorInteracting(), false);
-		if (Coast) { TestTrue(TEXT("Coast continues"), State.AngleDeg > Before); }
-		else { TestEqual(TEXT("Without coast stops"), State.AngleDeg, Before); }
+		for (bool Coast : {false, true})
+		{
+			FR7World W; W.AddHandle(); W.Door->bCoastAfterRelease = Coast; W.Play(); W.Cross(50);
+			const auto& Motion = W.Door->GetMotion();
+			Test.TestEqual(TEXT("Push active before entering zone"), Motion.PushHand, 0);
+			const double Before = Motion.AngleDeg;
+			W.Step(R7Hand(W.NearX(), -3, Before));
+			Test.TestEqual(TEXT("Same hand drives inside zone"), Motion.PushHand, 0);
+			Test.TestTrue(TEXT("Push opens farther inside zone"), Motion.AngleDeg > Before);
+			Test.TestEqual(TEXT("No near-handle rejection"), Motion.Metrics.Ignored[R7Near], 0);
+			Test.TestEqual(TEXT("One push start"), Motion.Metrics.PushStarts[0][1], 1);
+		}
 	}
+}
+
+R7_TEST(4, "KeepPushNearHandle")
+{
+	TestR7PushContinuesNearHandle(*this);
 	return true;
 }
 
@@ -278,4 +280,141 @@ R7_TEST(12, "MetricsText")
 }
 
 #undef R7_TEST
+
+#define R7B_TEST(N, Name) IMPLEMENT_SIMPLE_AUTOMATION_TEST(FR7bE##N, "vBoR.R7b.E" #N Name, EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter) bool FR7bE##N::RunTest(const FString&)
+
+R7B_TEST(1, "KeepPushNearHandle")
+{
+	TestR7PushContinuesNearHandle(*this);
+	return true;
+}
+
+R7B_TEST(2, "CatchUpAfterCoast")
+{
+	FR7World W; W.AddHandle(); W.Door->bCoastAfterRelease = true; W.Play();
+	const auto& Motion = W.Door->GetMotion();
+	W.Step(R7Hand(50, -6));
+	const auto FastHand = R7Hand(50, -5, 20);
+	W.Step(FastHand);
+	TestEqual(TEXT("Fast push drives door"), Motion.PushHand, 0);
+	const double Pushed = Motion.Metrics.PushedDeg;
+	W.Step(FastHand);
+	TestEqual(TEXT("Coast overtakes stopped hand"), Motion.PushHand, INDEX_NONE);
+	TestEqual(TEXT("Overtake has no pushed travel"), Motion.Metrics.PushedDeg, Pushed);
+	const double Before = Motion.AngleDeg;
+	auto CatchUp = R7Hand(50, 4, Before);
+	CatchUp.Points[1] = R7Hand(W.NearX(), -3, Before).Points[1];
+	W.Step(CatchUp);
+	TestEqual(TEXT("Catching up inside zone drives door"), Motion.PushHand, 0);
+	TestTrue(TEXT("Hand opens door farther"), Motion.AngleDeg > Before && Motion.Metrics.PushedDeg > Pushed);
+	TestEqual(TEXT("Restart metric keeps counting hand changes"), Motion.Metrics.PushStarts[0][1], 2);
+	TestEqual(TEXT("No near-handle rejection"), Motion.Metrics.Ignored[R7Near], 0);
+	return true;
+}
+
+R7B_TEST(3, "WithdrawAndReenter")
+{
+	FR7World W; W.AddHandle(); W.Play(); W.Cross(50);
+	const auto& Motion = W.Door->GetMotion();
+	W.Step(R7Hand(W.NearX(), -3, Motion.AngleDeg));
+	TestEqual(TEXT("Push active in zone"), Motion.PushHand, 0);
+	const double Before = Motion.AngleDeg;
+	W.Step(R7Hand(W.NearX(), -10, Before));
+	W.Step(R7Hand(W.NearX(), -3, Before));
+	TestEqual(TEXT("Re-entry cannot push"), Motion.AngleDeg, Before);
+	TestEqual(TEXT("Re-entry is rejected once"), Motion.Metrics.Ignored[R7Near], 1);
+	return true;
+}
+
+R7B_TEST(4, "GrabEndsPush")
+{
+	FR7World W; W.AddHandle(2); W.Play(); W.Cross(50);
+	auto& Motion = FR7TestAccess::Motion(W.Door);
+	W.Step(R7Hand(W.NearX(), -3, Motion.AngleDeg));
+	TestEqual(TEXT("Push active in zone"), Motion.PushHand, 0);
+	const double Before = Motion.AngleDeg;
+	TestTrue(TEXT("Grip starts during push"), Motion.BeginGrab(0, 2, R7Hand(80, -8, Before), false));
+	TestEqual(TEXT("Grab supersedes push"), Motion.PushHand, INDEX_NONE);
+	W.Step(R7Hand(80, -8, Before + 5));
+	TestTrue(TEXT("Grab drives door"), Motion.AngleDeg > Before);
+	TestTrue(TEXT("Grip released"), Motion.ReleaseGrab(true));
+	const double Released = Motion.AngleDeg;
+	W.Cross(W.NearX(), Released);
+	TestEqual(TEXT("Released hand cannot push"), Motion.AngleDeg, Released);
+	TestEqual(TEXT("Release is rejected once"), Motion.Metrics.Ignored[R7Near], 1);
+	return true;
+}
+
+R7B_TEST(5, "TrackingLossEndsPush")
+{
+	FR7World W; W.AddHandle(); W.Play(); W.Cross(50);
+	const auto& Motion = W.Door->GetMotion();
+	W.Step(R7Hand(W.NearX(), -3, Motion.AngleDeg));
+	TestEqual(TEXT("Push active in zone"), Motion.PushHand, 0);
+	const double Before = Motion.AngleDeg;
+	W.Step({});
+	TestEqual(TEXT("Tracking loss ends active push"), Motion.PushHand, INDEX_NONE);
+	TestEqual(TEXT("One tracking loss"), Motion.Metrics.PushTrackingLosses, 1);
+	W.Step(R7Hand(W.NearX(), -3, Before));
+	TestEqual(TEXT("Recovered hand cannot push"), Motion.AngleDeg, Before);
+	TestEqual(TEXT("Recovery is rejected once"), Motion.Metrics.Ignored[R7Near], 1);
+	return true;
+}
+
+R7B_TEST(6, "OtherHandRejectedIndependently")
+{
+	FR7World W; W.AddHandle(); W.Play(); W.Cross(50);
+	const auto& Motion = W.Door->GetMotion();
+	W.Door->Hands[1] = R7Hand(W.NearX(), -6, Motion.AngleDeg);
+	W.Step(R7Hand(W.NearX(), -4, Motion.AngleDeg));
+	for (int32 I = 0; I < 2; ++I)
+	{
+		const double Before = Motion.AngleDeg;
+		W.Door->Hands[1] = R7Hand(W.NearX(), -2, Before);
+		W.Step(R7Hand(W.NearX(), -4, Before));
+		TestTrue(TEXT("Left keeps driving inside zone"), Motion.PushHand == 0 && Motion.AngleDeg > Before);
+		TestEqual(TEXT("Right contact rejected once"), Motion.Metrics.Ignored[R7Near], 1);
+	}
+	TestEqual(TEXT("Right never starts a push"), Motion.Metrics.PushStarts[1][1], 0);
+	return true;
+}
+
+R7B_TEST(7, "LatchClearsPush")
+{
+	FVBoRDoorMotion Motion;
+	Motion.AngleDeg = 20;
+	Motion.Unlock();
+	FVBoRDoorHand Hands[2];
+	const auto Close = [&](double Angle, double Y, bool bNearHandle)
+	{
+		Hands[0] = R7Hand(80, Y, Angle);
+		Hands[0].PalmNormal *= -1;
+		Hands[0].bNearHandle = bNearHandle;
+		Motion.Advance(Hands, R7Dt);
+	};
+	Close(20, 6, false);
+	Close(20, 3, false);
+	Close(Motion.AngleDeg, 3, true);
+	TestEqual(TEXT("Closing push active in zone"), Motion.PushHand, 0);
+	TestTrue(TEXT("Latch armed before closing"), Motion.bLatchArmed);
+	Close(-3, 5, true);
+	TestTrue(TEXT("Push closes and latches"), Motion.bLocked && Motion.AngleDeg == 0);
+	Close(0, 3, true);
+	TestEqual(TEXT("Locked takes priority"), Motion.Metrics.Ignored[static_cast<int32>(EVBoRDoorIgnore::Locked)], 1);
+	TestTrue(TEXT("Latch unlocked again"), Motion.Unlock());
+	Close(0, 3, true);
+	TestEqual(TEXT("Latch ended near-handle continuation"), Motion.Metrics.Ignored[R7Near], 1);
+	TestEqual(TEXT("No new push in zone"), Motion.Metrics.PushStarts[0][0], 1);
+	return true;
+}
+
+R7B_TEST(8, "ZeroDisables")
+{
+	FR7World W; W.AddHandle(); W.Door->NoPushNearHandleCm = 0; W.Play(); W.Cross(W.NearX());
+	TestTrue(TEXT("Zero margin allows fresh push at handle"), W.Door->GetMotion().AngleDeg > 0);
+	TestEqual(TEXT("No near-handle rejection"), W.Door->GetMotion().Metrics.Ignored[R7Near], 0);
+	return true;
+}
+
+#undef R7B_TEST
 #endif
