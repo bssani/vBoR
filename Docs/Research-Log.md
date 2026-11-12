@@ -11,6 +11,16 @@
 
 ---
 
+## 2026-11-12 — 안내판 디자인 — Meta VR 색 가이드 (R9)
+
+사용자: 안내판이 흰 바탕·검정 글씨로 너무 기본이다. 전문적이고 진중하게, Blueprint에서 고칠 수 있게.
+- **Meta Design › Color(last_updated 2026-04-19):** 순수 흰색(#FFFFFF)·검정(#000000)은 VR에서 눈 피로를 일으킨다. 밝은 바탕 #DADADA 이하, 어두운 바탕 #1A1A1A 이상. 글자 대비 4.5:1(큰 글 18pt+ 또는 굵은 14pt+는 3:1), WCAG 2.1 AA. 실제 기기에서 확인할 것, Quest 화면은 모니터보다 약간 채도가 높게 보인다. 하드코딩 대신 의미 토큰(배경·글·강조)으로.
+- 지금 판: Slate `WhiteBrush` + `FLinearColor(0.95)`(≈ sRGB #F9F9F9) + 순검정 Bold 40(`VBoRScenarioRunner.cpp:111-115`, `:153`) — 가이드와 반대.
+- 시안 3개(캔버스 `https://claude.ai/artifact/B7WhSY53RbsXC9HW5tgPXG`): Graphite(#1E2226/#E3E6E9, 강철 파랑 #6F8FAF), Navy Instrument(#18212B/#DCE3EA, 앰버 #C99A4B, `GUIDANCE` 머리글), Soft Light(#D3D1CC/#22262A). WCAG 대비(Claude 계산): 본문 10.0–12.8, 이름표 6.6–12.8, Navy 머리글 5.75.
+- 사용자 결정: WBP 하나 + 스타일 프리셋 3개를 Runner Details에서 고름 → 명세 R9.
+
+---
+
 ## 2026-11-11 — 마커 정렬 — Quest 카메라·OpenCV (M1)
 
 사용자 질문: Unity에서 하는 마커·카메라 기반 캘리브레이션을 Unreal에서도 할 수 있나, 실물 Buck 볼트 4개(= `BP_Car_Core` 정렬점 1–4, 사용자 확인)에 마커를 붙여 정렬할 수 있나. **결론: 된다. 학습은 필요 없다**(인쇄 마커는 정해진 무늬 인식). 사용자 결정: 새 레벨에서 먼저 시험하고 통과하면 main에 넣는다 → 명세 M1.
