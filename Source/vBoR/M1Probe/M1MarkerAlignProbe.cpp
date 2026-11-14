@@ -157,6 +157,11 @@ void AM1MarkerAlignProbe::StartCapture(double Now)
 		Publish(TEXT("Vehicle alignment or player pawn unavailable"));
 		return;
 	}
+	if (GetMarkerArrowWorld(*Alignment->GetOwner()).IsZero())
+	{
+		Publish(TEXT("Marker arrow direction invalid"));
+		return;
+	}
 
 	TArray<UVBoRAlignPointComponent*> Points;
 	Alignment->GetOwner()->GetComponents(Points);
@@ -195,6 +200,15 @@ void AM1MarkerAlignProbe::StartCapture(double Now)
 	CaptureStart = Now;
 	bCapturing = true;
 	Publish(TEXT("Marker capture started"));
+}
+
+FVector AM1MarkerAlignProbe::GetMarkerArrowWorld(const AActor& Car) const
+{
+	if (MarkerArrowLocal.ContainsNaN())
+	{
+		return FVector::ZeroVector;
+	}
+	return Car.GetActorTransform().TransformVectorNoScale(MarkerArrowLocal).GetSafeNormal2D();
 }
 
 bool AM1MarkerAlignProbe::CheckModel(const FM1CameraFrame& Frame)
@@ -345,7 +359,12 @@ void AM1MarkerAlignProbe::FinishCapture(double Now)
 		Publish(TEXT("Marker fit unavailable"));
 		return;
 	}
-	const FVector CarFrontWorld = Settings->GetOwner()->GetActorForwardVector();
+	const FVector CarFrontWorld = GetMarkerArrowWorld(*Settings->GetOwner());
+	if (CarFrontWorld.IsZero())
+	{
+		Publish(TEXT("Marker arrow direction invalid"));
+		return;
+	}
 	const FVector CarFrontStage = Candidate.Pawn.InverseTransformVectorNoScale(CarFrontWorld);
 	const double CarYaw = CarFrontStage.Rotation().Yaw;
 	bool bArrowRejected = false;

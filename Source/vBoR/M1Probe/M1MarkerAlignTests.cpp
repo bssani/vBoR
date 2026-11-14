@@ -128,6 +128,8 @@ struct FM1ProbeFixture
 		Pawn->GetRootComponent()->RegisterComponent();
 
 		Car = World->SpawnActor<AActor>();
+		Car->SetRootComponent(NewObject<USceneComponent>(Car));
+		Car->GetRootComponent()->RegisterComponent();
 		Settings = NewObject<UVBoRVehicleAlignmentComponent>(Car);
 		Car->AddInstanceComponent(Settings);
 		Settings->RegisterComponent();
@@ -138,6 +140,7 @@ struct FM1ProbeFixture
 			Car->AddInstanceComponent(Point);
 			Point->Order = Index + 1;
 			Point->Label = FString::Printf(TEXT("Bolt %d"), Point->Order);
+			Point->SetupAttachment(Car->GetRootComponent());
 			Point->RegisterComponent();
 			Point->SetWorldLocation(Points[Index]);
 		}
@@ -262,6 +265,38 @@ bool FM1E2::RunTest(const FString&)
 			});
 			TestEqual(TEXT("One marker detected"), Count, 1);
 		}
+	}
+
+	const FTransform Pawn(FRotator(0, 35, 0), FVector(-770, -530, 570));
+	const FRotator FloorView(-50, 18, 0);
+	const FVector FloorCenter = FVector::ZeroVector;
+	constexpr double FloorDistanceCm = 60;
+	const FTransform FloorCamera(Pawn.TransformRotation(FloorView.Quaternion()),
+		Pawn.TransformPosition(FloorCenter - FloorDistanceCm * FloorView.Vector()));
+	for (double Yaw : {0.0, 90.0, -135.0})
+	{
+		auto Image = M1Frame(FloorCamera);
+		const FQuat MarkerWorld = Pawn.TransformRotation(FRotator(0, Yaw, 0).Quaternion());
+		// Printed arrow points toward the marker's top edge (corners 0 and 1)
+		DrawM1Marker(Image, 2, Pawn.TransformPosition(FloorCenter), MarkerWorld.GetRightVector(),
+			MarkerWorld.GetForwardVector());
+		int32 Count = 0;
+		DetectM1Markers(Image, [&](int32 Id, const FVector2f (&Corners)[4])
+		{
+			++Count;
+			TestEqual(TEXT("Floor marker ID"), Id, 2);
+			FM1MarkerObservation Found;
+			if (TestTrue(TEXT("Solve rendered floor marker"), SolveM1Marker(Corners, 60, Image.Model, Pawn, Found)))
+			{
+				const double YawError = FMath::Abs(FMath::FindDeltaAngleDegrees(Yaw, Found.ArrowYawDeg));
+				const double ErrorMm = FVector::Distance(Found.CenterStage, FloorCenter) * 10;
+				TestTrue(FString::Printf(TEXT("Floor marker yaw %.0f deg: error %.2f deg"), Yaw, YawError), YawError <= 2);
+				TestTrue(FString::Printf(TEXT("Floor marker yaw %.0f deg: tilt %.2f deg"), Yaw, Found.TiltDeg), Found.TiltDeg <= 2);
+				TestTrue(FString::Printf(TEXT("Floor marker yaw %.0f deg: center error %.2f mm"), Yaw, ErrorMm), ErrorMm <= 2);
+				TestTrue(TEXT("Floor marker reprojection <= 1 px"), Found.ReprojectionPx <= 1);
+			}
+		});
+		TestEqual(FString::Printf(TEXT("One floor marker at yaw %.0f deg"), Yaw), Count, 1);
 	}
 	return true;
 }
@@ -587,6 +622,38 @@ bool FM1E18::RunTest(const FString&)
 			TestTrue(TEXT("Specific marker and angle reported"), W.Messages().Contains(Case == 1 ?
 				TEXT("Marker 1 arrow 180 deg off car front") : TEXT("Marker 3 arrow 90 deg off car front")));
 		}
+	}
+
+	W.Car->SetActorRotation(FRotator(0, 180, 0));
+	TArray<FVector> RotatedPoints = M1Rectangle();
+	for (FVector& Point : RotatedPoints)
+	{
+		Point = W.Car->GetActorTransform().TransformPosition(Point);
+	}
+	for (const FVector Direction : {FVector::ForwardVector, -FVector::ForwardVector})
+	{
+		W.Probe->MarkerArrowLocal = Direction;
+		W.ClearMessages();
+		W.Start();
+		W.Fill(RotatedPoints);
+		W.Finish();
+		TestEqual(TEXT("World +X arrows fit only with car-local -X"), W.Fit().IsSet(), Direction.X < 0);
+		if (Direction.X > 0)
+		{
+			for (int32 Id = 1; Id <= RotatedPoints.Num(); ++Id)
+			{
+				TestTrue(FString::Printf(TEXT("Marker %d rejected at 180 deg"), Id),
+					W.Messages().Contains(FString::Printf(TEXT("Marker %d arrow 180 deg off car front"), Id)));
+			}
+		}
+	}
+	for (const FVector Direction : {FVector::ZeroVector, FVector::UpVector})
+	{
+		W.Probe->MarkerArrowLocal = Direction;
+		W.ClearMessages();
+		W.Start();
+		TestFalse(TEXT("Invalid marker arrow prevents capture"), W.Capturing());
+		TestTrue(TEXT("Invalid marker arrow reason"), W.Messages().Contains(TEXT("Marker arrow direction invalid")));
 	}
 	return true;
 }

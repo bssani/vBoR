@@ -63,6 +63,8 @@ public:
 	double MarkerMaxHeadDegPerSec = 10;
 	UPROPERTY(EditAnywhere, Category="Marker alignment", meta=(Units="deg", ClampMin="0", ClampMax="180"))
 	double MarkerYawLimitDeg = 30;
+	UPROPERTY(EditAnywhere, Category="Marker alignment", meta=(ToolTip="Direction of printed FRONT arrows in vehicle actor space"))
+	FVector MarkerArrowLocal = FVector::ForwardVector;
 
 protected:
 	virtual void BeginPlay() override;
@@ -89,6 +91,7 @@ private:
 
 	void ToggleCapture();
 	void StartCapture(double Now);
+	FVector GetMarkerArrowWorld(const AActor& Car) const;
 	void ProcessFrame(FM1CameraFrame& Frame, double Now);
 	bool CheckModel(const FM1CameraFrame& Frame);
 	void RecordObservation(int32 Id, const FM1MarkerObservation* Observation, bool bFastHead);
