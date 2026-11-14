@@ -43,3 +43,15 @@
 
 - Codex: 문제 1·2를 같은 브랜치 새 커밋으로. 명세 개정 1b. 빌드 2종과 `vBoR.M1.*`, 끝에 `vBoR.*` 한 번.
 - 사용자: 반영 뒤 Q3(바닥, 80 mm, 48 × 46 cm). Quest T-01 보조 `not-tested`.
+
+## 2회차 (Claude 2026-11-15, `9a4b26a`) — 통과
+
+- **문제 1 반영 확인:** E2에 바닥에 눕힌 마커(Pawn Yaw 35°, 위에서 50° 내려다봄, 마커 Yaw 0°·90°·−135°)를 합성 영상으로 그려 검출 → `SolveM1Marker`까지 거친다. `ArrowYawDeg` ±2°, `TiltDeg` ≤ 2°, 중심 ≤ 2 mm, 재투영 ≤ 1 px. 그리는 함수는 OpenCV `drawMarker` 0행을 `Up` 쪽에 둔다(`M1MarkerAlignTests.cpp:78`) — 인쇄 페이지 위쪽과 같다. 영상 → 화살표 → Stage Yaw 경로가 이제 덮인다.
+- **문제 2 반영 확인:** `MarkerArrowLocal`(기본 +X). 기준 방향 = 차 Actor 변환으로 돌린 값의 수평 단위 벡터(`GetMarkerArrowWorld`). 0·수직이면 `M`과 결과 둘 다에서 거부. E18에 차 Yaw 180° 경우와 잘못된 벡터 경우 추가.
+- 빌드 2종 `Result: Succeeded`, `vBoR.*` 745 성공·실패 0(`Saved/Logs/M1-R1-all.log`).
+- 회사 차는 +X가 차 앞(사용자 2026-11-15 확인) → 기본값 그대로.
+
+### 다음
+
+- 사용자: 이 브랜치에서 에디터를 열고 `L_M1_MarkerAlign`으로 Q3(바닥, 80 mm 마커, 48 × 46 cm, `Marker Size Mm`은 자로 잰 값, `Marker Height Offset Cm` −50). 한 번은 ID만 바꿔 붙여 거부를 본다.
+- `main` 머지: 사용자 결정. Quest T-01 보조 `not-tested`.
