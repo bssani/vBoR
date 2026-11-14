@@ -26,7 +26,7 @@
 
 - **문제:** `FinishCapture`가 차 앞을 `GetActorForwardVector()`로 잡는다(`M1MarkerAlignProbe.cpp` `CarFrontWorld`). 명세 D16이 "+X"라고 적었으니 명세대로다. 하지만 실제 차는 CAD 좌표를 그대로 가져온다(Datasmith, 차 원점 하나). 자동차 CAD는 흔히 **+X가 차 뒤쪽**이다. 회사 `BP_Car_Core`가 그렇다면 맞게 붙인 마커가 모두 180° 거부된다. 근사 차(+X 앞)에서만 맞다.
 - **제안:** 명세 개정 1b대로 시험대에 `MarkerArrowLocal`(FVector, 차 Actor 기준 방향, 기본 (1,0,0))을 둔다. 차 앞 = 차 Actor 변환으로 돌린 `MarkerArrowLocal`의 수평 성분. 길이 0이거나 수평 성분이 없으면 `M`을 거부하고 이유를 보인다(`Marker arrow direction invalid`). 문구 "car front"는 그대로 둬도 된다.
-- **확인할 시험:** E18에 한 경우를 더한다: 차 Actor를 Yaw 180°로 두고 `MarkerArrowLocal` = (−1,0,0) → 정상 배치(화살표가 차 Actor −X 방향의 반대… 즉 세계 기준 같은 방향) 통과, 기본값 (1,0,0)이면 거부. 길이 0 → `M` 거부.
+- **확인할 시험:** E18에 한 경우를 더한다. 차 Actor를 Yaw 180°로 두고 화살표를 모두 세계 +X로 둔다. `MarkerArrowLocal` = (−1,0,0)이면 기준 방향이 세계 +X라 통과, 기본값 (1,0,0)이면 기준이 세계 −X라 4장 모두 180° 거부. `MarkerArrowLocal` = (0,0,0) 또는 (0,0,1) → `M` 거부와 이유.
 
 ### 참고 (지적 아님)
 
