@@ -38,6 +38,27 @@ double M1Median(const TArray<SampleType>& Samples, Projection Project)
 	const int32 Middle = Values.Num() / 2;
 	return (Values[(Values.Num() - 1) / 2] + Values[Middle]) * 0.5;
 }
+
+FVector M1MedianCenter(const TArray<FM1MarkerObservation>& Samples)
+{
+	return FVector(
+		M1Median(Samples, [](const auto& S) { return S.CenterStage.X; }),
+		M1Median(Samples, [](const auto& S) { return S.CenterStage.Y; }),
+		M1Median(Samples, [](const auto& S) { return S.CenterStage.Z; }));
+}
+
+double M1SpreadMm(const TArray<FM1MarkerObservation>& Samples, const FVector& CenterStage)
+{
+	TArray<double> DistancesMm;
+	DistancesMm.Reserve(Samples.Num());
+	for (const auto& Sample : Samples)
+	{
+		DistancesMm.Add(FVector::Distance(Sample.CenterStage, CenterStage) * 10);
+	}
+	DistancesMm.Sort();
+	// Nearest rank (M1 rev 2)
+	return DistancesMm[FMath::CeilToInt32(0.8 * DistancesMm.Num()) - 1];
+}
 }
 
 AM1MarkerAlignProbe::AM1MarkerAlignProbe()
@@ -290,8 +311,7 @@ void AM1MarkerAlignProbe::RecordObservation(int32 Id, const FM1MarkerObservation
 	}
 	for (const auto& Sample : Marker->Samples)
 	{
-		// Max sample-to-sample distance (same definition as point alignment)
-		Marker->SpreadMm = FMath::Max(Marker->SpreadMm,
+		Marker->MaxPairMm = FMath::Max(Marker->MaxPairMm,
 			FVector::Distance(Sample.CenterStage, Observation->CenterStage) * 10);
 	}
 	Marker->Samples.Add(*Observation);
@@ -299,12 +319,9 @@ void AM1MarkerAlignProbe::RecordObservation(int32 Id, const FM1MarkerObservation
 	Marker->CenterStage = Observation->CenterStage;
 	if (Marker->bComplete)
 	{
-		const auto& Samples = Marker->Samples;
-		Marker->CenterStage = FVector(
-			M1Median(Samples, [](const auto& S) { return S.CenterStage.X; }),
-			M1Median(Samples, [](const auto& S) { return S.CenterStage.Y; }),
-			M1Median(Samples, [](const auto& S) { return S.CenterStage.Z; }));
-		Marker->bRejected = !Alignment.IsValid() || Marker->SpreadMm > Alignment->PointSpreadLimitMm;
+		Marker->CenterStage = M1MedianCenter(Marker->Samples);
+		Marker->SpreadMm = M1SpreadMm(Marker->Samples, Marker->CenterStage);
+		Marker->bRejected = Marker->SpreadMm > MarkerSpreadLimitMm;
 	}
 }
 
@@ -325,8 +342,10 @@ void AM1MarkerAlignProbe::FinishCapture(double Now)
 		{
 			ErrorSum += Sample.ReprojectionPx;
 		}
-		Publish(FString::Printf(TEXT("Marker %d%s | spread %.2f mm | accepted %d | rejected %d | mean reprojection %s"),
-			Id, *Label, Marker.SpreadMm, Marker.Samples.Num(), Marker.Rejected,
+		const double SpreadMm = !Marker.bComplete && !Marker.Samples.IsEmpty() ?
+			M1SpreadMm(Marker.Samples, M1MedianCenter(Marker.Samples)) : Marker.SpreadMm;
+		Publish(FString::Printf(TEXT("Marker %d%s | spread %.2f mm | max pair %.2f mm | accepted %d | rejected %d | mean reprojection %s"),
+			Id, *Label, SpreadMm, Marker.MaxPairMm, Marker.Samples.Num(), Marker.Rejected,
 			Marker.Samples.IsEmpty() ? TEXT("unavailable") :
 			*FString::Printf(TEXT("%.2f px"), ErrorSum / Marker.Samples.Num())));
 		if (!Marker.bComplete)
@@ -359,7 +378,8 @@ void AM1MarkerAlignProbe::FinishCapture(double Now)
 		Publish(TEXT("Marker fit unavailable"));
 		return;
 	}
-	const FVector CarFrontWorld = GetMarkerArrowWorld(*Settings->GetOwner());
+	const AActor& Car = *Settings->GetOwner();
+	const FVector CarFrontWorld = GetMarkerArrowWorld(Car);
 	if (CarFrontWorld.IsZero())
 	{
 		Publish(TEXT("Marker arrow direction invalid"));
@@ -375,6 +395,10 @@ void AM1MarkerAlignProbe::FinishCapture(double Now)
 		Candidate.HeightCm[Index] -= MarkerHeightOffsetCm;
 		Publish(FString::Printf(TEXT("Marker %d | XY %.2f cm | height %+.2f cm"),
 			Id, Candidate.XYCm[Index], Candidate.HeightCm[Index]));
+		const FVector MeasuredWorld = Candidate.Pawn.TransformPosition(Stage[Index]);
+		const FVector Residual = Car.GetActorTransform().InverseTransformVectorNoScale(MeasuredWorld - World[Index]);
+		Publish(FString::Printf(TEXT("Marker %d | Stage (%.2f, %.2f, %.2f) cm | car-local residual X %+.2f cm | Y %+.2f cm"),
+			Id, Stage[Index].X, Stage[Index].Y, Stage[Index].Z, Residual.X, Residual.Y), false);
 
 		const double Tilt = M1Median(Marker.Samples, [](const auto& S) { return S.TiltDeg; });
 		if (Tilt > 60)
@@ -394,6 +418,15 @@ void AM1MarkerAlignProbe::FinishCapture(double Now)
 			Marker.bRejected = true;
 			bArrowRejected = true;
 			Publish(FString::Printf(TEXT("Marker %d arrow %.0f deg off car front — markers swapped or rotated?"), Id, Error));
+		}
+	}
+	for (int32 A = 0; A < Orders.Num(); ++A)
+	{
+		for (int32 B = A + 1; B < Orders.Num(); ++B)
+		{
+			const double DistanceDelta = FVector::Dist2D(Stage[A], Stage[B]) - FVector::Dist2D(World[A], World[B]);
+			Publish(FString::Printf(TEXT("Marker pair %d-%d | XY distance delta %+.2f cm"),
+				Orders[A], Orders[B], DistanceDelta), false);
 		}
 	}
 	if (bArrowRejected)
@@ -596,10 +629,10 @@ FString AM1MarkerAlignProbe::DescribeCheckPoint(const FVector& Tip) const
 	return FString::Printf(TEXT("%s | XY %.1f cm | height %+.1f cm"), *Nearest->GetName(), Delta.Size2D(), Delta.Z);
 }
 
-void AM1MarkerAlignProbe::Publish(const FString& Line)
+void AM1MarkerAlignProbe::Publish(const FString& Line, bool bShowOnScreen)
 {
 	UE_LOG(LogM1Marker, Log, TEXT("%s"), *Line);
-	if (GEngine)
+	if (bShowOnScreen && GEngine)
 	{
 		GEngine->AddOnScreenDebugMessage(INDEX_NONE, 10, FColor::Cyan, Line);
 	}

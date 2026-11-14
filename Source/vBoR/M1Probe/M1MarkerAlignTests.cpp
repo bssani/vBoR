@@ -355,18 +355,46 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FM1E6, "vBoR.M1.E6", M1Flags)
 bool FM1E6::RunTest(const FString&)
 {
 	FM1ProbeFixture W;
-	W.Probe->MarkerMinFrames = 2;
-	W.Start();
 	const auto Stage = M1Rectangle();
-	for (double Noise : {-0.8, 0.8})
+	for (double PointLimitMm : {10.0, 1.0})
 	{
-		auto Samples = Stage;
-		Samples[1].X += Noise;
-		W.Fill(Samples);
+		W.Settings->PointSpreadLimitMm = PointLimitMm;
+		for (int32 OutlierCount : {3, 10})
+		{
+			W.ClearMessages();
+			W.Start();
+			for (int32 Index = 0; Index < 30; ++Index)
+			{
+				auto Samples = Stage;
+				if (Index >= 30 - OutlierCount)
+				{
+					Samples[1].X += 4;
+				}
+				else if (Index < 5)
+				{
+					Samples[1].X -= 0.3;
+				}
+				else if (Index >= 22)
+				{
+					Samples[1].X += 0.3;
+				}
+				W.Fill(Samples);
+			}
+			W.Finish();
+			if (OutlierCount == 3)
+			{
+				TestTrue(TEXT("Three outliers pass at 3 mm"), W.Fit().IsSet());
+				TestTrue(TEXT("P80 spread and max pair reported separately"), W.Messages().Contains(
+					TEXT("Marker 2 (Bolt 2) | spread 3.00 mm | max pair 43.00 mm | accepted 30")));
+			}
+			else
+			{
+				TestFalse(TEXT("Ten outliers prevent a fit"), W.Fit().IsSet());
+				TestTrue(TEXT("ID 2 rejected at 40 mm"), W.Messages().Contains(
+					TEXT("Marker 2 rejected: spread 40.00 mm")));
+			}
+		}
 	}
-	W.Finish();
-	TestTrue(TEXT("ID 2 rejected at 16 mm"), W.Messages().Contains(TEXT("Marker 2 rejected: spread 16.00 mm")));
-	TestFalse(TEXT("No fit"), W.Fit().IsSet());
 	return true;
 }
 
@@ -688,6 +716,56 @@ bool FM1E20::RunTest(const FString&)
 	if (TestEqual(TEXT("One accepted sample"), W.Samples(1), 1))
 	{
 		TestTrue(FString::Printf(TEXT("Center converted to Stage: %s"), *W.Center(1).ToString()), W.Center(1).Equals(Stage, 0.1));
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FM1E21, "vBoR.M1.E21", M1Flags)
+bool FM1E21::RunTest(const FString&)
+{
+	FM1ProbeFixture W;
+	W.Probe->MarkerMinFrames = 1;
+	const auto Rectangle = M1Rectangle();
+	const TArray<FVector> PointLocal = {Rectangle[0], Rectangle[3], Rectangle[2], Rectangle[1]};
+	TArray<UVBoRAlignPointComponent*> Points;
+	W.Car->GetComponents(Points);
+	for (auto* Point : Points)
+	{
+		Point->SetRelativeLocation(PointLocal[Point->Order - 1]);
+	}
+	auto Stage = PointLocal;
+	Stage[0].X -= 1;
+	Stage[1].X -= 1;
+	Stage[2].X += 1;
+	Stage[3].X += 1;
+	for (double Yaw : {0.0, 90.0})
+	{
+		W.Car->SetActorRotation(FRotator(0, Yaw, 0));
+		W.ClearMessages();
+		W.Start();
+		W.Fill(Stage);
+		W.Finish();
+		TestTrue(TEXT("Widened rectangle fits"), W.Fit().IsSet());
+		const FString Messages = W.Messages();
+		for (int32 Index = 0; Index < Stage.Num(); ++Index)
+		{
+			const FVector& Center = Stage[Index];
+			TestTrue(FString::Printf(TEXT("Marker %d Stage center and car-local X at car yaw %.0f"), Index + 1, Yaw),
+				Messages.Contains(FString::Printf(
+					TEXT("Marker %d | Stage (%.2f, %.2f, %.2f) cm | car-local residual X %+.2f cm"),
+					Index + 1, Center.X, Center.Y, Center.Z, Center.X - PointLocal[Index].X)));
+		}
+		for (const TCHAR* Pair : {TEXT("1-4"), TEXT("2-3")})
+		{
+			TestTrue(TEXT("Long side grows by 2 cm"), Messages.Contains(
+				FString::Printf(TEXT("Marker pair %s | XY distance delta +2.00 cm"), Pair)));
+		}
+		for (const TCHAR* Pair : {TEXT("1-2"), TEXT("3-4")})
+		{
+			TestTrue(TEXT("Short side stays the same"),
+				Messages.Contains(FString::Printf(TEXT("Marker pair %s | XY distance delta +0.00 cm"), Pair)) ||
+				Messages.Contains(FString::Printf(TEXT("Marker pair %s | XY distance delta -0.00 cm"), Pair)));
+		}
 	}
 	return true;
 }

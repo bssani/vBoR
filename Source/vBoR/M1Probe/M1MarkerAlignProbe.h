@@ -55,6 +55,8 @@ public:
 	double MarkerMinSidePx = 24;
 	UPROPERTY(EditAnywhere, Category="Marker alignment", meta=(ClampMin="1"))
 	int32 MarkerMinFrames = 30;
+	UPROPERTY(EditAnywhere, Category="Marker alignment", meta=(Units="mm", ClampMin="0"))
+	double MarkerSpreadLimitMm = 20;
 	UPROPERTY(EditAnywhere, Category="Marker alignment", meta=(Units="s", ClampMin="0.01"))
 	double MarkerSessionSeconds = 30;
 	UPROPERTY(EditAnywhere, Category="Marker alignment", meta=(Units="cm"))
@@ -84,6 +86,7 @@ private:
 		TArray<FM1MarkerObservation> Samples;
 		FVector CenterStage = FVector::ZeroVector;
 		double SpreadMm = 0;
+		double MaxPairMm = 0;
 		int32 Rejected = 0;
 		bool bComplete = false;
 		bool bRejected = false;
@@ -103,7 +106,7 @@ private:
 	void ProcessTip(double Now);
 	void UpdateVisuals();
 	FString DescribeCheckPoint(const FVector& Tip) const;
-	void Publish(const FString& Line);
+	void Publish(const FString& Line, bool bShowOnScreen = true);
 	void StopCamera();
 
 	TWeakObjectPtr<UVBoRVehicleAlignmentComponent> Alignment;
