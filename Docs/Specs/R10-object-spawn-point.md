@@ -4,10 +4,10 @@
 |---|---|
 | 단계 | 구조 보수(메시 우선, 사용자가 맞추는 구조). 시나리오 05(짐 싣기) 준비물 |
 | 결정 근거 | **사용자 결정(2026-11-16):** "box stand는 필요없어. 그냥 box가 생성되는 지점만 필요해." 받침대 메시를 바꾸면 박스가 겹친다. C++가 받침대를 100 cm 큐브·가운데 피벗으로 보고 위치·크기를 덮어쓰기 때문이다(`VBoRBoxStand.cpp:20-26`, BP Construction Script 뒤에 실행 — 엔진 `ActorConstruction.cpp:997`(UCS) → `:1005`(`OnConstruction`)). 이름은 박스가 아닌 물체도 받게 일반 이름으로. 받침대는 사용자가 따로 마음대로 놓는다 |
-| 베이스 브랜치 | `main` (`7140d9e` 이후) |
+| 베이스 브랜치 | `main@72d67c8` |
 | 작업 브랜치 | `codex/R10-object-spawn-point` |
 | 리뷰 파일 | `Docs/Reviews/R10-object-spawn-point.md` |
-| 에디터 작업 | **`L_Main`의 Box Stand 한 개를 새 클래스로 옮기고 위치를 올린다(MCP, 사용자 승인 2026-11-16 — §2 D6).** 그 밖의 레벨·에셋은 고치지 않는다 |
+| 에디터 작업 | **`L_Main`의 Box Stand 한 개를 새 클래스로 옮기고 위치를 올린다(MCP, 사용자 승인 2026-11-16 — §0 D6).** 그 밖의 레벨·에셋은 고치지 않는다 |
 
 ## 0. 결정
 
@@ -112,3 +112,41 @@
 | 날짜 | 개정 | 내용 |
 |---|---|---|
 | 2026-11-16 | 처음 | 작성(사용자 결정: 받침대 없이 생성 지점만, 일반 이름) |
+
+## 개정 1 (Claude 2026-11-16) — 기존 시험 감사 표 추가 (Codex 질문 답)
+
+§3 감사 표에 아래를 더한다. 이 밖은 여전히 고치지 않는다.
+
+| 시험 | 지금 단언 | 고침 |
+|---|---|---|
+| P4d E4 `P3FlowTests.cpp:1171-1182` | `E.Car->BoxStand->SourceBox` | 새 이름으로 참조 교체만 |
+| P4d E1 `:1127` | 박스 바닥 75.01 (받침대 Actor 기준) | 수치·허용차 그대로, 기준을 mock 원래 받침대 자리(`RearBoxStandCm`, 바닥)로 |
+| P4d E10 `:1141` | 장애물 = `S->Stand` 경계 | 새 mock 받침대 메시(D9) 경계로 교체만. 기대값 그대로 |
+| P5t E3 `P5tBoxBlueprintTests.cpp:122` | `FloorHeightCm == 받침대 Z` | 픽스처에 생성 지점 Z와 다른 `FloorWorldZCm` 정렬 컴포넌트, `FloorHeightCm == 그 값`(D4) |
+| P5t 경고 수집기 `:53` | `BoxClass is empty` 검색 | `SpawnClass is empty` 검색. E8 횟수 단언 그대로 |
+
+## 개정 2 (Claude 2026-11-16) — 명세 다시 확인
+
+**이 개정이 위 본문·개정 1보다 우선한다.**
+
+| # | 바뀜 | 내용 |
+|---|---|---|
+| R2-1 | **P5t E2의 "추가" 단언을 없앤다** | 본문 §3 표의 `P5t.E2MainStandClass` 행 "추가: Play 때 박스 월드 위치가 옮기기 전과 같음(상수)"을 지운다. 회사 PC의 `L_Main`은 차·자리가 달라 상수가 맞지 않는다(같은 이유로 P5t E6은 `Approx` 폴더가 없으면 건너뜀). E2는 클래스·태그·`SpawnClass`만 본다. 대신 Codex가 보고 ⑤에 `L_Main` Actor의 옮기기 전·후 위치(cm)를 적는다 — Claude가 리뷰에서 +Z 75만 바뀌었는지 본다 |
+| R2-2 | **P4d E1/E6–E9 행의 "수치 그대로 — 같다"는 개정 1 E1 행으로 읽는다** | 박스 바닥 75.01 검사는 생성 지점 기준이 아니라 mock 원래 받침대 자리(바닥) 기준이다(개정 1) |
+| R2-3 | **`L_Main`의 옛 `ApproximateStand` 컴포넌트 값** | `L_Main`에 그 컴포넌트의 인스턴스 값이 저장돼 있다(맵 안 문자열로 확인). 새 클래스에는 이 컴포넌트가 없으므로 불러올 때 버려진다. 이 때문에 나오는 로드 경고는 다시 저장하면 사라진다 — 맵 로드 확인에서 이 경고 말고 다른 경고가 늘면 멈추고 질문 |
+| R2-4 | **D4 경고는 시험 실패가 아니다** | 정렬 컴포넌트가 없는 시험 월드(P5t·P5zf·R3)에서 D4 경고가 한 번씩 난다. UE 5.7 기본 `bElevateLogWarningsToErrors = false`(`Runtime/Core/Private/Misc/AutomationTest.cpp:176`, 프로젝트 설정에 없음)라 실패하지 않는다. **그 시험들에 `AddExpectedMessage`를 새로 넣지 않는다**(감사 표 밖 변경). E3에서만 확인한다 |
+
+**§7 사용자 확인에 추가:** 받침대 메시를 바꿔 둔 레벨(회사 PC 등)은 업데이트 전에 **그 메시 이름과 위치를 적어 둔다.** 업데이트하면 옛 받침대 메시(`ApproximateStand`)가 사라진다. 그 메시를 `StaticMeshActor`로 다시 놓고 생성 지점을 그 윗면에 맞춘다.
+
+## 개정 3 (Claude 2026-11-16) — `L_Main` Runner에 R9 위젯 지정 (사용자 요청)
+
+**사용자(2026-11-16):** "widget buttonlabel이랑 guidancewidget도 만들어서 올려버리자." WBP는 R9에서 이미 있다(`Content/Main/UI/WBP_GuidancePanel`, `WBP_ButtonLabel`). 저장된 `L_Main`의 Runner 칸이 비어 있어 흰 판이 나온다(맵 안에 WBP 참조 없음 확인). `L_Main`을 이번에 어차피 고치므로 같은 저장에 넣는다(바이너리 충돌 방지).
+
+| # | 내용 |
+|---|---|
+| R3-1 | MCP로 `L_Main`의 `AVBoRScenarioRunner` 한 개: `GuidanceWidgetClass` = `WBP_GuidancePanel_C`, `ButtonLabelWidgetClass` = `WBP_ButtonLabel_C`. `PanelStylePreset`·`PanelStyle`은 건드리지 않는다(기본 Graphite). 다른 칸 그대로 |
+| R3-2 | WBP 두 개는 고치지 않는다 |
+| R3-3 | 기존 시험: `L_Main`을 여는 시험(P4i·P5p·P5q·P5t·M2)은 안내판 Slate 칸(`PanelText`)을 읽지 않는다(확인). R9 시험은 자기 픽스처에서 칸을 정한다. **바뀌는 단언 없음** — 깨지면 멈추고 질문 |
+| R3-4 | 보고 ⑤에 Runner 두 칸의 저장 뒤 값을 적는다. `L_Main` 맵 로드 확인 때 위젯 생성 경고(`FindMissingBinding`) 없음 |
+
+**§7 사용자 확인에 추가:** VR Preview에서 안내판·버튼 이름표가 Graphite(어두운 판)로 나오는지. 다른 시안은 Runner `Panel Style Preset`에서 고르고 저장.

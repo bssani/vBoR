@@ -25,7 +25,7 @@ class UBoxComponent;
 class AP1TrunkMock;
 class AVBoRPoweredPanel;
 class AVBoRLoadTarget;
-class AVBoRBoxStand;
+class AVBoRObjectSpawnPoint;
 class AVBoRFoldingSeat;
 class AVBoRPanelAnchor;
 
@@ -66,7 +66,8 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<AP1TrunkMock> Trunk;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<AVBoRPoweredPanel> Liftgate;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<AVBoRLoadTarget> LoadTarget;
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<AVBoRBoxStand> BoxStand;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<UStaticMeshComponent> RearBoxStandMesh;
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<AVBoRObjectSpawnPoint> ObjectSpawnPoint;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<UVBoREyePointComponent> DriverEye;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<UVBoRViewpointComponent> PassengerView;
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Approximate vehicle") TObjectPtr<UVBoRViewpointComponent> RearView;

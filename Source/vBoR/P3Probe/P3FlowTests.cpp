@@ -3,7 +3,7 @@
 #include "HAL/IConsoleManager.h"
 #include "P3VehicleMock.h"
 #include "../P1Probe/P1TrunkMock.h"
-#include "../Interaction/VBoRBoxStand.h"
+#include "../Interaction/VBoRObjectSpawnPoint.h"
 #include "../Interaction/VBoRCarryObject.h"
 #include "../Interaction/VBoRLoadTarget.h"
 #include "../Interaction/VBoRPoweredPanel.h"
@@ -1112,7 +1112,7 @@ namespace
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4dMockTest, "vBoR.P4d.E1E10RearAssemblyAndRoutes", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP4dMockTest::RunTest(const FString&)
 {
-	FP3World E; const auto* T = E.Car->Trunk.Get(); const auto* S = E.Car->BoxStand.Get();
+	FP3World E; const auto* T = E.Car->Trunk.Get(); const auto* S = E.Car->ObjectSpawnPoint.Get();
 	if (!TestNotNull(TEXT("E1 trunk"),T) || !TestNotNull(TEXT("E1 stand"),S)) { return false; }
 	TestTrue(TEXT("E1 rear opening faces +X"),T->GetActorLocation().Equals(FVector(-235,0,0)) && T->GetActorForwardVector().Equals(FVector::XAxisVector));
 	for (const TCHAR* Tag : {TEXT("Car.Liftgate"),TEXT("Car.BoxStand")})
@@ -1122,9 +1122,10 @@ bool FP4dMockTest::RunTest(const FString&)
 	}
 	TestTrue(TEXT("E1 loading region is trunk interior"),E.Car->LoadTarget->LoadingRegion->GetUnscaledBoxExtent().Equals(FVector(45,65,35)) && E.Car->LoadTarget->LoadingRegion->GetComponentLocation().Equals(FVector(-190,0,110)));
 	TestFalse(TEXT("E1 guide hidden"),E.Car->LoadTarget->bShowGuide);
-	TestEqual(TEXT("E1 one box"),P4dBoxes(E.World,E.Car->BoxStand),1);
+	TestEqual(TEXT("E1 one box"),P4dBoxes(E.World,E.Car->ObjectSpawnPoint),1);
 	TestTrue(TEXT("E1 box target and drop policy"),S->SourceBox->LoadTarget == E.Car->LoadTarget && !S->SourceBox->bUsePlacementAssist && S->SourceBox->bDestroyAtFloor);
-	TestTrue(TEXT("E1 box bottom on stand"),FMath::IsNearlyEqual(S->SourceBox->GetCollisionBoundsInPose(S->SourceBox->GetActorTransform(),S->GetActorTransform()).Min.Z,75.01,0.02));
+	const FTransform StandBase(E.Car->GetActorQuat(), E.Car->GetActorTransform().TransformPosition(E.Car->RearBoxStandCm));
+	TestTrue(TEXT("E1 box bottom on stand"),FMath::IsNearlyEqual(S->SourceBox->GetCollisionBoundsInPose(S->SourceBox->GetActorTransform(),StandBase).Min.Z,75.01,0.02));
 	TestTrue(TEXT("E1 rear plate below floor"),FP3FlowTestAccess::Plates(E.Car)[3]->Bounds.GetBox().Max.Z <= T->FloorHeightCm+0.01);
 	E.Steps({P3bStep(TEXT("03"),TEXT("Route.AroundCar")),P3bStep(TEXT("07"),TEXT("Route.ToDriverDoor"))});
 	TestTrue(TEXT("E10 both route validations pass"),E.Runner->IsRunning() && E.Runner->ValidationProblems.IsEmpty());
@@ -1138,7 +1139,7 @@ bool FP4dMockTest::RunTest(const FString&)
 		for (float D = 0; D <= Route->Spline->GetSplineLength(); D += 1)
 		{
 			const FVector P = Route->Spline->GetLocationAtDistanceAlongSpline(D,ESplineCoordinateSpace::World);
-			for (const FBox Obstacle : {S->Stand->Bounds.GetBox(), E.Car->RearKeyTable->TopMesh->Bounds.GetBox()})
+			for (const FBox Obstacle : {E.Car->RearBoxStandMesh->Bounds.GetBox(), E.Car->RearKeyTable->TopMesh->Bounds.GetBox()})
 			{
 				const double DX = FMath::Max3(Obstacle.Min.X-P.X,0.0,P.X-Obstacle.Max.X);
 				const double DY = FMath::Max3(Obstacle.Min.Y-P.Y,0.0,P.Y-Obstacle.Max.Y);
@@ -1177,7 +1178,7 @@ bool FP4dCloseTest::RunTest(const FString&)
 	TestEqual(TEXT("E4 closing waits"),E.Runner->GetStepIndex(),0);
 	G->Tick(5); E.Runner->ProcessFlow(0); TestEqual(TEXT("E4 closed completes"),E.Runner->GetStepIndex(),1);
 	P4dOpen(G); E.Steps({Closed,P3Step(TEXT("07"))});
-	auto* Box = E.Car->BoxStand->SourceBox.Get(); Box->SetActorLocation(FVector(-245,0,100));
+	auto* Box = E.Car->ObjectSpawnPoint->SourceBox.Get(); Box->SetActorLocation(FVector(-245,0,100));
 	G->RequestClose(); G->Tick(6); E.Runner->ProcessFlow(0);
 	TestTrue(TEXT("E4 actual obstruction reopens"),G->GetObstructionCount() > 0 && G->GetState() != EVBoRPoweredState::Closed);
 	G->Tick(5); E.Runner->ProcessFlow(0);
@@ -1202,7 +1203,7 @@ bool FP4dTargetTest::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP4dStandTest, "vBoR.P4d.E6E7SupplyFloorResetCleanup", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP4dStandTest::RunTest(const FString&)
 {
-	FP3World E; auto* S = E.Car->BoxStand.Get(); auto* First = S->SourceBox.Get(); const FTransform Start = First->GetActorTransform();
+	FP3World E; auto* S = E.Car->ObjectSpawnPoint.Get(); auto* First = S->SourceBox.Get(); const FTransform Start = First->GetActorTransform();
 	FP4dTestAccess::Grab(First); S->Tick(0); TestEqual(TEXT("E6 grabbing alone keeps one"),P4dBoxes(E.World,S),1);
 	First->AddActorWorldOffset(FVector(0,0,5)); S->Tick(0); TestEqual(TEXT("E6 overlap keeps one"),P4dBoxes(E.World,S),1);
 	First->SetActorLocation(Start.GetLocation()+FVector(0,0,31)); S->Tick(0); TestEqual(TEXT("E6 one cm boundary still occupied"),P4dBoxes(E.World,S),1);
@@ -1215,7 +1216,7 @@ bool FP4dStandTest::RunTest(const FString&)
 	First->SetActorLocation(FVector(-500,300,25)); First->Tick(1);
 	TestFalse(TEXT("E7 released box reaches floor and disappears"),IsValid(First));
 	TestEqual(TEXT("E7 floor leaves one"),P4dBoxes(E.World,S),1);
-	auto* Before = S->SourceBox.Get(); S->ResetStand(); TestFalse(TEXT("E7 reset destroys old source"),IsValid(Before));
+	auto* Before = S->SourceBox.Get(); S->ResetSpawn(); TestFalse(TEXT("E7 reset destroys old source"),IsValid(Before));
 	TestEqual(TEXT("E7 reset creates one"),P4dBoxes(E.World,S),1);
 	auto* Last = S->SourceBox.Get(); S->Destroy(); TestFalse(TEXT("E7 EndPlay cleans source"),IsValid(Last));
 	TestEqual(TEXT("E7 EndPlay cleans all"),P4dBoxes(E.World,S),0);
@@ -1227,7 +1228,7 @@ bool FP4dRestartTest::RunTest(const FString&)
 {
 	for (bool bPassenger : {false,true}) for (bool bClosing : {false,true})
 	{
-		FP3World E; auto* S = E.Car->BoxStand.Get(); auto* G = E.Car->Liftgate.Get();
+		FP3World E; auto* S = E.Car->ObjectSpawnPoint.Get(); auto* G = E.Car->Liftgate.Get();
 		E.Steps({P3Step(TEXT("01")),P3Step(TEXT("04"),EVBoRStepRule::PoweredOpen,TEXT("Car.Liftgate"),EVBoRConfirmBy::None)});
 		TArray<AVBoRCarryObject*> Old;
 		for (int32 I = 0; I < 2; ++I)

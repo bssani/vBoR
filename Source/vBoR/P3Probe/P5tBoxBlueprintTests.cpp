@@ -1,8 +1,9 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
 #include "P5tTestFixture.h"
-#include "../Interaction/VBoRBoxStand.h"
+#include "../Interaction/VBoRObjectSpawnPoint.h"
 #include "../Interaction/VBoRLoadTarget.h"
+#include "../Interaction/VBoRVehicleAlignmentComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "EdGraph/EdGraph.h"
 #include "Engine/Blueprint.h"
@@ -29,11 +30,19 @@ struct FP5tWorld
 	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
 	void Play() { World->InitializeActorsForPlay(FURL()); World->GetWorldSettings()->NotifyBeginPlay(); }
 	~FP5tWorld() { World->EndPlay(EEndPlayReason::Quit); World->DestroyWorld(false); }
-	AVBoRBoxStand* Stand(UClass* Class)
+	static constexpr float FloorZCm = 3;
+	AVBoRObjectSpawnPoint* Stand(UClass* Class, bool bWithAlignment = false)
 	{
-		auto* S = World->SpawnActorDeferred<AVBoRBoxStand>(AVBoRBoxStand::StaticClass(), FTransform(FVector(100, 200, 10)));
-		S->BoxClass = Class;
+		auto* S = World->SpawnActorDeferred<AVBoRObjectSpawnPoint>(AVBoRObjectSpawnPoint::StaticClass(), FTransform(FVector(100, 200, 85)));
+		S->SpawnClass = Class;
 		S->LoadTarget = World->SpawnActor<AVBoRLoadTarget>();
+		if (bWithAlignment)
+		{
+			auto* Alignment = NewObject<UVBoRVehicleAlignmentComponent>(S->LoadTarget);
+			Alignment->FloorWorldZCm = FloorZCm;
+			S->LoadTarget->AddInstanceComponent(Alignment);
+			Alignment->RegisterComponent();
+		}
 		S->FinishSpawning(S->GetActorTransform());
 		return S;
 	}
@@ -50,7 +59,7 @@ struct FP5tWarnings : FOutputDevice
 		const FString S(Text);
 		// UE forwards expected Warning as Verbose (P5t E7/E8, AutomationTest.cpp:289-291)
 		if ((Verbosity == ELogVerbosity::Warning || Verbosity == ELogVerbosity::Verbose)
-			&& (S.StartsWith(TEXT("Carry box '")) || S.Contains(TEXT("BoxClass is empty")))) { Messages.Add(S); }
+			&& (S.StartsWith(TEXT("Carry box '")) || S.Contains(TEXT("SpawnClass is empty")))) { Messages.Add(S); }
 	}
 };
 UClass* P5tBoxClass()
@@ -68,13 +77,13 @@ int32 P5tBoxes(UWorld* W, AActor* Stand)
 	for (TActorIterator<AVBoRCarryObject> It(W); It; ++It) { Count += It->GetOwner() == Stand; }
 	return Count;
 }
-void P5tPlacement(FAutomationTestBase& Test, AVBoRBoxStand* Stand, const FVector& Size)
+void P5tPlacement(FAutomationTestBase& Test, AVBoRObjectSpawnPoint* Stand, const FVector& Size)
 {
 	const auto* Box = Stand->SourceBox.Get();
 	if (!Test.TestNotNull(TEXT("Stand spawned box"), Box)) { return; }
-	const FBox Bounds = Box->GetCollisionBoundsInPose(Box->GetActorTransform(), Stand->GetActorTransform());
+	const FBox Bounds = Box->GetCollisionBoundsInPose(Box->GetActorTransform(), FTransform::Identity);
 	Test.TestTrue(TEXT("Collision dimensions use box class cm"), Bounds.IsValid && Bounds.GetSize().Equals(Size, .02));
-	Test.TestTrue(TEXT("Box bottom is stand top + 0.01 cm"), FMath::IsNearlyEqual(Bounds.Min.Z, double(Stand->StandTopHeightCm) + .01, .02));
+	Test.TestTrue(TEXT("Box bottom is spawn point Z + 0.01 cm"), FMath::IsNearlyEqual(Bounds.Min.Z, Stand->GetActorLocation().Z + .01, .02));
 }
 }
 
@@ -97,11 +106,11 @@ bool FP5tMainStand::RunTest(const FString&)
 	int32 Count = 0;
 	for (ULevel* Level : W->GetLevels()) { for (AActor* Actor : Level->Actors)
 	{
-		if (auto* Stand = Cast<AVBoRBoxStand>(Actor))
+		if (auto* Stand = Cast<AVBoRObjectSpawnPoint>(Actor))
 		{
 			++Count;
 			TestTrue(TEXT("Stand tag retained"), Stand->ActorHasTag(TEXT("Car.BoxStand")));
-			TestTrue(TEXT("Main stand uses BP_Box_C"), Stand->BoxClass.Get() == Class);
+			TestTrue(TEXT("Main stand uses BP_Box_C"), Stand->SpawnClass.Get() == Class);
 		}
 	} }
 	TestEqual(TEXT("One stand"), Count, 1);
@@ -111,7 +120,7 @@ bool FP5tMainStand::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5tSize, "vBoR.P5t.E3ClassSizeAndPolicies", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP5tSize::RunTest(const FString&)
 {
-	FP5tWorld W; auto* S = W.Stand(AP5tSizedBox::StaticClass()); W.Play();
+	FP5tWorld W; auto* S = W.Stand(AP5tSizedBox::StaticClass(), true); W.Play();
 	P5tPlacement(*this, S, FVector(20, 30, 40));
 	const auto* Box = S->SourceBox.Get(); if (!Box) { return false; }
 	TestTrue(TEXT("Class size retained"), Box->BoxSizeCm.Equals(FVector(20, 30, 40)));
@@ -119,7 +128,7 @@ bool FP5tSize::RunTest(const FString&)
 	TestTrue(TEXT("Fixture starts with assist enabled"), GetDefault<AP5tSizedBox>()->bUsePlacementAssist);
 	TestFalse(TEXT("Stand disables assist"), Box->bUsePlacementAssist);
 	TestTrue(TEXT("Floor destruction enabled"), Box->bDestroyAtFloor);
-	TestEqual(TEXT("Floor height is stand Z cm"), Box->FloorHeightCm, float(S->GetActorLocation().Z));
+	TestEqual(TEXT("Floor height is alignment Z cm"), Box->FloorHeightCm, FP5tWorld::FloorZCm);
 	return true;
 }
 
@@ -206,11 +215,11 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5tEmpty, "vBoR.P5t.E8EmptyClass", EAutomation
 bool FP5tEmpty::RunTest(const FString&)
 {
 	FP5tWarnings Warnings; FP5tWorld W; auto* S = W.Stand(nullptr);
-	AddExpectedMessage(TEXT("BoxClass is empty"), ELogVerbosity::Warning, EAutomationExpectedMessageFlags::Contains, 1);
+	AddExpectedMessage(TEXT("SpawnClass is empty"), ELogVerbosity::Warning, EAutomationExpectedMessageFlags::Contains, 1);
 	W.Play(); TestEqual(TEXT("BeginPlay warns once"), Warnings.Count(), 1);
 	if (!Warnings.Messages.IsEmpty()) { TestTrue(TEXT("Warning names stand"), Warnings.Messages[0].Contains(S->GetName())); }
 	TestEqual(TEXT("No initial box"), P5tBoxes(W.World, S), 0);
-	S->ResetStand(); S->Tick(1);
+	S->ResetSpawn(); S->Tick(1);
 	TestNull(TEXT("No source after reset and tick"), S->SourceBox.Get());
 	TestEqual(TEXT("No boxes after reset and tick"), P5tBoxes(W.World, S), 0);
 	TestEqual(TEXT("Warning not repeated"), Warnings.Count(), 1);

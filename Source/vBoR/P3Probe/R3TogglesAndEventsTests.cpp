@@ -6,7 +6,7 @@
 #include "../Interaction/VBoRScenarioRunner.h"
 #include "../Interaction/VBoRPokeButton.h"
 #include "../Interaction/VBoRHingedDoor.h"
-#include "../Interaction/VBoRBoxStand.h"
+#include "../Interaction/VBoRObjectSpawnPoint.h"
 #include "../Interaction/VBoRCarryObject.h"
 #include "Components/SceneComponent.h"
 #include "CoreGlobals.h"
@@ -226,7 +226,7 @@ bool FR3Restart::RunTest(const FString&)
 	auto* Console = W.World->SpawnActor<AVBoRHingedPanel>(); Console->Tags.Add(TEXT("Test.Console")); W.Observe(Console);
 	auto* OtherSeat = W.World->SpawnActor<AVBoRFoldingSeat>(); W.Observe(OtherSeat);
 	auto* OtherMirror = W.NewMirror(false);
-	auto* Stand = W.World->SpawnActor<AVBoRBoxStand>(); Stand->SetActorLocation(FVector(2000,0,0));
+	auto* Stand = W.World->SpawnActor<AVBoRObjectSpawnPoint>(); Stand->SetActorLocation(FVector(2000,0,0));
 	auto* Runner = W.NewRunner({R3Step(TEXT("01"), TEXT("Car.Liftgate")), R3Step(TEXT("02"), TEXT("Car.DriverDoor")), R3Step(TEXT("03"), TEXT("Test.Gate")), R3Step(TEXT("04"), TEXT("Test.Door")), R3Step(TEXT("05"), TEXT("Test.Console"))});
 	W.Play(); TestTrue(TEXT("Restart fixture flow valid"), Runner->InitializeFlow());
 	Door->Unlock(); TargetDoor->Unlock(); W.Seat->Fold(); OtherSeat->Fold(); W.Seat->Tick(10); OtherSeat->Tick(10);

@@ -10,7 +10,7 @@
 #include "../Interaction/VBoRTwoAxisPart.h"
 #include "../Interaction/VBoRKnob.h"
 #include "../Interaction/VBoRKeyTable.h"
-#include "../Interaction/VBoRBoxStand.h"
+#include "../Interaction/VBoRObjectSpawnPoint.h"
 #include "../Interaction/VBoRLoadTarget.h"
 #include "../Interaction/VBoRFloorRoute.h"
 #include "../Interaction/VBoRVehicleAlignmentComponent.h"
@@ -256,11 +256,11 @@ bool FP4iLevel::RunTest(const FString&)
 	TMap<UClass*,int32> Counts; TArray<AActor*> Actors;
 	for(ULevel* Level:W->GetLevels()) { for(AActor* A:Level->Actors) { if(A) { Actors.Add(A);++Counts.FindOrAdd(A->GetClass()); } } }
 	TestEqual(TEXT("No vehicle mock"),Counts.FindRef(AP3VehicleMock::StaticClass()),0);
-	int32 AlignmentCount=0; AVBoRLoadTarget* Target=nullptr; AVBoRBoxStand* Stand=nullptr;
+	int32 AlignmentCount=0; AVBoRLoadTarget* Target=nullptr; AVBoRObjectSpawnPoint* Stand=nullptr;
 	for(AActor* A:Actors)
 	{
 		TArray<UVBoRVehicleAlignmentComponent*> Alignments;A->GetComponents(Alignments);AlignmentCount+=Alignments.Num();
-		if(auto* T=Cast<AVBoRLoadTarget>(A)) { Target=T; } if(auto* S=Cast<AVBoRBoxStand>(A)) { Stand=S; }
+		if(auto* T=Cast<AVBoRLoadTarget>(A)) { Target=T; } if(auto* S=Cast<AVBoRObjectSpawnPoint>(A)) { Stand=S; }
 #if WITH_EDITOR
 		if(A->GetFolderPath().ToString().StartsWith(TEXT("Approx"))) { for(FName Tag:A->Tags) { TestFalse(TEXT("Approx has no route/car actor tag"),Tag.ToString().StartsWith(TEXT("Car."))||Tag.ToString().StartsWith(TEXT("Route."))); } TArray<UActorComponent*> Cs;A->GetComponents(Cs);for(auto* C:Cs) { for(FName Tag:C->ComponentTags) { TestFalse(TEXT("Approx has no route/car component tag"),Tag.ToString().StartsWith(TEXT("Car."))||Tag.ToString().StartsWith(TEXT("Route."))); } } }
 #endif
