@@ -22,7 +22,7 @@ L_Main
 ├─ BP_Car_Core         차 기준점 — 정렬·좌석점·구역·전원·태그 (§4)
 ├─ 부품 BP             문·손잡이·그립·콘솔·글러브박스·레버·스티어링·룸미러·노브·버튼·리프트게이트
 │                      ·2열 시트·선바이저·시동 버튼·사이드미러 (§5)
-├─ 레벨 배치            바닥 경로 2개, 키 테이블 2개, 박스 받침·적재 영역, 안내판 표식 5개 (§8·§9)
+├─ 레벨 배치            바닥 경로 2개, 키 테이블 2개, 박스 생성 지점·적재 영역, 안내판 표식 5개 (§8·§9)
 ├─ Approx 폴더         근사 판·트렁크·표시 글자 — 회사에서 통째로 지움 (§2-3)
 └─ CAD 정적 메시        움직이지 않는 것은 BP로 만들지 않고 레벨에 그대로 (U-14)
 ```
@@ -42,7 +42,7 @@ L_Main
    - 부품 BP Actor가 (0,0,0)인지는 자동화 시험(`vBoR.P4i.*`)이 본다. 차를 옮기면 실패한다.
    - **Pawn은 직접 맞추지 않는다.** 4점 정렬이 정렬점의 월드 위치로 Pawn 자리를 구한다. 정렬 전(집 시험) PIE 시작 자리인 `PlayerStart`만 차 근처로 옮겨 둔다.
    - **지면(타이어 바닥)은 Z 0이 아니다(사용자 2026-10-25).** `BP_Car_Core` → `VBoR Vehicle Alignment` → **`FloorWorldZCm` = 지면의 월드 Z(cm)**. 정렬이 실제 바닥을 이 높이에 둔다(U-17). 목표 표시 고리도 이 높이를 따른다(P5zb).
-   - **바닥에 놓는 것은 모두 그 높이에 둔다:** 레벨 바닥 메시, 바닥 경로 두 개(Actor Z와 Spline 점), 키 테이블 두 개(키가 테이블 Actor Z에 닿으면 돌아옴), 박스 받침(Actor Z = 박스 바닥 판정 높이), `Car.Start` 표시, `PlayerStart`.
+   - **바닥에 놓는 것은 모두 그 높이에 둔다:** 레벨 바닥 메시, 바닥 경로 두 개(Actor Z와 Spline 점), 키 테이블 두 개(키가 테이블 Actor Z에 닿으면 돌아옴), 박스 생성 지점은 예외 — 받침대 **윗면**에 둔다(박스가 바닥에서 사라지는 높이는 정렬 컴포넌트 `Floor World Z Cm`, R10), `Car.Start` 표시, `PlayerStart`.
 3. **`Approx` 폴더를 먼저 통째로 지운다.** BP 메시를 바꾸기 전에 한다.
    - CAD 차체와 겹치기 때문이다. 또 `vBoR.P4i.E2`·`P5t.E6`은 `Approx`가 있을 때만 BP를 근사 값과 비교하므로, 지우지 않고 BP를 바꾸면 실패한다.
    - **근사 트렁크가 박스 착지 충돌을 주고 있었다.** CAD 트렁크 바닥·벽 메시에는 막는 충돌이 있어야 박스가 착지한다(simple 또는 Use Complex Collision As Simple, 프리셋은 BlockAll 등).
@@ -160,7 +160,7 @@ L_Main
 | 선바이저 L·R — `BP_SunVisor_L`·`_R` | `AVBoRAxisPart` | `PartMesh` / `AxisPivot`, `Axis` Y | `Release` = Stay, palm·pinch·밀기 켬, `MaxAngleDeg` 95. **값 +가 내림**(아래). 밀기 면 상자·손끝 여유(§6.6) | 없음(자유모드 부품) |
 | 시동 버튼 — `BP_StartButton` | `AVBoRPokeButton` | `ButtonMesh` | `HitAreaScale` 1 | **`Car.StartButton`** — 전원(§8.4) |
 | 사이드미러 L·R — `BP_SideMirror_L`·`_R` | `AVBoRFoldingMirror` | `MirrorMesh` / **`HingeLocationCm`·`HingeRotation`**(회전한 +Z가 접는 축) | `MeshRestFromRoot` = **펼친** 자리, `FoldAngleDeg` L −65·R +65(차 뒤로 접힘), `SpeedDegPerSecond`, `Follow vehicle power`(기본 켬, §8.4) | L은 `BP_Door_FL` 밑(§8.1) |
-| 박스 — `BP_Box` | `AVBoRCarryObject` | `CarryMesh`(Actor 루트) / 축 없음 | **`BoxSizeCm`**(아래) | 레벨에 놓지 않는다. 받침의 `BoxClass`(§9) |
+| 박스 — `BP_Box` | `AVBoRCarryObject` | `CarryMesh`(Actor 루트) / 축 없음 | **`BoxSizeCm`**(아래) | 레벨에 놓지 않는다. 생성 지점의 `SpawnClass`(§9) |
 | 키 — `BP_KeyFob_Front`·`_Rear` | `AVBoRKeyFob` | `KeyMesh` | 키 메시. 버튼 자리 `UnlockButtonCm`·`LockButtonCm`(키 루트에서 cm) | Actor Tags `Car.FrontKey`·`Car.RearKey`(§8.3) |
 
 **문 관성 — `Door → Coast`(P5za).** `BP_Door_FL`에만 있다.
@@ -175,11 +175,11 @@ L_Main
 **키 메시(P5zd).** 키 메시가 엔진 Cube일 때만 `KeySizeCm`으로 크기를 맞춘다. CAD 키 메시는 넣은 크기(BP 배율, 보통 1) 그대로다. Play 로그 `key size=… cm`가 실제 크기다.
 
 **박스 — `BP_Box`(P5t·P5zf, 자동화는 엔진 Cube로만).**
-- `CarryMesh`에 메시를 넣는다. 메시는 bounds가 `BoxSizeCm`이 되도록 축마다 따로 늘어난다. CAD 메시를 원래 크기로 쓰려면 그 크기를 그대로 넣는다(비율이 다르면 찌그러짐). 받침은 크기를 `BP_Box`에서 읽는다.
+- `CarryMesh`에 메시를 넣는다. 메시는 bounds가 `BoxSizeCm`이 되도록 축마다 따로 늘어난다. CAD 메시를 원래 크기로 쓰려면 그 크기를 그대로 넣는다(비율이 다르면 찌그러짐). 생성 지점은 크기를 `BP_Box`에서 읽는다(에디터 선 상자 크기도).
 - **피벗을 박스 가운데에 둔다.** `CarryMesh`가 루트라 BP에서 옮길 수 없다. 1 cm 넘게 벗어나면 Play 때 "mesh bounds center is … cm from the Actor origin" 경고. 옮기는 방법은 §6.2 1번과 같다.
 - **simple collision(상자·convex)이 있어야 한다.** 없으면 "No simple collision on carry mesh … movement disabled". 구·캡슐은 쓰지 않는다.
-- 받침이 덮어쓰는 값: `LoadTarget`, `bUsePlacementAssist`(끔), `bDestroyAtFloor`(켬), `FloorHeightCm`. 높이를 크게 바꾸면 `LevelLiftMaxCm`(놓을 때 세우며 올리는 한도, 기본 15 cm)도 본다.
-- 받침은 **손에서 놓은 뒤에** 다음 박스를 만든다(들고 있는 동안은 안 만듦, P5zf).
+- 생성 지점이 덮어쓰는 값: `LoadTarget`, `bUsePlacementAssist`(끔), `bDestroyAtFloor`(켬), `FloorHeightCm`(= 정렬 컴포넌트 `Floor World Z Cm`). 높이를 크게 바꾸면 `LevelLiftMaxCm`(놓을 때 세우며 올리는 한도, 기본 15 cm)도 본다.
+- 생성 지점은 **손에서 놓은 뒤에** 다음 박스를 만든다(들고 있는 동안은 안 만듦, P5zf).
 - 적재 영역(`AVBoRLoadTarget`)은 박스 크기를 따르지 않는다. 트렁크 안 공간 크기로 따로 둔다.
 
 ## 6. 판정 형상 — 잡는 곳·미는 곳 맞추기
@@ -345,7 +345,7 @@ L_Main
 | 바닥 경로 — 운전석 문까지 | `AVBoRFloorRoute` | 같음. 끝 점은 문 앞 | `Route.ToDriverDoor` — 07단계 |
 | 앞·뒤 키 테이블 | `AVBoRKeyTable` | 바닥에. `KeyClass` = `BP_KeyFob_Front`·`_Rear` | 키 태그는 §8.3 |
 | 박스 적재 영역 | `AVBoRLoadTarget` | 트렁크 안. `LoadingRegion` 상자를 트렁크 안 공간 크기로 | — |
-| 박스 받침 | `AVBoRBoxStand` | 차 뒤 동승석 쪽 바닥 | `Car.BoxStand`, **`LoadTarget` = 위 적재 영역**(레벨 인스턴스에서 스포이트로), `BoxClass` = `BP_Box` |
+| 박스 생성 지점 | `AVBoRObjectSpawnPoint` (메시 없음 — 에디터에서만 화살표·선 상자) | **받침대 윗면**에. Actor 위치 = 박스 바닥 가운데, 화살표 = 박스 앞(+X). 받침대 메시는 따로 `StaticMeshActor`로 놓고 충돌을 켠다(놓은 박스를 받침) | `Car.BoxStand`, **`LoadTarget` = 위 적재 영역**(레벨 인스턴스에서 스포이트로), `SpawnClass` = `BP_Box` |
 | 안내판 표식 5개 | `AVBoRPanelAnchor` | §9.3 | `Guide.*` |
 
 - **경로는 `Car.Footprint`를 지나면 안 된다.** 지나면 흐름이 시작되지 않는다. 경로 점은 실제 방 크기에 맞춰 옮긴다(플레이 영역 밖이면 경로를 숨김).
@@ -409,7 +409,7 @@ L_Main
    - 열리는 방향·최대 각, 손잡이·그립·운전석 미러가 문과 같이 도는지, 기어 버튼이 레버를 따라오는지, 리프트게이트 버튼, 2열 F·U, 키 집고 버튼 누르기.
    - **문:** 운전석에서 안쪽 손잡이를 잡으러 갈 때 문이 먼저 밀려 나가지 않는지(§6.4), 바깥 면·안쪽 트림을 밀어 보이는 면에 닿을 때 밀리는지(§6.3). 그립으로 연 문을 밀고 당기는지, 잠긴 동안 그립이 반응하지 않는지.
    - **선바이저:** 잡아 내리고 놓은 자리에 남는지, 앞·뒤 면을 밀 때 손가락이 닿는 순간 움직이는지(§6.6), 잡으려다 밀려 버리지 않는지.
-   - **박스:** 트렁크에 놓아 바닥에 착지하는지, 리프트게이트를 닫을 때 트렁크 안쪽 박스에는 다시 열리지 않는지(§6.5). `BP_Box` 메시를 바꿨으면 받침 위에 뜨거나 묻히지 않는지.
+   - **박스:** 트렁크에 놓아 바닥에 착지하는지, 리프트게이트를 닫을 때 트렁크 안쪽 박스에는 다시 열리지 않는지(§6.5). `BP_Box` 메시를 바꿨으면 받침대 위에 뜨거나 묻히지 않는지(생성 지점이 받침대 윗면에 있는지).
    - **시동·미러:** 누르면 두 미러가 펼쳐지고 다시 누르면 접히는지, 문을 연 채로도. 진행자 `E`·`R`. 미러가 접히며 차체와 겹치지 않는지.
    - **문 관성을 켰다면:** 툭 밀기, 손잡이로 당겨 놓기, 밀어 닫기(잠기는지), 밀다가 손을 시야 밖으로 빼기(서는지).
    - **소리:** 넣은 칸마다 한 번씩 들어 본다. 감쇠를 넣은 칸이 부품 쪽에서 들리는지.
