@@ -15,6 +15,14 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FVBoRPointRecord, const FString&);
 UENUM(BlueprintType)
 enum class EVBoRAlignmentState : uint8 { Applied, NoSavedValue, NeedsCheck };
 
+USTRUCT(BlueprintType)
+struct FVBoRBuckProfile
+{
+	GENERATED_BODY()
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Alignment") FString Name;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Alignment", meta=(ClampMin="0", ClampMax="49")) int32 FirstMarkerId = 1;
+};
+
 UCLASS(ClassGroup=(VBoR), meta=(BlueprintSpawnableComponent))
 class VBOR_API UVBoRVehicleAlignmentComponent : public UActorComponent
 {
@@ -54,6 +62,14 @@ public:
 	const TArray<FVBoRAlignPointSample>& GetCapturedPoints() const { return CapturedPoints; }
 	FString PointStatus() const;
 	void AdvancePointCapture();
+	UPROPERTY(EditAnywhere, Category="Alignment") TArray<FVBoRBuckProfile> Bucks;
+	FString ValidateBuckProfiles() const;
+	FString FindAlignPoints(TArray<UVBoRAlignPointComponent*>& Out, const FString& BuckName) const;
+	FString ActiveBuckName() const;
+	FString BuckStatus() const;
+	FString NextBuckRejection() const;
+	bool SelectNextBuck(FString& Name, FString& Failure) const;
+	bool SaveMarkerPoints(const FString& BuckName, const TArray<FVBoRAlignPointSample>& Samples, FString& Failure) const;
 	UPROPERTY(EditAnywhere, Category="Point alignment", meta=(Units="s", ClampMin="0.01")) double PointCaptureSeconds = 1;
 	UPROPERTY(EditAnywhere, Category="Point alignment", meta=(ClampMin="0", ClampMax="1", ToolTip="Index fingertip used for point capture: 0 = left, 1 = right")) int32 PointHand = 0;
 	UPROPERTY(EditAnywhere, Category="Point alignment", meta=(Units="mm", ClampMin="0")) double PointSpreadLimitMm = 10;
@@ -75,6 +91,7 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual FString SavedAlignmentPath() const;
+	virtual FString CalibrationDirectory() const;
 	virtual bool CanReadPointTip() const;
 	virtual bool ReadPointTip(FVector& WorldTip) const;
 	virtual double PointTime() const;
@@ -84,6 +101,7 @@ private:
 	UPROPERTY() TObjectPtr<UVBoRViewpointComponent> CurrentViewpoint;
 	UPROPERTY() TObjectPtr<UVBoRViewpointComponent> PendingViewpoint;
 	FVBoRBuckSavedAlignment Saved;
+	int32 ActiveBuckIndex = 0;
 	FVector2D HomeShiftCm = FVector2D::ZeroVector;
 	bool bHasSaved = false, bSwitching = false, bMoved = false;
 	bool bReapplying = false;
@@ -102,7 +120,11 @@ private:
 	bool BasePawn(FTransform& Out, FString& Failure) const;
 	USceneComponent* DriverSeatReference(FString& Failure) const;
 	FString FindAlignPoints(TArray<UVBoRAlignPointComponent*>& Out) const;
-	bool FitCaptured(const TArray<FVBoRAlignPointSample>& Samples, FVBoRPointFit& Fit, FString& Failure) const;
+	void ReadActiveBuck(FString& FallbackReason);
+	bool WriteActiveBuck(const FString& Name, FString& Failure) const;
+	FString BuckAlignmentPath(const FString& Name) const;
+	bool FitCaptured(const TArray<FVBoRAlignPointSample>& Samples, FVBoRPointFit& Fit, FString& Failure, const FString& BuckName) const;
+	FString PointFitRejection(const TArray<FVBoRAlignPointSample>& Samples, const FString& BuckName) const;
 	void ShowPoints(bool bShow);
 	void PointResult(const FString& Message);
 	TArray<FVBoRAlignPointSample> CapturedPoints;

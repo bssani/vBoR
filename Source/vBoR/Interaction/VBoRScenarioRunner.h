@@ -24,7 +24,7 @@ class UVBoRVehiclePowerComponent;
 class UVBoRGuidanceWidget;
 class UVBoRButtonLabelWidget;
 
-enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel, ReapplyAlignment, FoldSeat, UnfoldSeat, CapturePoint, SavePoints, CancelPoints, Power };
+enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel, ReapplyAlignment, FoldSeat, UnfoldSeat, CapturePoint, SavePoints, CancelPoints, Power, NextBuck };
 enum class EVBoRCommandSource : uint8 { Participant, Operator };
 struct FVBoRFlowToken { int32 StepIndex = INDEX_NONE; uint64 Generation = 0; };
 struct FVBoRFlowCommand
@@ -98,6 +98,7 @@ private:
 	friend struct FR9TestAccess;
 	friend struct FR5TestAccess;
 	friend struct FP4hTestAccess;
+	friend struct FM2Fixture;
 	friend struct FP3FlowTestAccess;
 	friend struct FP5bTestAccess;
 	friend struct FP5gTestAccess;
@@ -196,6 +197,7 @@ private:
 	void KeyConfirm(); void KeyNext(); void KeyPrevious(); void KeyPassenger(); void KeyRear(); void KeyReturn(); void KeyRestart(); void KeyIgnore();
 	void KeyOperatorInfo();
 	void KeyFreeMode(); void KeyReloadLevel();
+	void KeyNextBuck();
 	void KeyReapply();
 	void KeyFoldSeat(); void KeyUnfoldSeat();
 	void KeyPower();

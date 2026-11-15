@@ -33,6 +33,7 @@ namespace
 		case EVBoROperatorButton::FoldSeat: return EVBoRFlowCommand::FoldSeat;
 		case EVBoROperatorButton::UnfoldSeat: return EVBoRFlowCommand::UnfoldSeat;
 		case EVBoROperatorButton::Power: return EVBoRFlowCommand::Power;
+		case EVBoROperatorButton::NextBuck: return EVBoRFlowCommand::NextBuck;
 		default: return EVBoRFlowCommand::Confirm;
 		}
 	}
@@ -49,7 +50,7 @@ namespace
 		if (!Decision.bAccepted) { return EVBoROperatorStyle::Disabled; }
 		if ((Button == EVBoROperatorButton::Confirm && !bReapplyPrimary) || (Button == EVBoROperatorButton::Reapply && bReapplyPrimary)) { return EVBoROperatorStyle::Primary; }
 		if (Badge == TEXT("Current")) { return EVBoROperatorStyle::Current; }
-		return Button == EVBoROperatorButton::Reload ? EVBoROperatorStyle::Danger : EVBoROperatorStyle::Secondary;
+		return Button == EVBoROperatorButton::Reload || Button == EVBoROperatorButton::NextBuck ? EVBoROperatorStyle::Danger : EVBoROperatorStyle::Secondary;
 	}
 }
 
@@ -111,6 +112,12 @@ FVBoRCommandDecision AVBoRScenarioRunner::EvaluateCommand(const FVBoRFlowCommand
 	{
 		const FString Reason = Alignment ? Alignment->ReapplyRejection() : FString(TEXT("Alignment component missing"));
 		if (!Reason.IsEmpty()) { return {false, EVBoRDiscard::Transition, Reason, TEXT("Command discarded — ") + Reason}; }
+		return {};
+	}
+	if (Action == EVBoRFlowCommand::NextBuck)
+	{
+		const FString Reason = Alignment ? Alignment->NextBuckRejection() : FString(TEXT("One buck or none"));
+		if (!Reason.IsEmpty()) { return {false, EVBoRDiscard::Rule, Reason, TEXT("Next buck — discarded (") + Reason + TEXT(")")}; }
 		return {};
 	}
 	if (Action == EVBoRFlowCommand::IgnoreAlignment)
@@ -249,6 +256,7 @@ FVBoROperatorStatus AVBoRScenarioRunner::GetOperatorStatus() const
 	S.bApplied = Alignment && Alignment->State == EVBoRAlignmentState::Applied;
 	S.bNeedsCheck = Alignment && Alignment->State == EVBoRAlignmentState::NeedsCheck;
 	S.Alignment = S.bApplied ? TEXT("Applied") : S.bNeedsCheck ? TEXT("Needs check — ") + Alignment->EnglishReason() : FString(TEXT("No saved alignment"));
+	S.Buck = Alignment ? Alignment->BuckStatus() : FString();
 	if (bAlignmentIgnored) { S.Alignment += TEXT(" · started without alignment"); }
 	S.Seat = Alignment ? Alignment->SeatName() : FString(TEXT("Driver"));
 	if (IsHomeShiftEnabled())

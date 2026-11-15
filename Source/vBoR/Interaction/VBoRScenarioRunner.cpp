@@ -242,6 +242,7 @@ void AVBoRScenarioRunner::BeginPlay()
 		InputComponent->BindKey(EKeys::R, IE_Pressed, this, &AVBoRScenarioRunner::KeyRestart);
 		InputComponent->BindKey(EKeys::End, IE_Pressed, this, &AVBoRScenarioRunner::KeyFreeMode);
 		InputComponent->BindKey(EKeys::F6, IE_Pressed, this, &AVBoRScenarioRunner::KeyReloadLevel);
+		InputComponent->BindKey(EKeys::B, IE_Pressed, this, &AVBoRScenarioRunner::KeyNextBuck);
 		InputComponent->BindKey(EKeys::O, IE_Pressed, this, &AVBoRScenarioRunner::KeyIgnore);
 		InputComponent->BindKey(EKeys::I, IE_Pressed, this, &AVBoRScenarioRunner::KeyOperatorInfo);
 		InputComponent->BindKey(EKeys::A, IE_Pressed, this, &AVBoRScenarioRunner::KeyReapply);
@@ -738,6 +739,19 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 		break;
 	case EVBoRFlowCommand::EnterFreeMode:
 		EnterFreeMode(false); break;
+	case EVBoRFlowCommand::NextBuck:
+	{
+		FString Name, Failure;
+		if (!Alignment->SelectNextBuck(Name, Failure))
+		{
+			LastOperatorCommand = TEXT("Next buck — discarded (") + Failure + TEXT(")");
+			Record(LastOperatorCommand);
+			break;
+		}
+		LastOperatorCommand = TEXT("Next buck — selected ") + Name;
+		Record(LastOperatorCommand);
+	}
+	[[fallthrough]];
 	case EVBoRFlowCommand::ReloadLevel:
 	{
 		bReloadPending = true; bReloadRequested = false;
@@ -1107,6 +1121,7 @@ void AVBoRScenarioRunner::KeyReturn() { QueueLive(EVBoRFlowCommand::ReturnBase, 
 void AVBoRScenarioRunner::KeyRestart() { QueueLive(EVBoRFlowCommand::Restart, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyFreeMode() { QueueLive(EVBoRFlowCommand::EnterFreeMode, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyReloadLevel() { QueueLive(EVBoRFlowCommand::ReloadLevel, EVBoRCommandSource::Operator); }
+void AVBoRScenarioRunner::KeyNextBuck() { QueueLive(EVBoRFlowCommand::NextBuck, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyReapply() { QueueLive(EVBoRFlowCommand::ReapplyAlignment, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyFoldSeat() { QueueLive(EVBoRFlowCommand::FoldSeat, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyUnfoldSeat() { QueueLive(EVBoRFlowCommand::UnfoldSeat, EVBoRCommandSource::Operator); }
