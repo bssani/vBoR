@@ -112,3 +112,15 @@
 | 날짜 | 개정 | 내용 |
 |---|---|---|
 | 2026-11-16 | 처음 | 작성(사용자 결정: 받침대 없이 생성 지점만, 일반 이름) |
+
+## 개정 1 (Claude 2026-11-16) — 기존 시험 감사 표 추가 (Codex 질문 답)
+
+§3 감사 표에 아래를 더한다. 이 밖은 여전히 고치지 않는다.
+
+| 시험 | 지금 단언 | 고침 |
+|---|---|---|
+| P4d E4 `P3FlowTests.cpp:1171-1182` | `E.Car->BoxStand->SourceBox` | 새 이름으로 참조 교체만 |
+| P4d E1 `:1127` | 박스 바닥 75.01 (받침대 Actor 기준) | 수치·허용차 그대로, 기준을 mock 원래 받침대 자리(`RearBoxStandCm`, 바닥)로 |
+| P4d E10 `:1141` | 장애물 = `S->Stand` 경계 | 새 mock 받침대 메시(D9) 경계로 교체만. 기대값 그대로 |
+| P5t E3 `P5tBoxBlueprintTests.cpp:122` | `FloorHeightCm == 받침대 Z` | 픽스처에 생성 지점 Z와 다른 `FloorWorldZCm` 정렬 컴포넌트, `FloorHeightCm == 그 값`(D4) |
+| P5t 경고 수집기 `:53` | `BoxClass is empty` 검색 | `SpawnClass is empty` 검색. E8 횟수 단언 그대로 |
