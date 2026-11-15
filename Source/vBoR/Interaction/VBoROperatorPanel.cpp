@@ -29,7 +29,8 @@ const TArray<FVBoROperatorShortcut>& VBoROperator::Shortcuts()
 		{EVBoROperatorButton::CapturePoint, EKeys::P, TEXT("Capture point"), TEXT("P")},
 		{EVBoROperatorButton::SavePoints, EKeys::S, TEXT("Save points"), TEXT("S")},
 		{EVBoROperatorButton::CancelPoints, EKeys::X, TEXT("Cancel points"), TEXT("X")},
-		{EVBoROperatorButton::Power, EKeys::E, TEXT("Power on/off"), TEXT("E")}};
+		{EVBoROperatorButton::Power, EKeys::E, TEXT("Power on/off"), TEXT("E")},
+		{EVBoROperatorButton::NextBuck, EKeys::B, TEXT("Next buck"), TEXT("B")}};
 	return Values;
 }
 
@@ -168,6 +169,9 @@ void SVBoROperatorPanel::Construct(const FArguments& Args)
 						[SNew(SHorizontalBox)
 							+ SHorizontalBox::Slot().AutoWidth()[SNew(SBox).WidthOverride(148)[Text(TEXT("Alignment"),15,TEXT("9aa6b8"))]]
 							+ SHorizontalBox::Slot().FillWidth(1)[AlignmentText]]
+						+ SVerticalBox::Slot().AutoHeight()
+						[SNew(SBox).Visibility_Lambda([this]() { return Snapshot.Status.Buck.IsEmpty() ? EVisibility::Collapsed : EVisibility::Visible; })
+							.Padding(0,0,0,8)[StatusText(&FVBoROperatorStatus::Buck,15,TEXT("eef2f7"))]]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0,0,0,8)[StatusRow(TEXT("Seat"),&FVBoROperatorStatus::Seat)]
 						+ SVerticalBox::Slot().AutoHeight()[StatusRow(TEXT("Last command"),&FVBoROperatorStatus::LastCommand)]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0,8,0,0)
@@ -197,6 +201,7 @@ void SVBoROperatorPanel::Construct(const FArguments& Args)
 					+ SHorizontalBox::Slot().FillWidth(1).Padding(8,0,0,0)
 					[Section(TEXT("Alignment and view"),SNew(SVerticalBox)
 						+ SVerticalBox::Slot().AutoHeight()[Button(EVBoROperatorButton::Reapply)]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0,8,0,0)[Button(EVBoROperatorButton::NextBuck)]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0,8)[SNew(STextBlock).Font(Font(12)).ColorAndOpacity(VBoROperator::Color(TEXT("9aa6b8"))).AutoWrapText(true)
 							.Text_Lambda([this]() { return FText::FromString(Snapshot.ReapplyHelp); })]
 						+ SVerticalBox::Slot().AutoHeight()[Button(EVBoROperatorButton::Info)]

@@ -39,7 +39,9 @@ void UVBoRVehicleAlignmentComponent::BeginPlay()
 }
 
 FString UVBoRVehicleAlignmentComponent::SavedAlignmentPath() const
-{ return FPaths::Combine(FPaths::ProjectSavedDir(), TEXT("Calibration/BuckEye.json")); }
+{
+	return Bucks.IsEmpty() ? FPaths::Combine(CalibrationDirectory(), TEXT("BuckEye.json")) : BuckAlignmentPath(ActiveBuckName());
+}
 
 bool UVBoRVehicleAlignmentComponent::PawnFor(const UVBoRViewpointComponent* Viewpoint, FTransform& Out, FString& Failure) const
 {
@@ -55,13 +57,46 @@ bool UVBoRVehicleAlignmentComponent::PawnFor(const UVBoRViewpointComponent* View
 
 void UVBoRVehicleAlignmentComponent::LoadSetupAlignment()
 {
+	const bool bUseBuck = !Bucks.IsEmpty() && CVarEyeAlignment.GetValueOnGameThread() == 0;
+	FString FallbackReason;
+	if (!Bucks.IsEmpty())
+	{
+		const FString ProfileFailure = ValidateBuckProfiles();
+		if (!ProfileFailure.IsEmpty())
+		{
+			if (bUseBuck)
+			{
+				InitializeSetup(AlignmentPawn, nullptr, INDEX_NONE, FVector2D::ZeroVector, true);
+				State = EVBoRAlignmentState::NeedsCheck;
+				Reason = TEXT("Buck profiles invalid — ") + ProfileFailure;
+				UE_LOG(LogP3Flow, Log, TEXT("Alignment %s"), *Describe());
+				return;
+			}
+		}
+		else { ReadActiveBuck(FallbackReason); }
+	}
+	const FString Path = !Bucks.IsEmpty() && !bUseBuck ?
+		FPaths::Combine(CalibrationDirectory(), TEXT("BuckEye.json")) : SavedAlignmentPath();
 	FVBoRBuckSavedAlignment Loaded; FString LoadReason;
-	const bool bLoaded = FVBoRBuckAlignmentStore::Load(SavedAlignmentPath(), Loaded, LoadReason);
+	const bool bLoaded = FVBoRBuckAlignmentStore::Load(Path, Loaded, LoadReason);
 	const bool bEyeBlocked = bLoaded && Loaded.Version == 1 && CVarEyeAlignment.GetValueOnGameThread() == 0;
 	int32 Origin; FVector2D Bounds; ReadPointEnvironment(Origin,Bounds);
 	InitializeSetup(AlignmentPawn, bLoaded && !bEyeBlocked ? &Loaded : nullptr, Origin, Bounds, true);
 	if (bEyeBlocked) { Reason = EyeDisabledReason; }
 	if (!bLoaded) { Reason += TEXT(" — ") + LoadReason; }
+	if (bUseBuck)
+	{
+		if (!bLoaded && State == EVBoRAlignmentState::NoSavedValue)
+		{
+			Reason = TEXT("No saved value for buck ") + ActiveBuckName() + TEXT(" — ") + LoadReason;
+		}
+		if (!FallbackReason.IsEmpty())
+		{
+			if (!Reason.IsEmpty()) { Reason += TEXT(" — "); }
+			Reason += FallbackReason;
+			UE_LOG(LogP3Flow, Log, TEXT("%s"), *FallbackReason);
+		}
+	}
 }
 
 void UVBoRVehicleAlignmentComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -146,7 +181,8 @@ void UVBoRVehicleAlignmentComponent::UpdateEyeAlignment()
 	if (!bPendingEyeEnable || !ReapplyRejection().IsEmpty()) { return; }
 	bPendingEyeEnable = false;
 	FVBoRBuckSavedAlignment Value; FString Failure;
-	if (!bFileEyeAlignment && FVBoRBuckAlignmentStore::Load(SavedAlignmentPath(), Value, Failure) && Value.Version == 1)
+	const FString EyePath = Bucks.IsEmpty() ? SavedAlignmentPath() : FPaths::Combine(CalibrationDirectory(), TEXT("BuckEye.json"));
+	if (!bFileEyeAlignment && FVBoRBuckAlignmentStore::Load(EyePath, Value, Failure) && Value.Version == 1)
 	{ RequestReapply(); }
 }
 

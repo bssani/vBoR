@@ -13,6 +13,7 @@ public:
 	UVBoRAlignPointComponent();
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Alignment points", meta=(ClampMin="1")) int32 Order = 1;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Alignment points") FString Label;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Alignment points") FString Buck;
 	void ShowPoint(bool bShow);
 protected:
 	virtual void OnRegister() override;

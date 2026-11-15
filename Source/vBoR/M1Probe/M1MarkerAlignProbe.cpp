@@ -100,9 +100,10 @@ void AM1MarkerAlignProbe::BeginPlay()
 		InputComponent->BindKey(EKeys::T, IE_Pressed, this, &AM1MarkerAlignProbe::StartTip);
 		InputComponent->BindKey(EKeys::G, IE_Pressed, this, &AM1MarkerAlignProbe::ApplyFit);
 		InputComponent->BindKey(EKeys::H, IE_Pressed, this, &AM1MarkerAlignProbe::RestorePawn);
+		InputComponent->BindKey(EKeys::S, IE_Pressed, this, &AM1MarkerAlignProbe::SaveFit);
 	}
 	RecenterHandle = FCoreDelegates::VRHeadsetRecenter.AddUObject(this, &AM1MarkerAlignProbe::CancelForRecenter);
-	Publish(TEXT("M: Record or cancel   T: Compare fingertip   G: Preview fit   H: Restore"));
+	Publish(TEXT("M: Record or cancel   T: Compare fingertip   G: Preview fit   H: Restore   S: Save fit"));
 	bCameraStarted = StartCamera();
 	if (!bCameraStarted)
 	{
@@ -184,34 +185,58 @@ void AM1MarkerAlignProbe::StartCapture(double Now)
 		return;
 	}
 
-	TArray<UVBoRAlignPointComponent*> Points;
-	Alignment->GetOwner()->GetComponents(Points);
-	Points.Sort([](const UVBoRAlignPointComponent& A, const UVBoRAlignPointComponent& B)
+	const FString ProfileFailure = Alignment->ValidateBuckProfiles();
+	if (!ProfileFailure.IsEmpty())
 	{
-		return A.Order < B.Order;
-	});
-	if (Points.Num() != 4)
-	{
-		Publish(TEXT("Expected four vehicle alignment points"));
+		Publish(TEXT("Buck profiles invalid — ") + ProfileFailure);
 		return;
 	}
-	for (int32 Index = 0; Index < Points.Num(); ++Index)
+	TArray<UVBoRAlignPointComponent*> Points;
+	TMap<int32, int32> BuckIndices;
+	if (Alignment->Bucks.IsEmpty())
 	{
-		const int32 Order = Points[Index]->Order;
-		if (Order < 1 || Order >= 50 || (Index > 0 && Order == Points[Index - 1]->Order))
+		Alignment->GetOwner()->GetComponents(Points);
+		Points.Sort([](const UVBoRAlignPointComponent& A, const UVBoRAlignPointComponent& B) { return A.Order < B.Order; });
+		if (Points.Num() != 4)
 		{
-			Publish(TEXT("Expected distinct alignment point orders from 1 to 49"));
+			Publish(TEXT("Expected four vehicle alignment points"));
 			return;
 		}
+		for (int32 Index = 0; Index < Points.Num(); ++Index)
+		{
+			const int32 Order = Points[Index]->Order;
+			if (Order < 1 || Order >= 50 || (Index > 0 && Order == Points[Index - 1]->Order))
+			{
+				Publish(TEXT("Expected distinct alignment point orders from 1 to 49"));
+				return;
+			}
+		}
 	}
-
+	else
+	{
+		for (int32 Index = 0; Index < Alignment->Bucks.Num(); ++Index)
+		{
+			const auto& Buck = Alignment->Bucks[Index];
+			TArray<UVBoRAlignPointComponent*> BuckPoints;
+			Alignment->FindAlignPoints(BuckPoints, Buck.Name);
+			if (BuckPoints.Num() != 4)
+			{
+				Publish(FString::Printf(TEXT("Expected four vehicle alignment points for buck %s"), *Buck.Name));
+				return;
+			}
+			for (const auto* Point : BuckPoints) { BuckIndices.Add(Buck.FirstMarkerId + Point->Order - 1, Index); }
+		}
+	}
 	Markers.Reset();
 	Orders.Reset();
-	for (UVBoRAlignPointComponent* Point : Points)
+	for (auto* Point : Points)
 	{
 		Orders.Add(Point->Order);
 		Markers.Add(Point->Order).Point = Point;
 	}
+	MarkerBuckIndices = MoveTemp(BuckIndices);
+	IgnoredMarkerCounts.Reset();
+	SessionBuck.Reset();
 	Fit.Reset();
 	LastCameraRotation.Reset();
 	if (Camera)
@@ -282,15 +307,18 @@ void AM1MarkerAlignProbe::ProcessFrame(FM1CameraFrame& Frame, double Now)
 	DetectM1Markers(Frame, [this, &Frame, &PawnWorld, bFastHead](int32 Id, const FVector2f (&Corners)[4])
 	{
 		const FMarker* Marker = Markers.Find(Id);
-		if (!Marker || Marker->bComplete)
+		if (!Marker && !MarkerBuckIndices.Contains(Id)) { return; }
+		if (Marker && Marker->bComplete) { return; }
+		if (!Marker && !SessionBuck.IsEmpty())
 		{
+			RecordObservation(Id, nullptr, bFastHead);
 			return;
 		}
 		FM1MarkerObservation Observation;
 		const bool bValid = !bFastHead && SolveM1Marker(Corners, MarkerSizeMm, Frame.Model, PawnWorld, Observation);
 		RecordObservation(Id, bValid ? &Observation : nullptr, bFastHead);
 	});
-	if (Algo::AllOf(Orders, [this](int32 Id) { return Markers[Id].bComplete; }))
+	if (!Orders.IsEmpty() && Algo::AllOf(Orders, [this](int32 Id) { return Markers[Id].bComplete; }))
 	{
 		FinishCapture(Now);
 	}
@@ -299,12 +327,33 @@ void AM1MarkerAlignProbe::ProcessFrame(FM1CameraFrame& Frame, double Now)
 void AM1MarkerAlignProbe::RecordObservation(int32 Id, const FM1MarkerObservation* Observation, bool bFastHead)
 {
 	FMarker* Marker = Markers.Find(Id);
-	if (!Marker || Marker->bComplete)
+	const bool bAccepted = !bFastHead && Observation && Observation->ReprojectionPx <= MarkerReprojLimitPx &&
+		Observation->SidePx >= MarkerMinSidePx;
+	if (!Marker)
 	{
-		return;
+		const int32* Index = MarkerBuckIndices.Find(Id);
+		if (!Index || !Alignment.IsValid() || !Alignment->Bucks.IsValidIndex(*Index)) { return; }
+		if (!SessionBuck.IsEmpty())
+		{
+			++IgnoredMarkerCounts.FindOrAdd(Id);
+			return;
+		}
+		if (!bAccepted) { return; }
+		const auto& Buck = Alignment->Bucks[*Index];
+		TArray<UVBoRAlignPointComponent*> Points;
+		if (!Alignment->FindAlignPoints(Points, Buck.Name).IsEmpty() || Points.Num() != 4) { return; }
+		SessionBuck = Buck.Name;
+		for (auto* Point : Points)
+		{
+			const int32 MarkerId = Buck.FirstMarkerId + Point->Order - 1;
+			Orders.Add(MarkerId);
+			Markers.Add(MarkerId).Point = Point;
+		}
+		Marker = Markers.Find(Id);
+		Publish(TEXT("Marker capture started — buck ") + SessionBuck);
 	}
-	if (bFastHead || !Observation || Observation->ReprojectionPx > MarkerReprojLimitPx ||
-		Observation->SidePx < MarkerMinSidePx)
+	if (!Marker || Marker->bComplete) { return; }
+	if (!bAccepted)
 	{
 		++Marker->Rejected;
 		return;
@@ -329,6 +378,23 @@ void AM1MarkerAlignProbe::FinishCapture(double Now)
 {
 	bCapturing = false;
 	Publish(FString::Printf(TEXT("Marker session %.2f s"), Now - CaptureStart));
+	if (!MarkerBuckIndices.IsEmpty())
+	{
+		if (SessionBuck.IsEmpty()) { Publish(TEXT("Incomplete — no buck identified")); return; }
+		if (Alignment.IsValid())
+		{
+			TArray<int32> Ids;
+			IgnoredMarkerCounts.GetKeys(Ids);
+			Ids.Sort();
+			for (int32 Id : Ids)
+			{
+				const int32 Index = MarkerBuckIndices[Id];
+				if (!Alignment->Bucks.IsValidIndex(Index)) { continue; }
+				Publish(FString::Printf(TEXT("Ignored markers from buck %s: ID %d ×%d"),
+					*Alignment->Bucks[Index].Name, Id, IgnoredMarkerCounts[Id]));
+			}
+		}
+	}
 	bool bReady = true;
 	TArray<FVector> Stage;
 	TArray<FVector> World;
@@ -447,6 +513,34 @@ void AM1MarkerAlignProbe::FinishCapture(double Now)
 	Fit = MoveTemp(Candidate);
 }
 
+void AM1MarkerAlignProbe::SaveFit()
+{
+	if (!Fit.IsSet() || !Alignment.IsValid())
+	{
+		Publish(TEXT("No marker fit to save"));
+		return;
+	}
+	TArray<FVBoRAlignPointSample> Samples;
+	for (int32 Id : Orders)
+	{
+		const FMarker& Marker = Markers[Id];
+		const auto* Point = Marker.Point.Get();
+		if (!Point) { Publish(TEXT("Marker save rejected — alignment points changed")); return; }
+		FVBoRAlignPointSample& Sample = Samples.AddDefaulted_GetRef();
+		Sample.Order = Point->Order;
+		Sample.StageCm = Marker.CenterStage;
+		Sample.SpreadMm = Marker.SpreadMm;
+		Sample.Frames = Marker.Samples.Num();
+	}
+	FString Failure;
+	if (!Alignment->SaveMarkerPoints(SessionBuck, Samples, Failure))
+	{
+		Publish(TEXT("Marker save rejected — ") + Failure);
+		return;
+	}
+	Publish(SessionBuck.IsEmpty() ? TEXT("Saved alignment — open L_Main") : TEXT("Saved for buck ") + SessionBuck + TEXT(" — open L_Main"));
+}
+
 void AM1MarkerAlignProbe::CancelForRecenter()
 {
 	if (bCapturing)
@@ -480,7 +574,7 @@ void AM1MarkerAlignProbe::ApplyFit()
 		Alignment->GetOwner()->GetComponents(Points);
 		for (auto* Point : Points)
 		{
-			Point->ShowPoint(true);
+			Point->ShowPoint(Alignment->Bucks.IsEmpty() || Point->Buck == SessionBuck);
 		}
 	}
 	Publish(TEXT("Marker fit applied temporarily"));
@@ -504,7 +598,8 @@ void AM1MarkerAlignProbe::RestorePawn()
 		Alignment->GetOwner()->GetComponents(Points);
 		for (auto* Point : Points)
 		{
-			Point->ShowPoint(Alignment->ArePointsVisible());
+			Point->ShowPoint(Alignment->ArePointsVisible() &&
+				(Alignment->Bucks.IsEmpty() || Point->Buck == Alignment->ActiveBuckName()));
 		}
 	}
 	Publish(TEXT("Previous pawn pose restored"));

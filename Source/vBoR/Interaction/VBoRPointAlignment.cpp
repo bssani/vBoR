@@ -13,7 +13,16 @@
 
 FString UVBoRVehicleAlignmentComponent::FindAlignPoints(TArray<UVBoRAlignPointComponent*>& Out) const
 {
+	return FindAlignPoints(Out, ActiveBuckName());
+}
+
+FString UVBoRVehicleAlignmentComponent::FindAlignPoints(TArray<UVBoRAlignPointComponent*>& Out, const FString& BuckName) const
+{
 	GetOwner()->GetComponents(Out);
+	if (!Bucks.IsEmpty())
+	{
+		Out.RemoveAll([&BuckName](const auto* Point) { return Point->Buck != BuckName; });
+	}
 	Out.Sort([](const UVBoRAlignPointComponent& A, const UVBoRAlignPointComponent& B) { return A.Order < B.Order; });
 	if (Out.Num() < 2) { return TEXT("Alignment points missing on the car"); }
 	for (int32 I = 0; I < Out.Num(); ++I)
@@ -37,10 +46,10 @@ USceneComponent* UVBoRVehicleAlignmentComponent::DriverSeatReference(FString& Fa
 	return Driver ? static_cast<USceneComponent*>(Driver) : BaseEye.Get();
 }
 
-bool UVBoRVehicleAlignmentComponent::FitCaptured(const TArray<FVBoRAlignPointSample>& Samples, FVBoRPointFit& Fit, FString& Failure) const
+bool UVBoRVehicleAlignmentComponent::FitCaptured(const TArray<FVBoRAlignPointSample>& Samples, FVBoRPointFit& Fit, FString& Failure, const FString& BuckName) const
 {
 	TArray<UVBoRAlignPointComponent*> Points;
-	Failure = FindAlignPoints(Points);
+	Failure = FindAlignPoints(Points, BuckName);
 	if (!Failure.IsEmpty() || Samples.Num() != Points.Num()) { Failure = TEXT("alignment points changed"); return false; }
 	TArray<FVector> Stage, World;
 	for (auto* Point : Points)
@@ -60,7 +69,7 @@ bool UVBoRVehicleAlignmentComponent::BasePawn(FTransform& Out, FString& Failure)
 	if (Saved.Version == 2)
 	{
 		FVBoRPointFit Fit;
-		if (!FitCaptured(Saved.Points,Fit,Failure)) { return false; }
+		if (!FitCaptured(Saved.Points,Fit,Failure,ActiveBuckName())) { return false; }
 		if (Fit.MaxXYCm > PointFitLimitCm) { Failure = TEXT("alignment points moved"); return false; }
 		Out = Fit.Pawn; return true;
 	}
@@ -88,6 +97,8 @@ FString UVBoRVehicleAlignmentComponent::CapturePointRejection() const
 	if (bSwitching) { return TEXT("View transition in progress"); }
 	if (!IsBaseViewpoint()) { return TEXT("Return to the driver seat first"); }
 	if (!CanReadPointTip()) { return TEXT("Hand tracking pawn required"); }
+	const FString ProfileFailure = ValidateBuckProfiles();
+	if (!ProfileFailure.IsEmpty()) { return TEXT("Buck profiles invalid — ") + ProfileFailure; }
 	TArray<UVBoRAlignPointComponent*> Points; const FString Failure = FindAlignPoints(Points);
 	if (!Failure.IsEmpty()) { return Failure; }
 	if (bPointCapturing) { return TEXT("Capturing a point"); }
@@ -137,11 +148,18 @@ FString UVBoRVehicleAlignmentComponent::SavePointsRejection() const
 {
 	TArray<UVBoRAlignPointComponent*> Points; FindAlignPoints(Points);
 	if (!bPointSession || bPointCapturing || CapturedPoints.Num() != Points.Num()) { return TEXT("Capture all points first"); }
+	const FString Failure = PointFitRejection(CapturedPoints, ActiveBuckName());
+	if (!Failure.IsEmpty()) { return Failure; }
+	if (bSwitching) { return TEXT("View transition in progress"); }
+	return FString();
+}
+
+FString UVBoRVehicleAlignmentComponent::PointFitRejection(const TArray<FVBoRAlignPointSample>& Samples, const FString& BuckName) const
+{
 	FVBoRPointFit Fit; FString Failure;
-	if (!FitCaptured(CapturedPoints,Fit,Failure)) { return Failure; }
+	if (!FitCaptured(Samples,Fit,Failure,BuckName)) { return Failure; }
 	if (Fit.SpanCm < PointMinSpanCm) { return TEXT("Points too close"); }
 	if (Fit.MaxXYCm > PointFitLimitCm) { return FString::Printf(TEXT("Fit %.2f cm over limit %.2f cm"),Fit.MaxXYCm,PointFitLimitCm); }
-	if (bSwitching) { return TEXT("View transition in progress"); }
 	return FString();
 }
 
@@ -168,7 +186,8 @@ void UVBoRVehicleAlignmentComponent::PointResult(const FString& Message)
 void UVBoRVehicleAlignmentComponent::ShowPoints(bool bShow)
 {
 	bPointsVisible = bShow; TArray<UVBoRAlignPointComponent*> Points; GetOwner()->GetComponents(Points);
-	for (auto* Point : Points) { Point->ShowPoint(bShow); }
+	const FString BuckName = ActiveBuckName();
+	for (auto* Point : Points) { Point->ShowPoint(bShow && (Bucks.IsEmpty() || Point->Buck == BuckName)); }
 }
 
 FString UVBoRVehicleAlignmentComponent::PointStatus() const
@@ -178,7 +197,7 @@ FString UVBoRVehicleAlignmentComponent::PointStatus() const
 	if (bPointSession && Points.IsValidIndex(CapturedPoints.Num()))
 	{ Text = FString::Printf(TEXT("Point %d/%d — %s\n"),CapturedPoints.Num()+1,Points.Num(),*Points[CapturedPoints.Num()]->Label) + Text; }
 	FVBoRPointFit Fit; FString FitFailure;
-	if (!CapturedPoints.IsEmpty() && FitCaptured(CapturedPoints,Fit,FitFailure))
+	if (!CapturedPoints.IsEmpty() && FitCaptured(CapturedPoints,Fit,FitFailure,ActiveBuckName()))
 	{
 		for (int32 I = 0; I < Points.Num(); ++I)
 		{ Text += FString::Printf(TEXT("\nPoint %d: XY %.2f cm, height %+.2f cm%s"),Points[I]->Order,Fit.XYCm[I],Fit.HeightCm[I],FMath::Abs(Fit.HeightCm[I]) > PointHeightWarnCm ? TEXT(" — height warning") : TEXT("")); }

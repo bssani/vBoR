@@ -79,6 +79,7 @@ protected:
 
 private:
 	friend struct FM1ProbeFixture;
+	friend struct FM2Fixture;
 
 	struct FMarker
 	{
@@ -99,6 +100,7 @@ private:
 	bool CheckModel(const FM1CameraFrame& Frame);
 	void RecordObservation(int32 Id, const FM1MarkerObservation* Observation, bool bFastHead);
 	void FinishCapture(double Now);
+	void SaveFit();
 	void CancelForRecenter();
 	void ApplyFit();
 	void RestorePawn();
@@ -112,6 +114,9 @@ private:
 	TWeakObjectPtr<UVBoRVehicleAlignmentComponent> Alignment;
 	TMap<int32, FMarker> Markers;
 	TArray<int32> Orders;
+	TMap<int32, int32> MarkerBuckIndices;
+	TMap<int32, int32> IgnoredMarkerCounts;
+	FString SessionBuck;
 	FVector2D CameraFocalPx = FVector2D::ZeroVector;
 	FVector2D CameraPrincipalPx = FVector2D::ZeroVector;
 	FDateTime LastTimestamp;
