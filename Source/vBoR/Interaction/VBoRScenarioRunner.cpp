@@ -3,7 +3,7 @@
 #include "VBoRVehiclePowerComponent.h"
 #include "VBoRFoldingMirror.h"
 #include "VBoRFoldingSeat.h"
-#include "VBoRBoxStand.h"
+#include "VBoRObjectSpawnPoint.h"
 #include "VBoRParticipantZones.h"
 #include "VBoRVehicleAlignmentComponent.h"
 #include "VBoRViewpointComponent.h"
@@ -773,7 +773,7 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 		Alignment->ResetHomeShift();
 		{
 			// Clear boxes first (none left inside closed gate, P4d D6)
-			for (TActorIterator<AVBoRBoxStand> It(GetWorld()); It; ++It) { It->ResetStand(); }
+			for (TActorIterator<AVBoRObjectSpawnPoint> It(GetWorld()); It; ++It) { It->ResetSpawn(); }
 			TSet<AVBoRPoweredPanel*> Gates;
 			for (UObject* Target : Targets) { if (auto* Gate = Cast<AVBoRPoweredPanel>(Target)) { Gates.Add(Gate); } }
 			for (TActorIterator<AVBoRPoweredPanel> It(GetWorld()); It; ++It) { if (It->ActorHasTag(TEXT("Car.Liftgate"))) { Gates.Add(*It); } }

@@ -1,6 +1,6 @@
 #if WITH_DEV_AUTOMATION_TESTS
 #include "Misc/AutomationTest.h"
-#include "../Interaction/VBoRBoxStand.h"
+#include "../Interaction/VBoRObjectSpawnPoint.h"
 #include "../Interaction/VBoRCarryObject.h"
 #include "../Interaction/VBoRLoadTarget.h"
 #include "Components/BoxComponent.h"
@@ -26,11 +26,11 @@ namespace
 struct FP5zfWorld
 {
 	UWorld* World = UWorld::CreateWorld(EWorldType::Game, false);
-	AVBoRBoxStand* Stand;
+	AVBoRObjectSpawnPoint* Stand;
 	FTransform Start;
 	FP5zfWorld()
 	{
-		Stand = World->SpawnActorDeferred<AVBoRBoxStand>(AVBoRBoxStand::StaticClass(), FTransform(FRotator(0, 30, 0), FVector(100, 200, 10)));
+		Stand = World->SpawnActorDeferred<AVBoRObjectSpawnPoint>(AVBoRObjectSpawnPoint::StaticClass(), FTransform(FRotator(0, 30, 0), FVector(100, 200, 85)));
 		Stand->LoadTarget = World->SpawnActor<AVBoRLoadTarget>();
 		Stand->LoadTarget->SetActorLocation(FVector(400, 200, 100));
 		Stand->LoadTarget->LoadingRegion->SetBoxExtent(FVector(100));
@@ -168,7 +168,7 @@ bool FP5zfFloor::RunTest(const FString&)
 {
 	FP5zfWorld W; auto* First = W.Stand->SourceBox.Get();
 	TestTrue(TEXT("Grab accepted"), FP5zfTestAccess::Grab(First));
-	First->SetActorLocation(FVector(500, 500, 35)); FP5zfTestAccess::Release(First); First->Tick(1);
+	First->SetActorLocation(FVector(500, 500, 25)); FP5zfTestAccess::Release(First); First->Tick(1);
 	TestFalse(TEXT("Released box removed at stand floor"), IsValid(First));
 	TestEqual(TEXT("No box before refill tick"), W.Count(), 0);
 	W.TickStand(); TestEqual(TEXT("Next stand tick restores one box"), W.Count(), 1);

@@ -5,7 +5,7 @@
 #include "../Interaction/VBoRPoweredPanel.h"
 #include "../Interaction/VBoRFoldingSeat.h"
 #include "../Interaction/VBoRLoadTarget.h"
-#include "../Interaction/VBoRBoxStand.h"
+#include "../Interaction/VBoRObjectSpawnPoint.h"
 #include "../Interaction/VBoRFloorRoute.h"
 #include "Components/BoxComponent.h"
 #include "Components/SplineComponent.h"
@@ -33,6 +33,12 @@
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstanceDynamic.h"
 
+namespace
+{
+constexpr double RearBoxStandTopCm = 75;
+const FVector RearBoxStandSizeCm(60, 60, 5);
+}
+
 AP3VehicleMock::AP3VehicleMock()
 {
 	KeyTableClass = AVBoRKeyTable::StaticClass();
@@ -52,6 +58,10 @@ AP3VehicleMock::AP3VehicleMock()
 	Seat = CreateDefaultSubobject<UVBoRSeatZoneComponent>(TEXT("DriverSeat")); Seat->SetupAttachment(RootComponent); Seat->ComponentTags.Add(TEXT("Car.DriverSeat"));
 	Alignment = CreateDefaultSubobject<UVBoRVehicleAlignmentComponent>(TEXT("Alignment")); Alignment->BaseEye = DriverEye;
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
+	RearBoxStandMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ApproximateBoxStand"));
+	RearBoxStandMesh->SetupAttachment(RootComponent);
+	RearBoxStandMesh->SetStaticMesh(Cube.Object);
+	RearBoxStandMesh->SetCollisionProfileName(TEXT("BlockAllDynamic"));
 	const TCHAR* Names[] = { TEXT("Floor"),TEXT("Roof"),TEXT("Front"),TEXT("Rear"),TEXT("RightSill"),TEXT("RightPillar"),TEXT("LeftRearSill"),TEXT("LeftFrontPillar"),TEXT("LeftRearPillar"),TEXT("SeatCushion"),TEXT("SeatBack"),TEXT("Dashboard"),TEXT("Steering") };
 	for (const TCHAR* Name : Names)
 	{
@@ -75,6 +85,8 @@ AP3VehicleMock::AP3VehicleMock()
 void AP3VehicleMock::OnConstruction(const FTransform& Transform)
 {
 	Super::OnConstruction(Transform);
+	RearBoxStandMesh->SetRelativeLocation(RearBoxStandCm + FVector(0, 0, RearBoxStandTopCm - RearBoxStandSizeCm.Z * 0.5));
+	RearBoxStandMesh->SetRelativeScale3D(RearBoxStandSizeCm / 100);
 	for (int32 I = 0; I < AlignPoints.Num(); ++I) { if (AlignPointsCm.IsValidIndex(I)) { AlignPoints[I]->SetRelativeLocation(AlignPointsCm[I]); } }
 	Footprint->SetRelativeLocation(FVector(0,0,BodySizeCm.Z*0.5));
 	Footprint->SetBoxExtent(FVector(BodySizeCm.X*0.5 + FootprintMarginCm, BodySizeCm.Y*0.5 + FootprintMarginCm, BodySizeCm.Z*0.5));
@@ -332,7 +344,7 @@ void AP3VehicleMock::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	for (AVBoRPanelAnchor* Anchor : PanelAnchors) { if (Anchor) { Anchor->Destroy(); } } PanelAnchors.Reset();
 	if (RearSeat) { RearSeat->Destroy(); }
 	if (RearCushion) { RearCushion->DestroyComponent(); }
-	if (BoxStand) { BoxStand->Destroy(); }
+	if (ObjectSpawnPoint) { ObjectSpawnPoint->Destroy(); }
 	if (Liftgate) { Liftgate->Destroy(); }
 	if (LoadTarget) { LoadTarget->Destroy(); }
 	if (Trunk) { Trunk->Destroy(); }
@@ -379,8 +391,8 @@ void AP3VehicleMock::CreateRearSection()
 	LoadTarget->FinishSpawning(Goal); LoadTarget->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 	LoadTarget->LoadingRegion->SetBoxExtent(Size/2);
 	LoadTarget->LoadingRegion->SetWorldTransform(FTransform(GetActorQuat(), RearPose.TransformPosition(FVector(Size.X/2,0,Trunk->FloorHeightCm+Size.Z/2))));
-	const FTransform StandPose(GetActorQuat(), GetActorTransform().TransformPosition(RearBoxStandCm));
-	BoxStand = GetWorld()->SpawnActorDeferred<AVBoRBoxStand>(AVBoRBoxStand::StaticClass(), StandPose, this);
-	BoxStand->Tags.Add(TEXT("Car.BoxStand")); BoxStand->LoadTarget = LoadTarget;
-	BoxStand->FinishSpawning(StandPose); BoxStand->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
+	const FTransform SpawnPose(GetActorQuat(), GetActorTransform().TransformPosition(RearBoxStandCm + FVector(0, 0, RearBoxStandTopCm)));
+	ObjectSpawnPoint = GetWorld()->SpawnActorDeferred<AVBoRObjectSpawnPoint>(AVBoRObjectSpawnPoint::StaticClass(), SpawnPose, this);
+	ObjectSpawnPoint->Tags.Add(TEXT("Car.BoxStand")); ObjectSpawnPoint->LoadTarget = LoadTarget;
+	ObjectSpawnPoint->FinishSpawning(SpawnPose); ObjectSpawnPoint->AttachToActor(this, FAttachmentTransformRules::KeepWorldTransform);
 }
