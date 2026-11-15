@@ -35,7 +35,7 @@ struct VBOR_API FVBoRPanelStyle
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Instruction", meta=(sRGB="true"))
 	FLinearColor TextColor;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Instruction", meta=(ClampMin="1"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Instruction", meta=(ClampMin="1", ToolTip="Instruction text size. Button labels use 0.8x (40 -> 32)."))
 	float FontSize = 40;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Accent", meta=(sRGB="true"))

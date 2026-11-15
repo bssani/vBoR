@@ -206,6 +206,8 @@ bool FR9ButtonLabelTest::RunTest(const FString&)
 	TestEqual(TEXT("Action normal color"), ActionText->GetColorAndOpacity().GetSpecifiedColor(), E.Runner->PanelStyle.LabelTextColor);
 	const auto* ConfirmPlate = CastChecked<UBorder>(ConfirmWidget->GetWidgetFromName(TEXT("Plate")));
 	TestEqual(TEXT("Graphite emphasis outline"), ConfirmPlate->Background.OutlineSettings.Width, 3.0f);
+	TestEqual(TEXT("Default label font 32"), ConfirmText->GetFont().Size, 32.0f);
+	TestEqual(TEXT("Action label font 32"), ActionText->GetFont().Size, 32.0f);
 	TestFalse(TEXT("Confirm label visible"), Confirm->bHiddenInGame);
 	TestTrue(TEXT("Action label hidden"), Action->bHiddenInGame);
 	E.Command(EVBoRFlowCommand::Next);
@@ -226,6 +228,7 @@ bool FR9NavyStyleTest::RunTest(const FString&)
 	E.Runner->GuidanceWidgetClass = UR9TestGuidanceWidget::StaticClass();
 	E.Runner->ButtonLabelWidgetClass = UR9TestButtonLabelWidget::StaticClass();
 	E.Runner->PanelStyle = FVBoRPanelStyle::FromPreset(EVBoRPanelStylePreset::NavyInstrument);
+	E.Runner->PanelStyle.FontSize = 50;
 	TestTrue(TEXT("Flow starts with both widgets"), E.Start({R9Step(TEXT("01"), TEXT("Observe."))}));
 	const auto* Widget = Cast<UR9TestGuidanceWidget>(E.Runner->Panel->GetUserWidgetObject());
 	const auto* Confirm = Cast<UR9TestButtonLabelWidget>(FR9TestAccess::Label(*E.Runner, 0)->GetUserWidgetObject());
@@ -244,6 +247,8 @@ bool FR9NavyStyleTest::RunTest(const FString&)
 	TestFalse(TEXT("Accent hidden"), Widget->GetWidgetFromName(TEXT("AccentBar"))->IsVisible());
 	const auto& ConfirmBrush = CastChecked<UBorder>(Confirm->GetWidgetFromName(TEXT("Plate")))->Background;
 	TestEqual(TEXT("Navy confirm fill"), ConfirmBrush.GetTint(FWidgetStyle()).ToFColorSRGB(), FColor(0xC9, 0x9A, 0x4B));
+	TestEqual(TEXT("Panel font follows style"), Text->GetFont().Size, 50.0f);
+	TestEqual(TEXT("Label font follows style"), CastChecked<UTextBlock>(Confirm->GetWidgetFromName(TEXT("LabelText")))->GetFont().Size, 40.0f);
 	return true;
 }
 

@@ -96,5 +96,12 @@ void UVBoRButtonLabelWidget::RefreshLabelStyle()
 		: AppliedStyle.LabelOutlineColor;
 	const float OutlineWidth = Outline.A > 0 ? (bEmphasized ? 3.0f : 2.0f) : 0.0f;
 	if (Plate) { Plate->SetBrush(FSlateRoundedBoxBrush(Fill, AppliedStyle.CornerRadius, Outline, OutlineWidth)); }
-	if (LabelText) { LabelText->SetColorAndOpacity(bEmphasized ? AppliedStyle.ConfirmTextColor : AppliedStyle.LabelTextColor); }
+	if (LabelText)
+	{
+		LabelText->SetColorAndOpacity(bEmphasized ? AppliedStyle.ConfirmTextColor : AppliedStyle.LabelTextColor);
+		// Follow panel font size (40 -> 32, R9 review 2 label Bold 32)
+		FSlateFontInfo Font = LabelText->GetFont();
+		Font.Size = AppliedStyle.FontSize * ButtonLabelFontRatio;
+		LabelText->SetFont(Font);
+	}
 }
