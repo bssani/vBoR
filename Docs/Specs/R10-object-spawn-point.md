@@ -137,3 +137,16 @@
 | R2-4 | **D4 경고는 시험 실패가 아니다** | 정렬 컴포넌트가 없는 시험 월드(P5t·P5zf·R3)에서 D4 경고가 한 번씩 난다. UE 5.7 기본 `bElevateLogWarningsToErrors = false`(`Runtime/Core/Private/Misc/AutomationTest.cpp:176`, 프로젝트 설정에 없음)라 실패하지 않는다. **그 시험들에 `AddExpectedMessage`를 새로 넣지 않는다**(감사 표 밖 변경). E3에서만 확인한다 |
 
 **§7 사용자 확인에 추가:** 받침대 메시를 바꿔 둔 레벨(회사 PC 등)은 업데이트 전에 **그 메시 이름과 위치를 적어 둔다.** 업데이트하면 옛 받침대 메시(`ApproximateStand`)가 사라진다. 그 메시를 `StaticMeshActor`로 다시 놓고 생성 지점을 그 윗면에 맞춘다.
+
+## 개정 3 (Claude 2026-11-16) — `L_Main` Runner에 R9 위젯 지정 (사용자 요청)
+
+**사용자(2026-11-16):** "widget buttonlabel이랑 guidancewidget도 만들어서 올려버리자." WBP는 R9에서 이미 있다(`Content/Main/UI/WBP_GuidancePanel`, `WBP_ButtonLabel`). 저장된 `L_Main`의 Runner 칸이 비어 있어 흰 판이 나온다(맵 안에 WBP 참조 없음 확인). `L_Main`을 이번에 어차피 고치므로 같은 저장에 넣는다(바이너리 충돌 방지).
+
+| # | 내용 |
+|---|---|
+| R3-1 | MCP로 `L_Main`의 `AVBoRScenarioRunner` 한 개: `GuidanceWidgetClass` = `WBP_GuidancePanel_C`, `ButtonLabelWidgetClass` = `WBP_ButtonLabel_C`. `PanelStylePreset`·`PanelStyle`은 건드리지 않는다(기본 Graphite). 다른 칸 그대로 |
+| R3-2 | WBP 두 개는 고치지 않는다 |
+| R3-3 | 기존 시험: `L_Main`을 여는 시험(P4i·P5p·P5q·P5t·M2)은 안내판 Slate 칸(`PanelText`)을 읽지 않는다(확인). R9 시험은 자기 픽스처에서 칸을 정한다. **바뀌는 단언 없음** — 깨지면 멈추고 질문 |
+| R3-4 | 보고 ⑤에 Runner 두 칸의 저장 뒤 값을 적는다. `L_Main` 맵 로드 확인 때 위젯 생성 경고(`FindMissingBinding`) 없음 |
+
+**§7 사용자 확인에 추가:** VR Preview에서 안내판·버튼 이름표가 Graphite(어두운 판)로 나오는지. 다른 시안은 Runner `Panel Style Preset`에서 고르고 저장.
