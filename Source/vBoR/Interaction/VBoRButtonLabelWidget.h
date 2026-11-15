@@ -21,6 +21,9 @@ public:
 
 	const TCHAR* FindMissingBinding() const;
 
+	// Label font = panel FontSize x this
+	static constexpr float ButtonLabelFontRatio = 0.8f;
+
 protected:
 	void NativePreConstruct() override;
 
