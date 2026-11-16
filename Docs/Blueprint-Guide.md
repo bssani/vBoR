@@ -373,7 +373,8 @@ L_Main
 
 ### 9.3 안내판 자리 — `Car/Guidance`의 표식 (P5z)
 
-- **안내판은 단계마다 정한 자리에만 뜬다.** 확인·시점 버튼은 안내판 바로 밑에 붙는다.
+- **안내판은 단계마다 정한 자리에만 뜬다.** 놓을 때 한 번 참가자 머리 쪽으로 좌우만 돈다(기울기는 표식 그대로, Runner `Panel Faces Participant`로 끔). 그 단계 안에서는 따라 돌지 않는다(R12).
+- **참가자 확인 버튼은 없다.** 확인은 진행자(Space)만 한다. 안내판 밑 버튼은 좌석 이동 하나뿐이다(R12).
 - 자리는 **위치 표식**(`AVBoRPanelAnchor`)이 정한다. `L_Main` Outliner `Car/Guidance`에 5개가 있다. 처음 자리는 임시 값이다 — 원하는 곳으로 옮긴다.
 
 | 표식(Actor Tags) | 단계 |
@@ -384,9 +385,27 @@ L_Main
 | `PanelAnchor_Passenger` (`Guide.Passenger`) | 14 |
 | `PanelAnchor_Rear` (`Guide.Rear`) | 15 |
 
-- **옮기는 법:** 에디터에서만 보이는 얇은 판이 안내판 크기(50×32 cm), 그 밑 작은 상자 두 개가 버튼 자리다. **노란 화살표(+X)가 참가자 쪽을 보게** 돌린다. 기울여도 된다. 버튼은 **손이 닿는 자리**에 두고, 13번 도달 버튼과 떨어뜨린다.
+- **옮기는 법:** 에디터에서만 보이는 얇은 판이 안내판 크기(50×32 cm), 그 밑 작은 상자 두 개가 버튼 자리다(왼쪽 확인 자리는 이제 쓰지 않음, 오른쪽이 좌석 이동 버튼). **노란 화살표(+X)가 참가자 쪽을 보게** 돌린다. 기울여도 된다. 버튼은 **손이 닿는 자리**에 두고, 13번 도달 버튼과 떨어뜨린다.
 - **단계와 표식 연결:** `DA_Main_Scenario` → 단계 → `PanelTag`에 표식의 Actor Tag. `PanelTag`가 빈 단계는 직전 자리에 뜬다. 첫 단계는 반드시 태그가 있어야 한다. 못 찾거나 둘 이상이면 `panel tag … type mismatch or missing`.
 - 안내판에는 안내문만 나온다. **자유모드에서는 안내판과 버튼이 안 뜬다**(좌석은 진행자 키 `1`·`2`·`Home`).
+- **좌석 단계(`Rule` = Viewpoint) 흐름(R12):** 도착 전에는 안내판이 **지금 있는 자리**에 남고 버튼은 "Move to <그 좌석>". 도착하면 그 단계 자리(예: `Guide.Passenger`)로 옮기고, 버튼은 다음 단계가 좌석 단계면 "Move to <다음 좌석>", 아니면 "Return to driver seat". 누르면 지금 단계 완료 + 이동이 함께 된다(이동이 거부되면 단계도 그대로). 그래서 `PanelAnchor_Passenger`·`PanelAnchor_Rear`는 **그 좌석에 앉았을 때 손이 닿는 앞쪽**에 둔다. 2열에서 돌아온 뒤 단계(예: 시트 접힘)는 운전석에서 보므로 `Guide.Driver`를 쓴다.
+
+### 9.4 시나리오 고치기 — `DA_Main_Scenario` 칸 (R12)
+
+- 목록 제목이 "`Step Id` · 안내문"으로 보인다. 순서·개수·번호는 자유다(`Step Id`만 비우지 않음).
+- `Rule`에 따라 안 쓰는 칸은 숨는다(Confirm이면 `Rule target`, 문 각도·앉은 시간은 해당 `Rule`에서만, 세부 칸은 접힘).
+
+| 칸 | 하는 일 |
+|---|---|
+| `Instruction` | 안내판 문구. TV 문구가 비면 TV에도 이것 |
+| `Spectator Text` | TV 문구를 따로 정할 때만 |
+| `Rule` + `Rule target` | 무엇이 되면 끝나는지(예: Door Opened + `Car.DriverDoor`) |
+| `Operator confirm` | Not needed = 조건만 되면 넘어감, Operator = 진행자 확인 필요(Confirm·좌석 단계는 늘 확인) |
+| `Panel at` | 안내판 자리(`Guide.*`) |
+| `Floor route` | 바닥 길 안내 점선(`Route.*`). 끝 고리에 도착하면 점선만 꺼지고 단계는 그대로 |
+| `Target marker` | 목표물 고리·화살표 |
+
+- `Rule target`·`Panel at`·`Floor route`·`Target marker`는 **에디터에 열린 레벨**의 태그 목록에서 고른다. `L_Main`을 열어 둔 채 고친다(다른 레벨이 열려 있으면 목록이 다르다 — 값은 지워지지 않음).
 
 ## 10. 손 메시 바꾸기 — `BP_vBoRPawn`
 
