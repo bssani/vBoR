@@ -59,6 +59,7 @@ AP0BuckBench::AP0BuckBench()
 	EyePoint = CreateDefaultSubobject<UVBoREyePointComponent>(TEXT("EyePoint"));
 	EyePoint->SetupAttachment(RootComponent);
 	EyePoint->SetRelativeLocation(EyeOffsetCm);
+	EyePoint->bShowInGame = true; // See eye in headset on bench (P0-c)
 	Panel = CreateDefaultSubobject<UTextRenderComponent>(TEXT("Panel"));
 	Panel->SetupAttachment(RootComponent);
 	Panel->SetHorizontalAlignment(EHTA_Left);

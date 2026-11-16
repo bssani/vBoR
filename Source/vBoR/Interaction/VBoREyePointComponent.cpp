@@ -8,6 +8,12 @@ UVBoREyePointComponent::UVBoREyePointComponent()
 	Forward->SetArrowColor(FLinearColor::Yellow);
 	Forward->SetArrowLength(12);
 	Forward->SetArrowSize(0.5f);
-	Forward->SetHiddenInGame(false);
+	Forward->SetHiddenInGame(true);
 	Forward->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+}
+
+void UVBoREyePointComponent::OnRegister()
+{
+	Super::OnRegister();
+	if (Forward) { Forward->SetHiddenInGame(!bShowInGame); }
 }
