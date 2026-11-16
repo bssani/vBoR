@@ -50,6 +50,8 @@ public:
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float PanelBelowCm = 0;
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) FVector2D PanelSizeCm = FVector2D(50, 32);
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float PanelButtonGapCm = 8;
+	// Confirm/Action button: X height, Y width, Z thickness. Spacing/label follow size
+	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm", ClampMin="1")) FVector PanelButtonSizeCm = FVector(8, 8, 1.5);
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float ButtonDistanceCm;
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float ButtonBelowCm;
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="s", ClampMin="0")) float ConfirmLockSeconds;

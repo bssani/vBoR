@@ -51,6 +51,8 @@ bool UR9TestMissingPlateWidget::Initialize()
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/WorldSettings.h"
+#include "Components/StaticMeshComponent.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Styling/CoreStyle.h"
 #include "UObject/UnrealType.h"
 #include "Widgets/Layout/SBorder.h"
@@ -229,6 +231,7 @@ bool FR9NavyStyleTest::RunTest(const FString&)
 	E.Runner->ButtonLabelWidgetClass = UR9TestButtonLabelWidget::StaticClass();
 	E.Runner->PanelStyle = FVBoRPanelStyle::FromPreset(EVBoRPanelStylePreset::NavyInstrument);
 	E.Runner->PanelStyle.FontSize = 50;
+	E.Runner->PanelButtonSizeCm = FVector(10, 12, 2);
 	TestTrue(TEXT("Flow starts with both widgets"), E.Start({R9Step(TEXT("01"), TEXT("Observe."))}));
 	const auto* Widget = Cast<UR9TestGuidanceWidget>(E.Runner->Panel->GetUserWidgetObject());
 	const auto* Confirm = Cast<UR9TestButtonLabelWidget>(FR9TestAccess::Label(*E.Runner, 0)->GetUserWidgetObject());
@@ -249,6 +252,19 @@ bool FR9NavyStyleTest::RunTest(const FString&)
 	TestEqual(TEXT("Navy confirm fill"), ConfirmBrush.GetTint(FWidgetStyle()).ToFColorSRGB(), FColor(0xC9, 0x9A, 0x4B));
 	TestEqual(TEXT("Panel font follows style"), Text->GetFont().Size, 50.0f);
 	TestEqual(TEXT("Label font follows style"), CastChecked<UTextBlock>(Confirm->GetWidgetFromName(TEXT("LabelText")))->GetFont().Size, 40.0f);
+	// Panel buttons: style color, size from Runner (user 2026-11-16)
+	for (int32 Index = 0; Index < 2; ++Index)
+	{
+		const AVBoRPokeButton* Button = FR9TestAccess::Button(*E.Runner, Index);
+		const auto* Material = Cast<UMaterialInstanceDynamic>(Button->ButtonMesh->GetMaterial(0));
+		if (!TestNotNull(TEXT("Button color material"), Material)) { return false; }
+		FLinearColor Color; Material->GetVectorParameterValue(FMaterialParameterInfo(TEXT("ColorParam")), Color);
+		const FLinearColor Expected = Index == 0 ? FColor(0xC9, 0x9A, 0x4B) : FColor(0xC4, 0xCD, 0xD6);
+		TestEqual(TEXT("Button color follows preset"), Color.ToFColorSRGB(), Expected.ToFColorSRGB());
+		TestEqual(TEXT("Button opaque"), Color.A, 1.0f);
+		TestTrue(TEXT("Button size from Runner"), Button->ButtonMesh->GetRelativeScale3D().Equals(FVector(0.10, 0.12, 0.02), 1e-4));
+		TestTrue(TEXT("Hover overlay still free"), Button->ButtonMesh->GetOverlayMaterial() == nullptr);
+	}
 	return true;
 }
 
