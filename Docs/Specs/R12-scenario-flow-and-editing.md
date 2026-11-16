@@ -92,7 +92,8 @@
 다음 파일에서 **참가자 확인 버튼이 보이거나 눌린다고 기대하는 단언**, **좌석 단계 도착 뒤 Confirm + Return 두 버튼을 기대하는 단언**, **좌석 단계 안내판이 단계 시작 때 그 단계 표식에 있다고 기대하는 단언**만 새 동작으로 바꾼다:
 `P3Probe/P3FlowTests.cpp`(`FP3FlowTestAccess::Confirm` 사용처 — 230·448·466-473·524·622·634·719행 근처), `P5gFreeModeTests.cpp`(`Button(R,0)`), `P5iOperatorPanelTests.cpp`(`SeatButtonsShown` 47행, 172행), `P5zFixedGuidanceTests.cpp`(`Button(R,0)`), `R9GuidanceStyleTests.cpp`(68행 근처 — 색 단언은 유지되어야 한다).
 - 안내판 방향(C)으로 깨지는 자세 단언은 **단언을 바꾸지 말고** 그 시험 world에서 `bPanelFacesParticipant = false`로 둔다.
-- `P5hSpectatorTests.cpp` 159·169행(빈 `SpectatorText` → 번호표)은 그 시험의 `Instruction`이 비어 있으면 D6 순서로도 그대로 통과해야 한다. 바뀌어야 하면 이유와 함께 보고.
+- ~~`P5hSpectatorTests.cpp` 159·169행~~ → 개정 1 참고.
+- **개정 1(아래)에 적은 두 곳**도 바꿀 수 있다.
 - **그 밖의 단언이 깨지면 멈추고 리뷰 파일 "질문"에 적는다.** 바꾼 단언은 전부 파일:줄과 이유를 보고 ③에 적는다.
 
 ## 4. 시험 — `vBoR.R12.*`
@@ -129,3 +130,21 @@
 2. 15번(시트 접힘) **Panel at = `Guide.Driver`**. 13·14 `Instruction` 문구(예: "Move and check from the passenger seat.").
 3. `PanelAnchor_Passenger`·`PanelAnchor_Rear`를 그 좌석에 앉았을 때 손이 닿는 앞쪽으로.
 4. Quest 3(T-05 좌석 시점 전환, T-06 순서·완료): 12 → 운전석에서 동승석 → 동승석에서 2열 → 2열에서 운전석 → 15, 안내판이 나를 향하는지, Confirm 버튼이 없는지. `not-tested`.
+
+## 개정 1 (Claude 2026-11-17) — Codex 질문 Q1·Q2
+
+두 곳 모두 명세의 빈틈이다(§3 범주를 좁게 적었다). 두 파일 전체를 다시 확인했다.
+
+### Q1 — `P5iOperatorPanelTests.cpp:172-173`: 바꾼다
+
+- 173행 "Participant step disabled for operator"는 A2(저장된 `Participant`도 진행자 확인)와 정면으로 반대다. **173행을 "진행자 확인 허용"으로 바꾼다**(같은 입력, 기대만 반대).
+- 같은 시험의 170·171(잠금)·177(운전석 복귀 미충족)은 그대로 둔다.
+- 다시 확인한 다른 곳 — 바꾸지 않는다: `P3FlowTests.cpp:261-264`(진행자 전용 단계에서 **참가자 명령** 거부·`PermissionDiscards` 1 — 참가자 명령 경로는 A2대로 남는다), `P5gFreeModeTests.cpp:175`(자유모드 참가자 좌석 권한). 시험 코드에서 `ConfirmBy::Participant`를 쓰는 곳은 173행 하나뿐이다.
+
+### Q2 — `P5hSpectatorTests.cpp` E4(157-171): 입력을 나눈다
+
+- 157행이 `Instruction`을 채우고 "TV에 안 나온다"를 확인한다. 이 전제는 P5h D5 "TV에 한국어를 내지 않는다"에서 왔고, P5v 이후 `Instruction`은 영어다. 사용자 결정(번호를 바꿔도 TV가 밀리지 않게)으로 D6이 이를 대신한다.
+- **E4는 `Instruction`을 비운 입력으로 바꿔** 159(번호표)·161(덮어쓰기)·163(Unknown)·164(17 없음)·169(19개 기본 문구) 단언을 그대로 둔다. 157행의 `Instruction` 문자열과 단언 이름의 "excluded from TV" 뜻은 없앤다(단언 문구는 영어로 맞게 고쳐도 된다).
+- 채운 `Instruction` + 빈 `SpectatorText` → `Instruction`은 R12 E8에서 따로 확인한다.
+
+보고 ③에 두 곳을 파일:줄로 적는다. 그 밖은 §3 그대로.

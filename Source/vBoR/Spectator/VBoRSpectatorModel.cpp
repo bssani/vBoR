@@ -4,6 +4,7 @@
 FText VBoRSpectator::MissionText(const FVBoRScenarioStep& Step, const FText& Unknown)
 {
 	if (!Step.SpectatorText.IsEmpty()) { return Step.SpectatorText; }
+	if (!Step.Instruction.IsEmpty()) { return Step.Instruction; }
 	// New fields empty in saved assets; use ID defaults (P5h D5)
 	static const TCHAR* Texts[] = {
 		TEXT("Approach the vehicle with the key."), TEXT("Check the exterior lights as you approach."),

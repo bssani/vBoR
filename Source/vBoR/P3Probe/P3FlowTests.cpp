@@ -227,10 +227,10 @@ bool FP3DuplicateTest::RunTest(const FString&)
 	FP3World E; E.Steps({P3Step(TEXT("02")),P3Step(TEXT("12")),P3Step(TEXT("19"))});
 	E.Ready();
 	const auto Token = E.Runner->GetToken();
-	P3Poke(FP3FlowTestAccess::Confirm(E.Runner)); FP3FlowTestAccess::Key(E.Runner); E.Runner->ProcessFlow(0);
-	TestEqual(TEXT("E1 actual poke plus key advances exactly once"), E.Runner->GetStepIndex(), 1);
+	FP3FlowTestAccess::Key(E.Runner); E.Runner->QueueCommand({EVBoRFlowCommand::Confirm, EVBoRCommandSource::Operator, Token}); E.Runner->ProcessFlow(0);
+	TestEqual(TEXT("E1 duplicate operator confirmation advances exactly once"), E.Runner->GetStepIndex(), 1);
 	TestEqual(TEXT("E1 second command stale"), E.Runner->StaleDiscards, 1);
-	TestTrue(TEXT("E1 participant result distinct from operator"), E.Runner->LastCompletion.Contains(TEXT("Participant confirm")));
+	TestTrue(TEXT("E1 operator confirmation recorded"), E.Runner->LastCompletion.Contains(TEXT("Operator confirm")));
 	E.Runner->QueueCommand({EVBoRFlowCommand::Confirm, EVBoRCommandSource::Operator, Token}); E.Runner->ProcessFlow(0);
 	TestEqual(TEXT("E2 delayed command never completes new step"), E.Runner->GetStepIndex(), 1);
 	E.Steps({P3Step(TEXT("08"),EVBoRStepRule::DoorOpened,TEXT("Car.DriverDoor"),EVBoRConfirmBy::None),P3Step(TEXT("12"))});
@@ -464,11 +464,11 @@ bool FP3ConfirmLockTest::RunTest(const FString&)
 {
 	FP3World E; E.Steps({P3Step(TEXT("02")), P3Step(TEXT("12")), P3Step(TEXT("19"))});
 	TestTrue(TEXT("Initial confirmation hidden and poke inactive"), FP3FlowTestAccess::Confirm(E.Runner)->IsHidden() && !FP3FlowTestAccess::Confirm(E.Runner)->Poke->IsActive());
-	E.Ready(); P3Poke(FP3FlowTestAccess::Confirm(E.Runner)); E.Runner->ProcessFlow(0);
-	TestEqual(TEXT("A completed by actual poke"), E.Runner->GetStepIndex(), 1);
+	E.Ready(); FP3FlowTestAccess::Key(E.Runner); E.Runner->ProcessFlow(0);
+	TestEqual(TEXT("A completed by operator confirmation"), E.Runner->GetStepIndex(), 1);
 	E.Runner->ProcessFlow(0.3); FP3FlowTestAccess::NewInputFrame(E.Runner);
-	P3Poke(FP3FlowTestAccess::Confirm(E.Runner)); E.Runner->ProcessFlow(0);
-	TestEqual(TEXT("B not completed by next-frame double poke"), E.Runner->GetStepIndex(), 1);
+	FP3FlowTestAccess::Key(E.Runner); E.Runner->ProcessFlow(0);
+	TestEqual(TEXT("B not completed by next-frame confirmation"), E.Runner->GetStepIndex(), 1);
 	TestTrue(TEXT("Lock reason logged"), E.Runner->LastRecord.Contains(TEXT("immediately after step start")));
 	TestTrue(TEXT("Confirmation stays hidden and inactive"), FP3FlowTestAccess::Confirm(E.Runner)->IsHidden() && !FP3FlowTestAccess::Confirm(E.Runner)->Poke->IsActive());
 	E.Runner->ProcessFlow(0.4); FP3FlowTestAccess::NewInputFrame(E.Runner); FP3FlowTestAccess::Key(E.Runner); E.Runner->ProcessFlow(0);
@@ -527,7 +527,7 @@ bool FP3PanelLayoutTest::RunTest(const FString&)
 			TestTrue(TEXT("Button ahead 40-50 cm and below 25-35 cm"), Offset.X >= 40 && Offset.X <= 50 && Offset.Z >= -35 && Offset.Z <= -25);
 		}
 	}
-	E.Ready(); TestFalse(TEXT("Confirm name appears with button"), FP3FlowTestAccess::Label(E.Runner, 0)->bHiddenInGame);
+	E.Ready(); TestTrue(TEXT("Confirm name stays hidden when ready"), FP3FlowTestAccess::Label(E.Runner, 0)->bHiddenInGame);
 	TestEqual(TEXT("Confirm name text"), FP3FlowTestAccess::LabelText(E.Runner, 0)->GetText().ToString(), FString(TEXT("Confirm")));
 	E.Steps({P3Step(TEXT("09"), EVBoRStepRule::Confirm, TEXT(""), EVBoRConfirmBy::Operator)});
 	TestTrue(TEXT("Confirm name hides with button"), FP3FlowTestAccess::Label(E.Runner, 0)->bHiddenInGame);
@@ -942,7 +942,7 @@ bool FP4cButtonsTest::RunTest(const FString&)
 		if (bUnlockFirst) { Key->OnLockPressed.Broadcast(Key); } else { Key->OnUnlockPressed.Broadcast(Key); }
 		E.Runner->ProcessFlow(0);
 		TestEqual(TEXT("E4 both require confirmation"),E.Runner->GetStepIndex(),1);
-		TestFalse(TEXT("E4 participant confirmation visible"),FP3FlowTestAccess::Confirm(E.Runner)->IsHidden());
+		TestTrue(TEXT("E4 participant confirmation stays hidden"),FP3FlowTestAccess::Confirm(E.Runner)->IsHidden());
 		E.Command(EVBoRFlowCommand::Confirm);
 		TestEqual(TEXT("E4 Space advances after either order"),E.Runner->GetStepIndex(),2);
 		TestTrue(TEXT("E4 operator confirmation recorded"),E.Runner->LastCompletion.Contains(TEXT("Operator confirm")));

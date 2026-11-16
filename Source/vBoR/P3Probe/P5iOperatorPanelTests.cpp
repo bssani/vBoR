@@ -170,7 +170,7 @@ bool FP5iE4::RunTest(const FString&)
 	TestTrue(TEXT("Ready confirmation enabled"),W.Runner->EvaluateOperatorButton(B::Confirm).bAccepted);
 	FP5iTestAccess::Lock(W.Runner); TestFalse(TEXT("Locked confirmation disabled"),W.Runner->EvaluateOperatorButton(B::Confirm).bAccepted); W.Ready();
 	W.Runner->Scenario->Steps[0].ConfirmBy = EVBoRConfirmBy::Participant;
-	TestFalse(TEXT("Participant step disabled for operator"),W.Runner->EvaluateOperatorButton(B::Confirm).bAccepted);
+	TestTrue(TEXT("Legacy participant step can be confirmed by operator"),W.Runner->EvaluateOperatorButton(B::Confirm).bAccepted);
 	W.Runner->Scenario->Steps[0].ConfirmBy = EVBoRConfirmBy::Operator;
 	W.Runner->Scenario->Steps[0].bRequireBaseViewpoint = true;
 	W.Button(B::Passenger); W.FinishSwitch(); W.Ready();

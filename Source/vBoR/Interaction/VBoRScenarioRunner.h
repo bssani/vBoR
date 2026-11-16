@@ -24,7 +24,7 @@ class UVBoRVehiclePowerComponent;
 class UVBoRGuidanceWidget;
 class UVBoRButtonLabelWidget;
 
-enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel, ReapplyAlignment, FoldSeat, UnfoldSeat, CapturePoint, SavePoints, CancelPoints, Power, NextBuck };
+enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel, ReapplyAlignment, FoldSeat, UnfoldSeat, CapturePoint, SavePoints, CancelPoints, Power, NextBuck, SeatAdvance };
 enum class EVBoRCommandSource : uint8 { Participant, Operator };
 struct FVBoRFlowToken { int32 StepIndex = INDEX_NONE; uint64 Generation = 0; };
 struct FVBoRFlowCommand
@@ -50,6 +50,7 @@ public:
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float PanelBelowCm = 0;
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) FVector2D PanelSizeCm = FVector2D(50, 32);
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float PanelButtonGapCm = 8;
+	UPROPERTY(EditAnywhere, Category="Guidance", meta=(ToolTip="Turn fixed panel toward head on placement")) bool bPanelFacesParticipant = true;
 	// Confirm/Action button: X height, Y width, Z thickness. Spacing/label follow size
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm", ClampMin="1")) FVector PanelButtonSizeCm = FVector(8, 8, 1.5);
 	UPROPERTY(EditAnywhere, Category="Guidance", meta=(Units="cm")) float ButtonDistanceCm;
@@ -151,7 +152,8 @@ private:
 	double StepElapsed = 0;
 	double ConfirmLockRemaining = 0, HeadLogElapsed = 0;
 	bool bOperatorInfo = false, bPanelPlacementPending = true, bSeatedPanelPlaced = false;
-	bool bFixedPanelMode = false, bFixedPanelPlaced = false;
+	bool bFixedPanelMode = false, bFixedPanelPlaced = false, bFixedPanelWaitingForArrival = false;
+	TOptional<int32> SeatAdvanceBeforeSwitch;
 	bool bStartHeadPending = false, bSeatHeadRecorded = false;
 	bool bPawnMovedBeforeFlow = false;
 	bool bReapplyPending = false, bPointSavePending = false;
@@ -164,6 +166,9 @@ private:
 	FVBoRCommandDecision EvaluateCommand(const FVBoRFlowCommand& Command, UVBoRViewpointComponent* Viewpoint) const;
 	FString OperatorButtonBadge(EVBoROperatorButton Button, UVBoRViewpointComponent* Viewpoint) const;
 	UVBoRViewpointComponent* CommandViewpoint(EVBoRFlowCommand Action) const;
+	bool IsViewpointStep(int32 Index) const;
+	bool IsAtStepViewpoint() const;
+	bool ReturnsToBase(EVBoRFlowCommand Action) const;
 	// Cache passenger/rear viewpoints once at startup (no per-frame scan of thousands of CAD Actors, P5o)
 	TWeakObjectPtr<UVBoRViewpointComponent> SeatViews[2];
 	UVBoRViewpointComponent* ScanSeatView(FName Tag) const;
@@ -175,7 +180,6 @@ private:
 	const FVBoRScenarioStep* CurrentStep() const;
 	bool RuleSatisfied() const;
 	bool NeedsConfirmation() const;
-	bool CanParticipantConfirm() const;
 	void EnterStep(int32 Index, bool bNewAttempt = false);
 	void EnterFreeMode(bool bCompleted);
 	void CompleteStep(const TCHAR* Who);
@@ -191,7 +195,6 @@ private:
 	void RefreshPanel();
 	void UpdateMarker();
 	void Record(const FString& Text);
-	UFUNCTION() void HandleConfirmPoke(const FIsdkInteractionPointerEvent& Event);
 	UFUNCTION() void HandleActionPoke(const FIsdkInteractionPointerEvent& Event);
 	UFUNCTION() void HandleTargetPoke(const FIsdkInteractionPointerEvent& Event);
 	UFUNCTION() void HandleKeyUnlock(AVBoRKeyFob* Key);

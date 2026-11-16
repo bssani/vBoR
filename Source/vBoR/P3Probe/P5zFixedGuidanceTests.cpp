@@ -8,6 +8,7 @@
 #include "../Interaction/VBoRViewpointComponent.h"
 #include "../Interaction/VBoRFloorRoute.h"
 #include "../Interaction/VBoRPokeButton.h"
+#include "../Spectator/VBoRSpectatorModel.h"
 #include "Components/ArrowComponent.h"
 #include "Components/SplineComponent.h"
 #include "Components/StaticMeshComponent.h"
@@ -22,6 +23,7 @@
 #include "Misc/OutputDevice.h"
 #include "Misc/OutputDeviceRedirector.h"
 #include "XRTrackingSystemBase.h"
+#include "UObject/UnrealType.h"
 
 struct FP5zTestAccess
 {
@@ -30,10 +32,14 @@ struct FP5zTestAccess
 	static UWidgetComponent* Operator(AVBoRScenarioRunner* R) { return R->OperatorPanel; }
 	static double Lock(AVBoRScenarioRunner* R) { return R->ConfirmLockRemaining; }
 	static bool Arrived(AVBoRScenarioRunner* R) { return R->bRouteArrived; }
+	static FString ActionLabel(AVBoRScenarioRunner* R) { return R->ActionLabel(); }
+	static void NewInputFrame(AVBoRScenarioRunner* R) { R->LiveFrame = MAX_uint64; }
+	static TArray<FString> Options(UVBoRScenarioAsset* Asset, FName FVBoRScenarioStep::* Field, UWorld* World, const UClass* Type = nullptr)
+	{ return Asset->TagOptions(Field, World, Type); }
 	static void PawnMoved(AVBoRScenarioRunner* R) { R->HandlePawnMoved(); }
 	static void Poke(AVBoRScenarioRunner* R, int32 I)
 	{
-		R->LiveFrame = MAX_uint64;
+		NewInputFrame(R);
 		FIsdkInteractionPointerEvent Event; Event.Type = EIsdkPointerEventType::Select; Event.Interactable = Button(R,I)->Poke.Get();
 		Button(R,I)->Poke->GetInteractionPointerEventDelegate().Broadcast(Event);
 	}
@@ -86,12 +92,21 @@ namespace
 		{ for (TActorIterator<AVBoRPanelAnchor> It(World); It; ++It) { if (It->ActorHasTag(Tag)) { return *It; } } return nullptr; }
 		FVBoRScenarioStep Step(const TCHAR* Id, FName Tag = TEXT("Guide.Outside"))
 		{ FVBoRScenarioStep S; S.StepId = Id; S.Instruction = FText::FromString(TEXT("Observe the vehicle.")); S.PanelTag = Tag; return S; }
+		FVBoRScenarioStep SeatStep(const TCHAR* Id, bool bPassenger)
+		{
+			auto S = Step(Id, bPassenger ? TEXT("Guide.Passenger") : TEXT("Guide.Rear"));
+			S.Rule = EVBoRStepRule::Viewpoint;
+			S.TargetTag = bPassenger ? TEXT("Car.PassengerView") : TEXT("Car.RearView");
+			return S;
+		}
 		bool Start(std::initializer_list<FVBoRScenarioStep> Steps)
 		{ Runner->Scenario->Steps.Reset(); for (const auto& S : Steps) { Runner->Scenario->Steps.Add(S); } return Runner->InitializeFlow(); }
 		void Command(EVBoRFlowCommand Action)
 		{ Runner->QueueCommand({Action,EVBoRCommandSource::Operator,Runner->GetToken()}); Runner->ProcessFlow(0); }
 		void Ready() { Runner->ProcessFlow(0); Runner->ProcessFlow(1); }
 		void Key(FKey Key) { Runner->HandleOperatorKey(Key); Runner->ProcessFlow(0); }
+		void Action() { FP5zTestAccess::Poke(Runner,1); Runner->ProcessFlow(0); }
+		bool AtAnchor(FName Tag) { return Runner->Panel->GetComponentLocation().Equals(Anchor(Tag)->GetActorLocation(), 0.01); }
 		void FinishSwitch() { Car->Alignment->AdvanceSwitch(Car->Alignment->FadeSeconds); Car->Alignment->AdvanceSwitch(Car->Alignment->FadeSeconds); Runner->ProcessFlow(0); }
 	};
 	struct FP5zRecords : FOutputDevice
@@ -162,6 +177,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5zButtonsTest, "vBoR.P5z.E4TiltedButtons", EA
 bool FP5zButtonsTest::RunTest(const FString&)
 {
 	FP5zWorld E; auto* Anchor = E.Anchor(TEXT("Guide.Outside")); Anchor->SetActorRotation(FRotator(20,45,0));
+	E.Runner->bPanelFacesParticipant = false;
 	E.Start({E.Step(TEXT("01"))});
 	const FTransform Pose(Anchor->GetActorQuat(),Anchor->GetActorLocation());
 	for (int32 I = 0; I < 2; ++I)
@@ -252,6 +268,233 @@ bool FP5zAnchorTest::RunTest(const FString&)
 		{ TestTrue(TEXT("Preview hidden in game"),Piece->bHiddenInGame); TestEqual(TEXT("Preview has no collision"),Piece->GetCollisionEnabled(),ECollisionEnabled::NoCollision); }
 	}
 	TestEqual(TEXT("Mock provides five tagged anchors"),Count,5);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FR12Confirm, "vBoR.R12.E1OperatorOnlyConfirmation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FR12Confirm::RunTest(const FString&)
+{
+	FP5zWorld E;
+	TArray<FVBoRScenarioStep> Rules = E.Runner->Scenario->Steps;
+	for (auto Rule : {EVBoRStepRule::KeyHeld, EVBoRStepRule::KeyUnlockAndLock, EVBoRStepRule::PoweredOpen, EVBoRStepRule::PoweredClosed})
+	{
+		auto S = E.Step(TEXT("Extra"));
+		S.Rule = Rule;
+		S.TargetTag = Rule == EVBoRStepRule::KeyHeld || Rule == EVBoRStepRule::KeyUnlockAndLock ? TEXT("Car.FrontKey") : TEXT("Car.Liftgate");
+		Rules.Add(S);
+	}
+	for (auto ConfirmBy : {EVBoRConfirmBy::None, EVBoRConfirmBy::Participant, EVBoRConfirmBy::Operator, EVBoRConfirmBy::Either})
+	{
+		for (auto S : Rules)
+		{
+			S.ConfirmBy = ConfirmBy;
+			if (!TestTrue(TEXT("Valid rule target"), E.Start({S}))) { return false; }
+			E.Ready();
+			const auto* Button = FP5zTestAccess::Button(E.Runner, 0);
+			TestTrue(TEXT("Confirm actor hidden, poke disabled"), Button->IsHidden() && !Button->Poke->IsActive());
+		}
+		auto S = E.Step(TEXT("Observe"));
+		S.ConfirmBy = ConfirmBy;
+		E.Start({S});
+		E.Command(EVBoRFlowCommand::Confirm);
+		TestFalse(TEXT("Operator confirm locked at step start"), E.Runner->IsFinished());
+		E.Ready();
+		FP5zTestAccess::Poke(E.Runner, 0);
+		E.Runner->ProcessFlow(0);
+		TestFalse(TEXT("Confirm poke cannot finish the step"), E.Runner->IsFinished());
+		E.Command(EVBoRFlowCommand::Confirm);
+		TestTrue(TEXT("Operator confirm finishes the step"), E.Runner->IsFinished());
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FR12Consecutive, "vBoR.R12.E2ConsecutiveSeats", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FR12Consecutive::RunTest(const FString&)
+{
+	FP5zWorld E;
+	E.Start({E.Step(TEXT("12"), TEXT("Guide.Driver")), E.SeatStep(TEXT("13"), true), E.SeatStep(TEXT("14"), false), E.Step(TEXT("15"), TEXT("Guide.Trunk"))});
+	E.Ready(); E.Key(EKeys::SpaceBar);
+	auto* Action = FP5zTestAccess::Button(E.Runner, 1);
+	TestTrue(TEXT("Passenger step starts at driver panel"), E.AtAnchor(TEXT("Guide.Driver")));
+	TestEqual(TEXT("Driver button"), FP5zTestAccess::ActionLabel(E.Runner), FString(TEXT("Move to passenger seat")));
+	E.Action();
+	TestTrue(TEXT("Button hidden during fade"), Action->IsHidden() && !Action->Poke->IsActive());
+	E.FinishSwitch();
+	TestEqual(TEXT("Arrival alone keeps passenger step"), E.Runner->GetStepIndex(), 1);
+	TestTrue(TEXT("Passenger panel follows arrival"), E.AtAnchor(TEXT("Guide.Passenger")));
+	TestTrue(TEXT("Only action shown at passenger seat"), !Action->IsHidden() && FP5zTestAccess::Button(E.Runner, 0)->IsHidden());
+	TestEqual(TEXT("Passenger button"), FP5zTestAccess::ActionLabel(E.Runner), FString(TEXT("Move to rear seat")));
+	E.Action(); E.FinishSwitch();
+	TestEqual(TEXT("Seat advance completes passenger step"), E.Runner->GetStepIndex(), 2);
+	TestTrue(TEXT("Rear seat and panel reached"), E.Car->Alignment->IsAtViewpoint(E.Car->RearView) && E.AtAnchor(TEXT("Guide.Rear")));
+	TestTrue(TEXT("Completion attributed to participant"), E.Runner->LastCompletion.Contains(TEXT("Participant seat advance")));
+	TestEqual(TEXT("Rear button"), FP5zTestAccess::ActionLabel(E.Runner), FString(TEXT("Return to driver seat")));
+	E.Action(); E.FinishSwitch();
+	TestEqual(TEXT("Return completes rear step"), E.Runner->GetStepIndex(), 3);
+	TestTrue(TEXT("Driver seat and next panel reached"), E.Car->Alignment->IsBaseViewpoint() && E.AtAnchor(TEXT("Guide.Trunk")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FR12Rejected, "vBoR.R12.E3SeatAdvanceAtomic", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FR12Rejected::RunTest(const FString&)
+{
+	FP5zWorld E;
+	E.Start({E.SeatStep(TEXT("13"), true), E.SeatStep(TEXT("14"), false)});
+	TestTrue(TEXT("First seat step uses its own panel before arrival"), E.AtAnchor(TEXT("Guide.Passenger")));
+	E.Action(); E.FinishSwitch();
+	E.Car->Alignment->State = EVBoRAlignmentState::NeedsCheck;
+	E.Action();
+	TestEqual(TEXT("Rejected move leaves step active"), E.Runner->GetStepIndex(), 0);
+	TestTrue(TEXT("Rejected move leaves seat unchanged"), E.Car->Alignment->IsAtViewpoint(E.Car->PassengerView));
+	TestTrue(TEXT("Alignment rejection in operator status"), E.Runner->GetOperatorStatus().LastCommand.Contains(TEXT("Saved alignment required")));
+	E.Car->Alignment->State = EVBoRAlignmentState::Applied;
+	E.Action();
+	E.Car->Alignment->State = EVBoRAlignmentState::NeedsCheck;
+	E.FinishSwitch();
+	TestEqual(TEXT("Interrupted fade also leaves step active"), E.Runner->GetStepIndex(), 0);
+	E.Car->Alignment->State = EVBoRAlignmentState::Applied;
+	const int32 Requests = E.Car->Alignment->SwitchCompletions;
+	FP5zTestAccess::Poke(E.Runner, 1); FP5zTestAccess::Poke(E.Runner, 1);
+	E.Runner->ProcessFlow(0);
+	E.Action(); E.FinishSwitch();
+	TestEqual(TEXT("Double press makes one seat transition"), E.Car->Alignment->SwitchCompletions, Requests + 1);
+	TestEqual(TEXT("Double press completes one step"), E.Runner->GetStepIndex(), 1);
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FR12Operator, "vBoR.R12.E4OperatorSeatNavigation", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FR12Operator::RunTest(const FString&)
+{
+	FP5zWorld E;
+	E.Start({E.Step(TEXT("12"), TEXT("Guide.Driver")), E.SeatStep(TEXT("13"), true), E.SeatStep(TEXT("14"), false)});
+	E.Ready(); E.Command(EVBoRFlowCommand::Confirm);
+	E.Action(); E.FinishSwitch(); E.Ready(); E.Command(EVBoRFlowCommand::Confirm);
+	TestEqual(TEXT("Operator completed passenger step"), E.Runner->GetStepIndex(), 2);
+	TestTrue(TEXT("Operator confirm leaves participant in passenger seat"), E.Car->Alignment->IsAtViewpoint(E.Car->PassengerView) && E.AtAnchor(TEXT("Guide.Passenger")));
+	TestEqual(TEXT("Next step offers rear move"), FP5zTestAccess::ActionLabel(E.Runner), FString(TEXT("Move to rear seat")));
+	E.Command(EVBoRFlowCommand::Previous);
+	TestEqual(TEXT("Previous returns to passenger step"), E.Runner->GetStepIndex(), 1);
+	TestEqual(TEXT("Already seated, action targets next seat"), FP5zTestAccess::ActionLabel(E.Runner), FString(TEXT("Move to rear seat")));
+	FP5zTestAccess::NewInputFrame(E.Runner); E.Key(EKeys::Home); E.FinishSwitch();
+	TestEqual(TEXT("Back at driver, action targets current step"), FP5zTestAccess::ActionLabel(E.Runner), FString(TEXT("Move to passenger seat")));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FR12Last, "vBoR.R12.E5LastAndSingleSeat", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FR12Last::RunTest(const FString&)
+{
+	for (bool bLast : {false, true})
+	{
+		FP5zWorld E;
+		const auto Seat = E.SeatStep(TEXT("13"), true);
+		if (bLast) { E.Start({Seat}); }
+		else { E.Start({Seat, E.Step(TEXT("14"), TEXT("Guide.Driver"))}); }
+		E.Action(); E.FinishSwitch();
+		TestEqual(TEXT("Single seat action returns to driver"), FP5zTestAccess::ActionLabel(E.Runner), FString(TEXT("Return to driver seat")));
+		E.Action(); E.FinishSwitch();
+		TestTrue(TEXT("Driver seat reached"), E.Car->Alignment->IsBaseViewpoint());
+		if (bLast) { TestTrue(TEXT("Last seat completes guidance"), E.Runner->IsFinished()); }
+		else { TestTrue(TEXT("Confirm step starts at driver panel"), E.Runner->GetStepIndex() == 1 && E.AtAnchor(TEXT("Guide.Driver"))); }
+	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FR12Facing, "vBoR.R12.E6PanelFacing", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FR12Facing::RunTest(const FString&)
+{
+	FP5zWorld E; FP5zRecords Records;
+	auto* Anchor = E.Anchor(TEXT("Guide.Outside"));
+	Anchor->SetActorRotation(FRotator(20, 45, 15));
+	const FVector Point = Anchor->GetActorLocation();
+	E.WorldHead(FTransform(Point + FVector(0, 100, 20)));
+	auto S = E.Step(TEXT("Observe"));
+	E.Start({S, S, S, S});
+	TestTrue(TEXT("Placement preserves anchor location"), E.AtAnchor(TEXT("Guide.Outside")));
+	TestTrue(TEXT("Placement changes only anchor yaw"), E.Runner->Panel->GetComponentRotation().Equals(FRotator(20, 90, 15), 0.01));
+	E.WorldHead(FTransform(Point + FVector(100, 0, 30)));
+	E.Ready(); E.Ready();
+	TestEqual(TEXT("Stationary placement records only once"), Records.Count(), 1);
+	TestEqual(TEXT("Lock expires despite head motion"), FP5zTestAccess::Lock(E.Runner), 0.0);
+	TestTrue(TEXT("Panel does not follow head"), E.Runner->Panel->GetComponentRotation().Equals(FRotator(20, 90, 15), 0.01));
+	E.Command(EVBoRFlowCommand::Next);
+	TestTrue(TEXT("Next placement recomputes yaw"), E.Runner->Panel->GetComponentRotation().Equals(FRotator(20, 0, 15), 0.01));
+	E.Head->bTracked = false;
+	E.Command(EVBoRFlowCommand::Next);
+	TestTrue(TEXT("No head tracking uses anchor rotation"), E.Runner->Panel->GetComponentRotation().Equals(Anchor->GetActorRotation(), 0.01));
+	E.Head->bTracked = true; E.WorldHead(FTransform(Point + FVector(0, 9, 30)));
+	E.Command(EVBoRFlowCommand::Next);
+	TestTrue(TEXT("Head within 10 cm horizontally uses anchor yaw"), E.Runner->Panel->GetComponentRotation().Equals(Anchor->GetActorRotation(), 0.01));
+	E.Runner->bPanelFacesParticipant = false; E.WorldHead(FTransform(Point + FVector(100, 0, 30)));
+	E.Command(EVBoRFlowCommand::Previous);
+	TestTrue(TEXT("Disabled facing uses anchor rotation"), E.Runner->Panel->GetComponentRotation().Equals(Anchor->GetActorRotation(), 0.01));
+	return true;
+}
+
+#if WITH_METADATA
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FR12Editing, "vBoR.R12.E7ScenarioEditing", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FR12Editing::RunTest(const FString&)
+{
+	FP5zWorld E;
+	auto* Asset = E.Runner->Scenario.Get();
+	const auto* Steps = FindFProperty<FProperty>(UVBoRScenarioAsset::StaticClass(), TEXT("Steps"));
+	TestEqual(TEXT("Step array title template"), Steps->GetMetaData(TEXT("TitleProperty")), FString(TEXT("{StepId} · {Instruction}")));
+	const auto* StepStruct = FVBoRScenarioStep::StaticStruct();
+	for (const TCHAR* Field : {TEXT("TargetTag"), TEXT("DoorOpenDeg"), TEXT("SeatedSeconds")})
+	{
+		const auto* Property = FindFProperty<FProperty>(StepStruct, Field);
+		TestTrue(Field, Property->HasMetaData(TEXT("EditCondition")) && Property->HasMetaData(TEXT("EditConditionHides")));
+	}
+	for (const TCHAR* Field : {TEXT("PanelTag"), TEXT("RouteTag"), TEXT("MarkerTag"), TEXT("TargetTag")})
+	{
+		const auto* Property = FindFProperty<FProperty>(StepStruct, Field);
+		TestTrue(Field, Property->HasMetaData(TEXT("DisplayName")) && Asset->FindFunction(*Property->GetMetaData(TEXT("GetOptions"))) != nullptr);
+	}
+	const auto* ConfirmBy = FindFProperty<FProperty>(StepStruct, TEXT("ConfirmBy"));
+	TestEqual(TEXT("Confirmation display name"), ConfirmBy->GetMetaData(TEXT("DisplayName")), FString(TEXT("Operator confirm")));
+	Asset->Steps[0].PanelTag = TEXT("Legacy.Panel");
+	const auto Panels = FP5zTestAccess::Options(Asset, &FVBoRScenarioStep::PanelTag, E.World, AVBoRPanelAnchor::StaticClass());
+	TestTrue(TEXT("With a level, list its panel anchors only"), Panels[0] == TEXT("None") && Panels.Contains(TEXT("Guide.Driver")) && !Panels.Contains(TEXT("Route.ToDriverDoor")) && !Panels.Contains(TEXT("Legacy.Panel")));
+	const auto Routes = FP5zTestAccess::Options(Asset, &FVBoRScenarioStep::RouteTag, E.World, AVBoRFloorRoute::StaticClass());
+	TestTrue(TEXT("Route option comes from route actor"), Routes.Contains(TEXT("Route.ToDriverDoor")) && !Routes.Contains(TEXT("Guide.Driver")));
+	const auto Targets = FP5zTestAccess::Options(Asset, &FVBoRScenarioStep::TargetTag, E.World);
+	TestTrue(TEXT("Car actor and component tags only"), Targets.Contains(TEXT("Car.DriverDoor")) && Targets.Contains(TEXT("Car.PassengerView")) && !Targets.Contains(TEXT("Guide.Driver")));
+	const auto Saved = FP5zTestAccess::Options(Asset, &FVBoRScenarioStep::PanelTag, nullptr, AVBoRPanelAnchor::StaticClass());
+	TestTrue(TEXT("Without an editor level, offer None and saved tag"), Saved == TArray<FString>{TEXT("None"), TEXT("Legacy.Panel")});
+	TestEqual(TEXT("Stored tag unchanged"), Asset->Steps[0].PanelTag, FName(TEXT("Legacy.Panel")));
+	return true;
+}
+#endif
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FR12Spectator, "vBoR.R12.E8SpectatorFallback", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FR12Spectator::RunTest(const FString&)
+{
+	FVBoRScenarioStep S; S.StepId = TEXT("08");
+	const FText Unknown = FText::FromString(TEXT("Unknown"));
+	S.SpectatorText = FText::FromString(TEXT("TV override"));
+	S.Instruction = FText::FromString(TEXT("Participant instruction"));
+	TestEqual(TEXT("TV text wins"), VBoRSpectator::MissionText(S, Unknown).ToString(), FString(TEXT("TV override")));
+	S.SpectatorText = FText::GetEmpty(); S.StepId = TEXT("Renumbered");
+	TestEqual(TEXT("Use instruction even for renumbered step"), VBoRSpectator::MissionText(S, Unknown).ToString(), FString(TEXT("Participant instruction")));
+	S.Instruction = FText::GetEmpty(); S.StepId = TEXT("08");
+	TestEqual(TEXT("Original ID supplies fallback"), VBoRSpectator::MissionText(S, Unknown).ToString(), FString(TEXT("Open the door.")));
+	S.StepId = TEXT("Renumbered");
+	TestTrue(TEXT("Unknown without any other text"), VBoRSpectator::MissionText(S, Unknown).EqualTo(Unknown));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FR12Legacy, "vBoR.R12.E9LegacyConfirmValues", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
+bool FR12Legacy::RunTest(const FString&)
+{
+	FP5zWorld E;
+	auto A = E.Step(TEXT("LegacyA")); A.ConfirmBy = static_cast<EVBoRConfirmBy>(1);
+	auto B = E.Step(TEXT("LegacyB")); B.ConfirmBy = static_cast<EVBoRConfirmBy>(3);
+	E.Start({A, B});
+	E.Ready(); E.Command(EVBoRFlowCommand::Confirm);
+	TestEqual(TEXT("Legacy Participant completed by operator"), E.Runner->GetStepIndex(), 1);
+	E.Ready(); E.Command(EVBoRFlowCommand::Confirm);
+	TestTrue(TEXT("Legacy Either completed by operator"), E.Runner->IsFinished());
+	TestEqual(TEXT("Participant still stored"), E.Runner->Scenario->Steps[0].ConfirmBy, EVBoRConfirmBy::Participant);
+	TestEqual(TEXT("Either still stored"), E.Runner->Scenario->Steps[1].ConfirmBy, EVBoRConfirmBy::Either);
 	return true;
 }
 #endif
