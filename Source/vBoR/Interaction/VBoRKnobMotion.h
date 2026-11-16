@@ -12,9 +12,11 @@ struct FVBoRKnobMotion
 	int32 GrabHand = INDEX_NONE;
 	bool bPaused = false;
 	TArray<int32> PendingSteps;
+	int32 PendingSoundSteps = 0;
 	bool BeginGrab(int32 Hand, const FQuat& Palm);
-	void AdvanceGrab(bool bTracked, const FQuat& Palm);
+	void AdvanceGrab(bool bTracked, const FQuat& Palm, double SoundStepDeg = 0);
 	void ReleaseGrab();
 private:
 	FQuat LastPalm = FQuat::Identity;
+	double SoundRemainderDeg = 0;
 };

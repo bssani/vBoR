@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "VBoRMotionGuideComponent.h"
+#include "VBoRSoundCue.h"
 #include "VBoRFoldingSeat.generated.h"
 
 class UStaticMeshComponent;
@@ -43,6 +44,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Seat folding") FTransform MeshRestFromRoot = FTransform(FQuat::Identity, FVector(0,0,78), FVector(0.08,1.7,0.6));
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Seat folding", meta=(Units="deg", ClampMin="1", ClampMax="170")) float FoldAngleDeg = 80;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Seat folding", meta=(Units="deg/s", ClampMin="0.1")) float SpeedDegPerSecond = 45;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Seat folding", meta=(Units="s", ClampMin="0", ToolTip="Full folding travel time. Zero = use Speed Deg Per Second")) float FoldSeconds = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Seat folding", meta=(Units="s", ClampMin="0", ToolTip="Full unfolding travel time. Zero = use Speed Deg Per Second")) float UnfoldSeconds = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Seat folding|Sound", meta=(ToolTip="Held during folding travel")) FVBoRHeldSoundCue FoldingCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Seat folding|Sound", meta=(ToolTip="Held during unfolding travel")) FVBoRHeldSoundCue UnfoldingCue;
+#if WITH_DEV_AUTOMATION_TESTS
+	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
+	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return SoundAudio[Slot]; }
+#endif
+protected:
+	virtual void EndPlay(const EEndPlayReason::Type Reason) override;
 private:
 	friend class UVBoRMotionGuideComponent;
 
@@ -51,6 +62,9 @@ private:
 #endif
 	EVBoRFoldingSeatState State = EVBoRFoldingSeatState::Standing;
 	float AngleDeg = 0;
+	UPROPERTY() TObjectPtr<UAudioComponent> SoundAudio[2];
+	FVBoRSoundPlayback SoundPlayback[2];
+	uint64 SoundFrame = 0;
 	void SetState(EVBoRFoldingSeatState NewState);
 	void ApplyAngle();
 };

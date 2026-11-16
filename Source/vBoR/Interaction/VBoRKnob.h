@@ -53,6 +53,7 @@ class VBOR_API AVBoRKnob : public AActor, public IVBoRSpectatorPart
 public:
 	AVBoRKnob();
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob|Sound") FVBoRSoundCue StepCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob|Sound", meta=(Units="deg", ClampMin="0", ToolTip="Rotation per sound request. Zero = use detents")) float SoundStepDeg = 0;
 	// Slot order = property order above (P5s D12)
 #if WITH_DEV_AUTOMATION_TESTS
 	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
@@ -81,7 +82,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob", meta=(Units="deg", ClampMin="0")) float StepDeg = 15;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob", meta=(Units="deg", ClampMin="0")) float StepHysteresisDeg = 3;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob", meta=(Units="deg", ClampMin="0")) float JumpThresholdDeg = 30;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob", meta=(ClampMin="0.1")) float TwistGain = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob|Input", meta=(ClampMin="0.1")) float TwistGain = 1;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Knob", meta=(Units="cm", ClampMin="0")) float GrabMarginCm = 1;
 	UPROPERTY(EditAnywhere, Category="Knob") FLinearColor HoverColor = FLinearColor(0,0.6,1,0.4);
 	UPROPERTY(EditAnywhere, Category="Knob") FLinearColor GrabColor = FLinearColor(0.5,0,1,0.4);
@@ -101,6 +102,9 @@ private:
 #endif
 	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
 	FVBoRSoundPlayback SoundPlayback[1];
+#if WITH_DEV_AUTOMATION_TESTS
+	friend struct FR11TestAccess;
+#endif
 	uint64 SoundFrame = 0;
 	void AdvanceSounds(double Seconds);
 

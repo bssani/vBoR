@@ -1,5 +1,6 @@
 #include "VBoRFoldingSeat.h"
 
+#include "Components/AudioComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "Engine/StaticMesh.h"
@@ -54,10 +55,17 @@ bool AVBoRFoldingSeat::Unfold()
 
 void AVBoRFoldingSeat::ResetSeat()
 {
+	for (int32 I = 0; I < UE_ARRAY_COUNT(SoundPlayback); ++I) { SoundPlayback[I].Reset(SoundAudio[I], true); }
 	AngleDeg = 0;
 	ApplyAngle();
 	SetState(EVBoRFoldingSeatState::Standing);
 	if (HasActorBegunPlay()) { OnReset.Broadcast(this); }
+}
+
+void AVBoRFoldingSeat::EndPlay(const EEndPlayReason::Type Reason)
+{
+	for (int32 I = 0; I < UE_ARRAY_COUNT(SoundPlayback); ++I) { SoundPlayback[I].Reset(SoundAudio[I], false); }
+	Super::EndPlay(Reason);
 }
 
 void AVBoRFoldingSeat::SetState(EVBoRFoldingSeatState NewState)
@@ -76,13 +84,30 @@ void AVBoRFoldingSeat::ApplyAngle()
 void AVBoRFoldingSeat::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	++SoundFrame;
 	if (State != EVBoRFoldingSeatState::Folding && State != EVBoRFoldingSeatState::Unfolding) { return; }
 	const bool bFolding = State == EVBoRFoldingSeatState::Folding;
 	const float Limit = FMath::Clamp(FoldAngleDeg, 1.0f, 170.0f);
 	const float Target = bFolding ? Limit : 0;
-	AngleDeg = FMath::Clamp(FMath::FInterpConstantTo(AngleDeg, Target, FMath::Max(0.0f, DeltaSeconds), FMath::Max(0.1f, SpeedDegPerSecond)), 0.0f, Limit);
+	const float TravelSeconds = bFolding ? FoldSeconds : UnfoldSeconds;
+	const float Speed = TravelSeconds > 0 ? Limit / TravelSeconds : FMath::Max(0.1f, SpeedDegPerSecond);
+	const float Before = AngleDeg;
+	AngleDeg = FMath::Clamp(FMath::FInterpConstantTo(AngleDeg, Target, FMath::Max(0.0f, DeltaSeconds), Speed), 0.0f, Limit);
 	ApplyAngle();
-	if (AngleDeg == Target) { SetState(bFolding ? EVBoRFoldingSeatState::Folded : EVBoRFoldingSeatState::Standing); }
+	const int32 Slot = bFolding ? 0 : 1;
+	const auto& Cue = bFolding ? FoldingCue : UnfoldingCue;
+	const float Used = FMath::Abs(AngleDeg - Before) / Speed;
+	if (Used > 0 && Cue.Sound && !SoundPlayback[Slot].HasPending())
+	{
+		VBoREnsureCueAudio(SoundAudio[Slot], Cue, this, HingePivot);
+		SoundPlayback[Slot].BeginHeld(Cue, SoundAudio[Slot], SoundFrame);
+	}
+	SoundPlayback[Slot].Advance(Cue, SoundAudio[Slot], Used, SoundFrame);
+	if (AngleDeg == Target)
+	{
+		SoundPlayback[Slot].EndHeld(Cue, SoundAudio[Slot]);
+		SetState(bFolding ? EVBoRFoldingSeatState::Folded : EVBoRFoldingSeatState::Standing);
+	}
 }
 
 FTransform AVBoRFoldingSeat::HingePoseAt(double Angle) const

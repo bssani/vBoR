@@ -16,7 +16,8 @@ class USoundBase;
 class AVBoRPoweredPanel;
 class UVBoRObstructionBoxComponent;
 
-enum class EVBoRPoweredSound : uint8 { OpenAccepted, CloseAccepted, Warning, Motor, Opened, Closed, Obstructed, Count };
+// Count bounds the original prebuilt slots (P5r tests)
+enum class EVBoRPoweredSound : uint8 { OpenAccepted, CloseAccepted, Warning, Motor, Opened, Closed, Obstructed, Count, Opening = Count, Closing, SlotCount };
 
 struct FVBoRObstructionShape
 {
@@ -97,6 +98,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel") FTransform MeshRestFromRoot = FTransform(FQuat::Identity, FVector(-2.5, 0, 110), FVector(0.05, 1.3, 0.7));
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel", meta = (Units = "deg", ClampMin = "1", ClampMax = "170")) float OpenAngleDeg = 85;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel", meta = (Units = "deg/s", ClampMin = "0.1")) float SpeedDegPerSecond = 21.25f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel", meta = (Units="s", ClampMin="0", ToolTip="Full opening travel time. Zero = use Speed Deg Per Second")) float OpenSeconds = 0;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel", meta = (Units="s", ClampMin="0", ToolTip="Full closing travel time. Zero = use Speed Deg Per Second")) float CloseSeconds = 0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel", meta = (Units = "s", ClampMin = "0")) float DelaySeconds = 1;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel") bool bStartOpen = false;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Sound", meta = (ToolTip = "Open request accepted: starts on the next Tick.")) FVBoRSoundCue OpenAcceptedCue;
@@ -106,6 +109,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Sound", meta = (ToolTip = "Starts in the OnOpened arrival frame.")) FVBoRSoundCue OpenedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Sound", meta = (ToolTip = "Starts in the OnClosed arrival frame.")) FVBoRSoundCue ClosedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Sound", meta = (ToolTip = "Starts in the OnObstructed detection frame.")) FVBoRSoundCue ObstructedCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Sound", meta=(ToolTip="Held during opening travel")) FVBoRHeldSoundCue OpeningCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Sound", meta=(ToolTip="Held during closing travel")) FVBoRHeldSoundCue ClosingCue;
 	// Button Actor origin = face center, +Z outward (P5zc D6)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Buttons", meta = (DisplayName = "Open button class", ToolTip = "Empty = default cube button. Set = this BP's mesh/size/material/press depth kept.")) TSubclassOf<AVBoRPokeButton> OpenButtonClass;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Powered Panel|Buttons", meta = (DisplayName = "Close button class", ToolTip = "Empty = default cube button. Set = this BP's mesh/size/material/press depth kept.")) TSubclassOf<AVBoRPokeButton> CloseButtonClass;
@@ -138,7 +143,7 @@ private:
 	bool bPendingCommand = false;
 	bool bInitializingPlay = false;
 	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
-	FVBoRSoundPlayback SoundPlayback[static_cast<int32>(EVBoRPoweredSound::Count)];
+	FVBoRSoundPlayback SoundPlayback[static_cast<int32>(EVBoRPoweredSound::SlotCount)];
 	uint64 SoundFrame = 0;
 	int32 ObstructionCount = 0;
 	UPROPERTY() TArray<TObjectPtr<UVBoRObstructionBoxComponent>> ObstructionBoxes;
@@ -148,6 +153,8 @@ private:
 	const FVBoRSoundCue& GetSoundCue(EVBoRPoweredSound Slot) const;
 	void QueueSound(EVBoRPoweredSound Slot);
 	void BeginHeldSound(EVBoRPoweredSound Slot, const FVBoRHeldSoundCue& Cue);
+	void BeginTravelSound(bool bOpening);
+	void EndTravelSound(bool bOpening);
 	void AdvanceSounds(double Seconds, bool bIncludeHeld = true);
 	void StopHeldSounds();
 	FTransform MeshPoseAt(float Angle) const;

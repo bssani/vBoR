@@ -1,4 +1,5 @@
 #include "VBoRHingedPanel.h"
+#include "VBoRParticipantZones.h"
 #include "VBoRHandRigPawn.h"
 #include "VBoRAxisPart.h"
 #include "Components/StaticMeshComponent.h"
@@ -44,7 +45,7 @@ AVBoRHingedPanel::AVBoRHingedPanel()
 	StateAudio->bAutoActivate = false;
 	static ConstructorHelpers::FObjectFinder<USoundBase> Sound(IsdkContentAssetPaths::Audio::Interaction_BasicPoke_ButtonPress);
 	StateAudio->SetSound(Sound.Object);
-	SoundAudio.SetNum(2); SoundAudio[0] = StateAudio;
+	SoundAudio.SetNum(UE_ARRAY_COUNT(SoundPlayback)); SoundAudio[0] = StateAudio;
 	SoundAudio[1] = CreateDefaultSubobject<UAudioComponent>(TEXT("LatchedCueAudio")); SoundAudio[1]->SetupAttachment(HingePivot); SoundAudio[1]->bAutoActivate = false;
 	UnlockedCue.Sound = StateAudio->Sound;
 	LatchedCue.Sound = StateAudio->Sound;
@@ -387,6 +388,7 @@ void AVBoRHingedPanel::PreInitializeComponents()
 void AVBoRHingedPanel::BeginPlay()
 {
 	Super::BeginPlay();
+	CabinZone = UVBoRCabinZoneComponent::FindFirst(GetWorld());
 	UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, IsdkContentAssetPaths::Materials::GrabbableDefault);
 	StateOverlay = Material ? UMaterialInstanceDynamic::Create(Material, this) : nullptr;
 	const FSetupAssessment Setup = EvaluateSetup();
@@ -502,8 +504,8 @@ void AVBoRHingedPanel::Tick(float DeltaSeconds)
 void AVBoRHingedPanel::ApplyState(double BeforeAngle, int32 BeforeUnlocks, int32 BeforeLatches)
 {
 	HingePivot->SetRelativeRotation(RotationAt(Motion.AngleDeg, ClosedHingeRotation));
-	if (Motion.Metrics.Unlocks != BeforeUnlocks) { SoundPlayback[0].Queue(UnlockedCue, SoundAudio[0], SoundFrame); NotifyUnlocked(); }
-	if (Motion.Metrics.Latches != BeforeLatches) { CancelSelections(TEXT("latch")); SoundPlayback[1].Queue(LatchedCue, SoundAudio[1], SoundFrame); NotifyLocked(); }
+	if (Motion.Metrics.Unlocks != BeforeUnlocks) { QueueLatchSound(false); NotifyUnlocked(); }
+	if (Motion.Metrics.Latches != BeforeLatches) { CancelSelections(TEXT("latch")); QueueLatchSound(true); NotifyLocked(); }
 	if (GripAxisHandle) { GripAxisHandle->RefreshGripInput(); }
 	if (Motion.AngleDeg != BeforeAngle) { OnAngleChanged.Broadcast(static_cast<float>(Motion.AngleDeg)); }
 	if (StateOverlay)
@@ -518,7 +520,7 @@ void AVBoRHingedPanel::ApplyState(double BeforeAngle, int32 BeforeUnlocks, int32
 
 void AVBoRHingedPanel::ResetDoor()
 {
-	for (int32 I = 0; I < 2; ++I) { SoundPlayback[I].Reset(SoundAudio[I], true); }
+	for (int32 I = 0; I < SoundAudio.Num(); ++I) { SoundPlayback[I].Reset(SoundAudio[I], true); }
 	const double Before = Motion.AngleDeg;
 	Motion.Reset();
 	for (int32 H = 0; H < 2; ++H)
@@ -557,7 +559,7 @@ FString AVBoRHingedPanel::GetMeasurementText(const FVBoRDoorMetrics* Baseline) c
 
 void AVBoRHingedPanel::EndPlay(const EEndPlayReason::Type Reason)
 {
-	for (int32 I = 0; I < 2; ++I) { SoundPlayback[I].Reset(SoundAudio[I], false); }
+	for (int32 I = 0; I < SoundAudio.Num(); ++I) { SoundPlayback[I].Reset(SoundAudio[I], false); }
 	EndAxisHold(TEXT("end play"), false);
 	DoorMesh->SetOverlayMaterial(nullptr);
 	Super::EndPlay(Reason);
@@ -570,6 +572,18 @@ void AVBoRHingedPanel::AdvanceSounds(double Seconds)
 {
 	SoundPlayback[0].Advance(UnlockedCue, SoundAudio[0], Seconds, SoundFrame);
 	SoundPlayback[1].Advance(LatchedCue, SoundAudio[1], Seconds, SoundFrame);
+	SoundPlayback[2].Advance(UnlockedInsideCue, SoundAudio[2], Seconds, SoundFrame);
+	SoundPlayback[3].Advance(LatchedInsideCue, SoundAudio[3], Seconds, SoundFrame);
+}
+
+void AVBoRHingedPanel::QueueLatchSound(bool bLatched)
+{
+	const auto& InsideCue = bLatched ? LatchedInsideCue : UnlockedInsideCue;
+	const bool bInside = InsideCue.Sound && CabinZone.IsValid() && CabinZone->IsHeadInside();
+	const int32 Slot = (bInside ? 2 : 0) + (bLatched ? 1 : 0);
+	const auto& Cue = bInside ? InsideCue : (bLatched ? LatchedCue : UnlockedCue);
+	if (bInside) { VBoREnsureCueAudio(SoundAudio[Slot], Cue, this, HingePivot); }
+	SoundPlayback[Slot].Queue(Cue, SoundAudio[Slot], SoundFrame);
 }
 
 FQuat AVBoRHingedPanel::RotationAt(double Angle, const FQuat& Rest)

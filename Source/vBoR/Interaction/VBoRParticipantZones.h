@@ -44,3 +44,17 @@ private:
 	bool bWasTracked = true;
 	bool bInside = false;
 };
+
+UCLASS(ClassGroup=(VBoR), meta=(BlueprintSpawnableComponent))
+class VBOR_API UVBoRCabinZoneComponent : public UBoxComponent
+{
+	GENERATED_BODY()
+public:
+	UVBoRCabinZoneComponent();
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	void SampleHead(bool bTracked, const FVector& WorldHead);
+	bool IsHeadInside();
+	static UVBoRCabinZoneComponent* FindFirst(UWorld* World, int32* Count = nullptr);
+private:
+	bool bInside = false;
+};

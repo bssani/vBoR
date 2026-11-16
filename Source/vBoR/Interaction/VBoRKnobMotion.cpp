@@ -6,7 +6,7 @@ bool FVBoRKnobMotion::BeginGrab(int32 Hand, const FQuat& Palm)
 	GrabHand = Hand; LastPalm = Palm; bPaused = false; return true;
 }
 
-void FVBoRKnobMotion::AdvanceGrab(bool bTracked, const FQuat& Palm)
+void FVBoRKnobMotion::AdvanceGrab(bool bTracked, const FQuat& Palm, double SoundStepDeg)
 {
 	if (GrabHand == INDEX_NONE) { return; }
 	if (!bTracked || Palm.ContainsNaN() || !Palm.IsNormalized()) { bPaused = true; return; }
@@ -17,7 +17,18 @@ void FVBoRKnobMotion::AdvanceGrab(bool bTracked, const FQuat& Palm)
 	else if (FMath::Abs(TwistDeg) <= JumpThresholdDeg + 1.e-6)
 	{
 		// Real hand angle for jump/recovery; multiplier for motion only (P5n D2, deg)
-		AngleDeg += TwistDeg * TwistGain;
+		const double TurnDeg = TwistDeg * TwistGain;
+		AngleDeg += TurnDeg;
+		if (SoundStepDeg > 0)
+		{
+			// Count hand-driven rotation only (ignore release snap, R11 D4)
+			SoundRemainderDeg += TurnDeg;
+			const double Magnitude = FMath::Abs(SoundRemainderDeg);
+			const int32 Steps = FMath::FloorToInt(Magnitude / SoundStepDeg + UE_DOUBLE_SMALL_NUMBER);
+			PendingSoundSteps += Steps;
+			SoundRemainderDeg -= FMath::Sign(SoundRemainderDeg) * Steps * SoundStepDeg;
+		}
+		else { SoundRemainderDeg = 0; }
 		if (StepDeg > 0)
 		{
 			// Directional handling at exact H=0 boundary (no round-trip notifications in same frame, P5f D4)

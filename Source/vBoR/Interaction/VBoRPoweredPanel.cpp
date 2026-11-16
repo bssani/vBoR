@@ -44,9 +44,9 @@ AVBoRPoweredPanel::AVBoRPoweredPanel()
 	WarningAudio = CreateDefaultSubobject<UAudioComponent>(TEXT("WarningAudio"));
 	WarningAudio->SetupAttachment(HingePivot);
 	WarningAudio->bAutoActivate = false;
-	SoundAudio.SetNum(static_cast<int32>(EVBoRPoweredSound::Count));
+	SoundAudio.SetNum(static_cast<int32>(EVBoRPoweredSound::SlotCount));
 	const TCHAR* Names[] = {TEXT("OpenAcceptedAudio"), TEXT("CloseAcceptedAudio"), TEXT("WarningAudio"), TEXT("MotorAudio"), TEXT("OpenedAudio"), TEXT("ClosedAudio"), TEXT("ObstructedAudio")};
-	for (int32 I = 0; I < SoundAudio.Num(); ++I)
+	for (int32 I = 0; I < static_cast<int32>(EVBoRPoweredSound::Count); ++I)
 	{
 		SoundAudio[I] = I == static_cast<int32>(EVBoRPoweredSound::Warning) ? WarningAudio.Get() : CreateDefaultSubobject<UAudioComponent>(Names[I]);
 		SoundAudio[I]->SetupAttachment(HingePivot);
@@ -265,6 +265,8 @@ const FVBoRSoundCue& AVBoRPoweredPanel::GetSoundCue(EVBoRPoweredSound Slot) cons
 	case EVBoRPoweredSound::Opened: return OpenedCue;
 	case EVBoRPoweredSound::Closed: return ClosedCue;
 	case EVBoRPoweredSound::Obstructed: return ObstructedCue;
+	case EVBoRPoweredSound::Opening: return OpeningCue;
+	case EVBoRPoweredSound::Closing: return ClosingCue;
 	default: checkNoEntry(); return OpenAcceptedCue;
 	}
 }
@@ -281,12 +283,28 @@ void AVBoRPoweredPanel::BeginHeldSound(EVBoRPoweredSound Slot, const FVBoRHeldSo
 	SoundPlayback[I].BeginHeld(Cue, SoundAudio[I], SoundFrame);
 }
 
+void AVBoRPoweredPanel::BeginTravelSound(bool bOpening)
+{
+	const int32 Slot = static_cast<int32>(bOpening ? EVBoRPoweredSound::Opening : EVBoRPoweredSound::Closing);
+	const auto& Cue = bOpening ? OpeningCue : ClosingCue;
+	if (!Cue.Sound || SoundPlayback[Slot].HasPending()) { return; }
+	VBoREnsureCueAudio(SoundAudio[Slot], Cue, this, HingePivot);
+	SoundPlayback[Slot].BeginHeld(Cue, SoundAudio[Slot], SoundFrame);
+}
+
+void AVBoRPoweredPanel::EndTravelSound(bool bOpening)
+{
+	const int32 Slot = static_cast<int32>(bOpening ? EVBoRPoweredSound::Opening : EVBoRPoweredSound::Closing);
+	SoundPlayback[Slot].EndHeld(bOpening ? OpeningCue : ClosingCue, SoundAudio[Slot]);
+}
+
 void AVBoRPoweredPanel::AdvanceSounds(double Seconds, bool bIncludeHeld)
 {
 	for (int32 I = 0; I < SoundAudio.Num(); ++I)
 	{
 		const EVBoRPoweredSound Slot = static_cast<EVBoRPoweredSound>(I);
-		if (!bIncludeHeld && (Slot == EVBoRPoweredSound::Warning || Slot == EVBoRPoweredSound::Motor)) { continue; }
+		if (!bIncludeHeld && (Slot == EVBoRPoweredSound::Warning || Slot == EVBoRPoweredSound::Motor ||
+			Slot == EVBoRPoweredSound::Opening || Slot == EVBoRPoweredSound::Closing)) { continue; }
 		SoundPlayback[I].Advance(GetSoundCue(Slot), SoundAudio[I], Seconds, SoundFrame);
 	}
 }
@@ -333,8 +351,10 @@ void AVBoRPoweredPanel::Tick(float DeltaSeconds)
 		PublishState();
 	}
 	const bool bOpening = Motion.State == EVBoRPoweredState::Opening;
-	const float Target = bOpening ? FMath::Clamp(OpenAngleDeg, 1.0f, 170.0f) : 0;
-	const float Speed = FMath::Max(0.1f, SpeedDegPerSecond);
+	const float Limit = FMath::Clamp(OpenAngleDeg, 1.0f, 170.0f);
+	const float Target = bOpening ? Limit : 0;
+	const float TravelSeconds = bOpening ? OpenSeconds : CloseSeconds;
+	const float Speed = TravelSeconds > 0 ? Limit / TravelSeconds : FMath::Max(0.1f, SpeedDegPerSecond);
 	const float Travel = FMath::Min(static_cast<float>(Remaining * Speed), FMath::Abs(Target - Motion.AngleDeg));
 	const float Start = Motion.AngleDeg;
 	const int32 Steps = FMath::Max(1, FMath::CeilToInt(Travel));
@@ -347,8 +367,11 @@ void AVBoRPoweredPanel::Tick(float DeltaSeconds)
 			{
 				ApplyAngle();
 				const double Used = FMath::Abs(Motion.AngleDeg - Start) / Speed;
+				if (Used > 0) { BeginTravelSound(false); }
 				AdvanceSounds(Used);
 				Motion.State = EVBoRPoweredState::Opening;
+				EndTravelSound(false);
+				BeginTravelSound(true);
 				++ObstructionCount;
 				PublishState();
 				QueueSound(EVBoRPoweredSound::Obstructed);
@@ -362,11 +385,13 @@ void AVBoRPoweredPanel::Tick(float DeltaSeconds)
 	}
 	ApplyAngle();
 	const double Used = Travel / Speed;
+	if (Travel > 0) { BeginTravelSound(bOpening); }
 	AdvanceSounds(Used);
 	if (FMath::IsNearlyEqual(Motion.AngleDeg, Target))
 	{
 		Motion.State = bOpening ? EVBoRPoweredState::Open : EVBoRPoweredState::Closed;
 		StopHeldSounds();
+		EndTravelSound(bOpening);
 		PublishState();
 		QueueSound(bOpening ? EVBoRPoweredSound::Opened : EVBoRPoweredSound::Closed);
 		if (bOpening) { OnOpened.Broadcast(this); } else { OnClosed.Broadcast(this); }

@@ -1,4 +1,6 @@
 #include "VBoRKeyFob.h"
+#include "VBoRVehiclePowerComponent.h"
+#include "Components/AudioComponent.h"
 #include "Sound/SoundBase.h"
 #include "VBoRKeyTable.h"
 #include "VBoRPokeButton.h"
@@ -174,6 +176,7 @@ void AVBoRKeyFob::UnlockPressed(const FIsdkInteractionPointerEvent& Event)
 {
 	if (!CanPress(Event)) { return; }
 	UE_LOG(LogKeyFob, Log, TEXT("%s Unlock pressed hand=%d"), *GetName(), 1 - HoldingHand);
+	QueueCarSound(false);
 	OnUnlockPressed.Broadcast(this);
 }
 
@@ -181,7 +184,22 @@ void AVBoRKeyFob::LockPressed(const FIsdkInteractionPointerEvent& Event)
 {
 	if (!CanPress(Event)) { return; }
 	UE_LOG(LogKeyFob, Log, TEXT("%s Lock pressed hand=%d"), *GetName(), 1 - HoldingHand);
+	QueueCarSound(true);
 	OnLockPressed.Broadcast(this);
+}
+
+void AVBoRKeyFob::QueueCarSound(bool bLock)
+{
+	const int32 Slot = bLock ? 1 : 0;
+	const auto& Cue = bLock ? LockCarCue : UnlockCarCue;
+	if (!Cue.Sound) { return; }
+	if (!CarSoundAudio[Slot])
+	{
+		const auto* VehiclePower = UVBoRVehiclePowerComponent::FindUnique(GetWorld());
+		USceneComponent* CarRoot = VehiclePower ? VehiclePower->GetOwner()->GetRootComponent() : nullptr;
+		VBoREnsureCueAudio(CarSoundAudio[Slot], Cue, this, CarRoot ? CarRoot : GetRootComponent());
+	}
+	CarSoundPlayback[Slot].Queue(Cue, CarSoundAudio[Slot], SoundFrame);
 }
 
 void AVBoRKeyFob::ClearVelocity()
@@ -199,6 +217,9 @@ void AVBoRKeyFob::SetHome(AVBoRKeyTable* Table)
 void AVBoRKeyFob::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	++SoundFrame;
+	CarSoundPlayback[0].Advance(UnlockCarCue, CarSoundAudio[0], DeltaSeconds, SoundFrame);
+	CarSoundPlayback[1].Advance(LockCarCue, CarSoundAudio[1], DeltaSeconds, SoundFrame);
 	// Switch outside pointer callback. Block unheld key press visual/sound too (P4a R1-1)
 	const bool bHeld = HoldingHand != INDEX_NONE;
 	for (AVBoRPokeButton* Button : {UnlockButton.Get(), LockButton.Get()})
@@ -219,6 +240,7 @@ void AVBoRKeyFob::Tick(float DeltaSeconds)
 
 void AVBoRKeyFob::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	for (int32 I = 0; I < UE_ARRAY_COUNT(CarSoundPlayback); ++I) { CarSoundPlayback[I].Reset(CarSoundAudio[I], false); }
 	if (UnlockButton) { UnlockButton->PressFilter.Unbind(); UnlockButton->Destroy(); }
 	if (LockButton) { LockButton->PressFilter.Unbind(); LockButton->Destroy(); }
 	Super::EndPlay(EndPlayReason);

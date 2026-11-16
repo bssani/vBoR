@@ -22,6 +22,9 @@ public:
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Vehicle power|Sound") FVBoRSoundCue PowerOnCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Vehicle power|Sound") FVBoRSoundCue PowerOffCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Vehicle power|Sound", meta=(ToolTip="Cabin start sound. Empty = Power On Cue")) FVBoRSoundCue PowerOnInsideCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Vehicle power|Sound", meta=(ToolTip="Idle sound while powered on")) FVBoRHeldSoundCue IdleCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Vehicle power|Sound", meta=(ToolTip="Cabin idle sound. Empty = Idle Cue")) FVBoRHeldSoundCue IdleInsideCue;
 	// Slot order = property order above (P5s D12)
 #if WITH_DEV_AUTOMATION_TESTS
 	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
@@ -44,9 +47,14 @@ private:
 	friend struct FP5sTestAccess;
 #endif
 	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
-	FVBoRSoundPlayback SoundPlayback[2];
+	enum ESoundSlot { PowerOn, PowerOff, PowerOnInside, Idle, IdleInside, SoundSlotCount };
+	FVBoRSoundPlayback SoundPlayback[SoundSlotCount];
 	uint64 SoundFrame = 0;
-	void EnsureSoundAudio(int32 Slot);
+	TWeakObjectPtr<class UVBoRCabinZoneComponent> CabinZone;
+	ESoundSlot IdleSlot = Idle;
+	void BeginIdle(bool bInside, bool bSkipDelay = false);
+	void EndIdle();
+	void UpdateSoundTick();
 
 	bool bPowerOn = false, bAvailable = false;
 	uint64 LastToggleFrame = MAX_uint64;

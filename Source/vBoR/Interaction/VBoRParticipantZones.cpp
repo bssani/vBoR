@@ -2,6 +2,7 @@
 #include "Engine/Engine.h"
 #include "Engine/World.h"
 #include "IXRTrackingSystem.h"
+#include "UObject/UObjectIterator.h"
 
 DEFINE_LOG_CATEGORY(LogP3Flow);
 
@@ -73,4 +74,50 @@ void UVBoRSeatZoneComponent::SampleHead(bool bTracked, const FVector& WorldHead,
 	if (!bInside) { DwellSeconds = 0; }
 	// Ignore recovery-frame dt (may include tracking-loss time, P3 E7)
 	else if (!bRecovered) { DwellSeconds += FMath::Max(0.0, DeltaSeconds); }
+}
+
+UVBoRCabinZoneComponent::UVBoRCabinZoneComponent()
+{
+	PrimaryComponentTick.bCanEverTick = true;
+	PrimaryComponentTick.TickGroup = TG_PostUpdateWork;
+	SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	SetHiddenInGame(true);
+}
+
+UVBoRCabinZoneComponent* UVBoRCabinZoneComponent::FindFirst(UWorld* World, int32* Count)
+{
+	if (Count) { *Count = 0; }
+	if (!World) { return nullptr; }
+	UVBoRCabinZoneComponent* First = nullptr;
+	for (TObjectIterator<UVBoRCabinZoneComponent> It; It; ++It)
+	{
+		if (It->IsTemplate() || It->GetWorld() != World || !It->IsRegistered()) { continue; }
+		if (!First) { First = *It; }
+		if (!Count) { break; }
+		++*Count;
+	}
+	return First;
+}
+
+void UVBoRCabinZoneComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+	IsHeadInside();
+}
+
+bool UVBoRCabinZoneComponent::IsHeadInside()
+{
+	// Resample on request (one-shot events may precede the zone Tick)
+	FTransform Head;
+	const bool bTracked = VBoRReadWorldHead(GetWorld(), Head);
+	SampleHead(bTracked, Head.GetLocation());
+	return bInside;
+}
+
+void UVBoRCabinZoneComponent::SampleHead(bool bTracked, const FVector& WorldHead)
+{
+	if (!bTracked) { return; }
+	const FVector P = GetComponentTransform().InverseTransformPosition(WorldHead).GetAbs();
+	const FVector E = GetUnscaledBoxExtent();
+	bInside = P.X <= E.X && P.Y <= E.Y && P.Z <= E.Z;
 }
