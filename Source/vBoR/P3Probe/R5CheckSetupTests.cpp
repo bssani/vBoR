@@ -148,7 +148,7 @@ R5_TEST(5, "PlayValidationParity")
 	W.Step(EVBoRStepRule::ButtonPressed, TEXT("Car.Duplicate"));
 	W.Start->Tags.Add(TEXT("Car.Duplicate")); W.World->SpawnActor<AVBoRPokeButton>()->Tags.Add(TEXT("Car.Duplicate"));
 	auto* BadMarker = W.Add<UInputComponent>(); BadMarker->ComponentTags.Add(TEXT("Car.BadMarker"));
-	auto& S = W.Runner->Scenario->Steps[0]; S.StepId = TEXT("17"); S.MarkerTag = TEXT("Car.BadMarker"); S.RouteTag = TEXT("Car.MissingRoute");
+	auto& S = W.Runner->Scenario->Steps[0]; S.StepId = NAME_None; S.MarkerTag = TEXT("Car.BadMarker"); S.RouteTag = TEXT("Car.MissingRoute");
 	FVBoRScenarioStep Second; Second.StepId = TEXT("02"); Second.PanelTag = TEXT("Car.MissingPanel"); W.Runner->Scenario->Steps.Add(Second);
 	W.Runner->CheckSetup(); const FString Before = W.Runner->SetupReport;
 	W.Play(); TestFalse(TEXT("Invalid setup blocks Play"), W.Runner->InitializeFlow());
@@ -275,6 +275,22 @@ R5_TEST(12, "NoSideEffects")
 		TestEqual(TEXT("Input bindings"), W.Runner->InputComponent ? W.Runner->InputComponent->KeyBindings.Num() : 0, Keys);
 		TestTrue(TEXT("Gate button bindings"), Bound == After && CloseBound == CloseAfter);
 	}
+	return true;
+}
+
+R5_TEST(14, "FreeStepIds")
+{
+	// Renumbered scenario passes (user 2026-11-16)
+	FR5World W; W.Step();
+	for (const TCHAR* Id : {TEXT("1"), TEXT("17"), TEXT("18"), TEXT("Intro")})
+	{
+		W.Runner->Scenario->Steps[0].StepId = Id; W.Runner->CheckSetup();
+		TestEqual(TEXT("Any non-empty ID passes"), W.Runner->SetupReport, FString(TEXT("No issues")));
+	}
+	FVBoRScenarioStep Second; Second.StepId = TEXT("  "); W.Runner->Scenario->Steps.Add(Second); W.Runner->CheckSetup();
+	TestEqual(TEXT("Blank ID names its step"), W.Runner->SetupReport, FString(TEXT("Step 2: StepId required")));
+	W.Runner->Scenario->Steps[1].StepId = NAME_None; W.Runner->CheckSetup();
+	TestEqual(TEXT("Empty ID names its step"), W.Runner->SetupReport, FString(TEXT("Step 2: StepId required")));
 	return true;
 }
 

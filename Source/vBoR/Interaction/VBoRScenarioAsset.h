@@ -13,9 +13,9 @@ USTRUCT(BlueprintType)
 struct VBOR_API FVBoRScenarioStep
 {
 	GENERATED_BODY()
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="Original scenario ID. No 17")) FName StepId;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="Shown in log, operator window, TV. Any value, not empty")) FName StepId;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="Participant instruction")) FText Instruction;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="English TV spectator text. Empty uses step ID defaults")) FText SpectatorText;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="English TV spectator text. Empty uses defaults for original IDs 01-20 (fill in if renumbered)")) FText SpectatorText;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="Current state or confirmation rule to complete step")) EVBoRStepRule Rule = EVBoRStepRule::Confirm;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ToolTip="Rule target Actor or Component tag. Exactly one match required")) FName TargetTag;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(Units="deg", ClampMin="0", ToolTip="Door open target angle. Placeholder, not acceptance threshold")) float DoorOpenDeg = 45;
