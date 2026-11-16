@@ -18,6 +18,8 @@ FVBoRPanelStyle::FVBoRPanelStyle()
 	, LabelPlateColor(PlateColor)
 	, LabelOutlineColor(PanelSRGB(0x3E, 0x45, 0x4C))
 	, LabelTextColor(PanelSRGB(0xC3, 0xC9, 0xCF))
+	, ConfirmButtonColor(AccentColor)
+	, ActionButtonColor(LabelTextColor)
 {
 }
 
@@ -59,5 +61,8 @@ FVBoRPanelStyle FVBoRPanelStyle::FromPreset(EVBoRPanelStylePreset Preset)
 	default:
 		break;
 	}
+	// Buttons follow preset accent / label text
+	Style.ConfirmButtonColor = Style.AccentColor;
+	Style.ActionButtonColor = Style.LabelTextColor;
 	return Style;
 }

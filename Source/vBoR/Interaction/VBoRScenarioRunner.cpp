@@ -17,6 +17,8 @@
 #include "VBoRGuidanceWidget.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Components/ArrowComponent.h"
+#include "IsdkContentAssetPaths.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "Components/BoxComponent.h"
 #include "Components/SplineComponent.h"
 #include "Components/InputComponent.h"
@@ -42,6 +44,9 @@
 namespace
 {
 	constexpr double MarkerFloorLiftCm = 0.5; // Avoid floor z-fighting (P5zb D3, cm)
+	// Keep 16 cm gap between buttons and 3 cm to label at any size (default 8 cm -> 12 / 7)
+	double PanelButtonSideCm(const FVector& SizeCm) { return SizeCm.Y / 2 + 8; }
+	double PanelLabelUpCm(const FVector& SizeCm) { return SizeCm.X / 2 + 3; }
 	TAutoConsoleVariable<int32> CVarHomeShift(TEXT("vBoR.HomeShift"), 0,
 		TEXT("Home testing only: enable keypad 8/2/4/6 to shift by 1 m in car axes, 5 to reset."));
 	TAutoConsoleVariable<int32> CVarRouteIgnorePlayArea(TEXT("vBoR.RouteIgnorePlayArea"), 0,
@@ -211,8 +216,17 @@ void AVBoRScenarioRunner::BeginPlay()
 	{
 		// Set mesh/decision area together, reuse actual poke path (P3 D4)
 		AVBoRPokeButton* Button = GetWorld()->SpawnActorDeferred<AVBoRPokeButton>(AVBoRPokeButton::StaticClass(), FTransform::Identity, this);
-		Button->ButtonMesh->SetRelativeScale3D(FVector(0.08, 0.08, 0.015)); Button->HitAreaScale = 1;
+		// Engine cube is 100 cm (UE cm -> scale)
+		Button->ButtonMesh->SetRelativeScale3D(PanelButtonSizeCm.ComponentMax(FVector(1)) / 100.0); Button->HitAreaScale = 1;
 		Button->FinishSpawning(FTransform::Identity); Button->AttachToComponent(RootComponent, FAttachmentTransformRules::KeepWorldTransform);
+		// Base color from panel style; hover/select overlay unchanged (P0-b R1-1)
+		if (UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, IsdkContentAssetPaths::Materials::GrabbableDefault))
+		{
+			UMaterialInstanceDynamic* ColorMaterial = UMaterialInstanceDynamic::Create(Material, Button);
+			FLinearColor Color = I == 0 ? PanelStyle.ConfirmButtonColor : PanelStyle.ActionButtonColor;
+			Color.A = 1; // ColorParam alpha is opacity
+			ColorMaterial->SetVectorParameterValue(TEXT("ColorParam"), Color); Button->ButtonMesh->SetMaterial(0, ColorMaterial);
+		}
 		if (I == 0) { ConfirmButton = Button; Button->OnButtonPressed.AddUniqueDynamic(this, &AVBoRScenarioRunner::HandleConfirmPoke); }
 		else { ActionButton = Button; Button->OnButtonPressed.AddUniqueDynamic(this, &AVBoRScenarioRunner::HandleActionPoke); }
 		SetP3ButtonVisible(Button, false);
@@ -855,10 +869,11 @@ void AVBoRScenarioRunner::PlacePanel()
 			for (int32 I = 0; I < 2; ++I)
 			{
 				AVBoRPokeButton* Button = I == 0 ? ConfirmButton.Get() : ActionButton.Get(); if (!Button) { continue; }
-				const FVector Local(0,I == 0 ? -12 : 12,-PanelSizeCm.Y/2-PanelButtonGapCm);
+				const double Side = PanelButtonSideCm(PanelButtonSizeCm);
+				const FVector Local(0,I == 0 ? -Side : Side,-PanelSizeCm.Y/2-PanelButtonGapCm);
 				// Local +Z press face toward anchor +X; preserve tilt (P5z D4)
 				Button->SetActorLocationAndRotation(Pose.TransformPosition(Local),Pose.GetRotation()*FRotator(-90,0,0).Quaternion());
-				ButtonLabels[I]->SetWorldLocationAndRotation(Pose.TransformPosition(Local+FVector(0,0,7)),Pose.GetRotation());
+				ButtonLabels[I]->SetWorldLocationAndRotation(Pose.TransformPosition(Local+FVector(0,0,PanelLabelUpCm(PanelButtonSizeCm))),Pose.GetRotation());
 			}
 			bFixedPanelPlaced = true; ConfirmLockRemaining = FMath::Max(0.0f,ConfirmLockSeconds);
 			Record(TEXT("Panel repositioned — confirmation lock"));
@@ -889,10 +904,11 @@ void AVBoRScenarioRunner::PlacePanelAtHead(const FTransform& Head, bool bAtRoute
 	for (int32 I = 0; I < 2; ++I)
 	{
 		AVBoRPokeButton* Button = I == 0 ? ConfirmButton.Get() : ActionButton.Get(); if (!Button) { continue; }
-		const FVector ButtonPosition = Head.GetLocation() + Facing.RotateVector(FVector(ButtonDistanceCm, I == 0 ? -12 : 12, -ButtonBelowCm));
+		const double Side = PanelButtonSideCm(PanelButtonSizeCm);
+		const FVector ButtonPosition = Head.GetLocation() + Facing.RotateVector(FVector(ButtonDistanceCm, I == 0 ? -Side : Side, -ButtonBelowCm));
 		// Face Actor +Z press surface toward head (P0-b D4)
 		Button->SetActorLocationAndRotation(ButtonPosition, FRotator(90, Facing.Yaw, 0));
-		ButtonLabels[I]->SetWorldLocationAndRotation(ButtonPosition + FVector(0, 0, 7), Panel->GetComponentRotation());
+		ButtonLabels[I]->SetWorldLocationAndRotation(ButtonPosition + FVector(0, 0, PanelLabelUpCm(PanelButtonSizeCm)), Panel->GetComponentRotation());
 	}
 	bPanelPlacementPending = false; ConfirmLockRemaining = FMath::Max(0.0f, ConfirmLockSeconds);
 	Record(TEXT("Panel repositioned — confirmation lock"));

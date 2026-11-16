@@ -73,4 +73,11 @@ struct VBOR_API FVBoRPanelStyle
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Button Label", meta=(sRGB="true"))
 	FLinearColor LabelTextColor;
+
+	// Panel poke buttons (Confirm/Action). Presets: accent / label text
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Button", meta=(sRGB="true"))
+	FLinearColor ConfirmButtonColor;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Button", meta=(sRGB="true"))
+	FLinearColor ActionButtonColor;
 };
