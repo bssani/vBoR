@@ -227,7 +227,7 @@ void AVBoRScenarioRunner::BeginPlay()
 			Color.A = 1; // ColorParam alpha is opacity
 			ColorMaterial->SetVectorParameterValue(TEXT("ColorParam"), Color); Button->ButtonMesh->SetMaterial(0, ColorMaterial);
 		}
-		if (I == 0) { ConfirmButton = Button; Button->OnButtonPressed.AddUniqueDynamic(this, &AVBoRScenarioRunner::HandleConfirmPoke); }
+		if (I == 0) { ConfirmButton = Button; }
 		else { ActionButton = Button; Button->OnButtonPressed.AddUniqueDynamic(this, &AVBoRScenarioRunner::HandleActionPoke); }
 		SetP3ButtonVisible(Button, false);
 		if (auto* Widget = CreateR9Widget(GetWorld(), ButtonLabelWidgetClass))
@@ -404,7 +404,7 @@ void AVBoRScenarioRunner::CheckSetup()
 		if (!Step.PanelTag.IsNone() && (!Anchor || !PanelProblems.IsEmpty()))
 		{ ScenarioProblems += FString::Printf(TEXT("%s: panel tag %s type mismatch or missing | %s\n"), *Step.StepId.ToString(), *Step.PanelTag.ToString(), *PanelProblems); }
 		FString RouteProblems;
-		AVBoRFloorRoute* Route = Cast<AVBoRFloorRoute>(FindP3Tag(GetWorld(), Step.RouteTag, RouteProblems, &Forecast));
+		AVBoRFloorRoute* Route = Cast<AVBoRFloorRoute>(P3Actor(FindP3Tag(GetWorld(), Step.RouteTag, RouteProblems, &Forecast)));
 		if (!Step.RouteTag.IsNone())
 		{
 			if (!Route || Route->Spline->GetNumberOfSplinePoints() < 2)
@@ -466,7 +466,8 @@ bool AVBoRScenarioRunner::InitializeFlow()
 	UnbindKeys(); bStartHeadPending = false;
 	bInitialized = true; bRunning = false; bFinished = false; ValidationProblems.Reset(); Targets.Reset(); Markers.Reset();
 	Routes.Reset(); FloorRouteNotice.Reset(); StartMarker = nullptr;
-	PanelAnchors.Reset(); bFixedPanelMode = false; bFixedPanelPlaced = false;
+	PanelAnchors.Reset(); bFixedPanelMode = false; bFixedPanelPlaced = false; bFixedPanelWaitingForArrival = false;
+	SeatAdvanceBeforeSwitch.Reset();
 	for (TActorIterator<AVBoRFloorRoute> It(GetWorld()); It; ++It) { It->SetRouteVisible(false); }
 	bFreeMode = false; bReloadPending = false; bReloadRequested = false; ReloadRemaining = 0;
 	for (const auto& Entry : ButtonCounts)
@@ -517,7 +518,7 @@ bool AVBoRScenarioRunner::InitializeFlow()
 		if (!Step.PanelTag.IsNone() && (!Anchor || !PanelProblems.IsEmpty()))
 		{ ValidationProblems += FString::Printf(TEXT("%s: panel tag %s type mismatch or missing | %s\n"), *Step.StepId.ToString(), *Step.PanelTag.ToString(), *PanelProblems); }
 		FString RouteProblems;
-		AVBoRFloorRoute* Route = Cast<AVBoRFloorRoute>(FindP3Tag(GetWorld(), Step.RouteTag, RouteProblems)); Routes.Add(Route);
+		AVBoRFloorRoute* Route = Cast<AVBoRFloorRoute>(P3Actor(FindP3Tag(GetWorld(), Step.RouteTag, RouteProblems))); Routes.Add(Route);
 		if (!Step.RouteTag.IsNone())
 		{
 			if (!Route || Route->Spline->GetNumberOfSplinePoints() < 2)
@@ -588,7 +589,7 @@ bool AVBoRScenarioRunner::RuleSatisfied() const
 	case EVBoRStepRule::DoorUnlocked: { const auto* C = Cast<AVBoRHingedDoor>(Target); return C && !C->GetMotion().bLocked; }
 	case EVBoRStepRule::DoorOpened: { const auto* C = Cast<AVBoRHingedDoor>(Target); return C && C->GetMotion().AngleDeg >= Step->DoorOpenDeg; }
 	case EVBoRStepRule::DoorLatched: { const auto* C = Cast<AVBoRHingedDoor>(Target); return C && C->GetMotion().bLocked && C->GetMotion().AngleDeg <= C->LatchAngleDeg; }
-	case EVBoRStepRule::Viewpoint: return Alignment && Alignment->IsAtViewpoint(Cast<UVBoRViewpointComponent>(Target));
+	case EVBoRStepRule::Viewpoint: return IsAtStepViewpoint();
 	case EVBoRStepRule::KeyHeld: { const auto* Key = Cast<AVBoRKeyFob>(Target); return Key && Key->GetHoldingHand() != INDEX_NONE; }
 	case EVBoRStepRule::PoweredOpen: { const auto* Gate = Cast<AVBoRPoweredPanel>(Target); return Gate && Gate->GetState() == EVBoRPoweredState::Open; }
 	case EVBoRStepRule::PoweredClosed: { const auto* Gate = Cast<AVBoRPoweredPanel>(Target); return Gate && Gate->GetState() == EVBoRPoweredState::Closed; }
@@ -607,10 +608,15 @@ bool AVBoRScenarioRunner::NeedsConfirmation() const
 	return Step && (Step->ConfirmBy != EVBoRConfirmBy::None || Step->Rule == EVBoRStepRule::Confirm || Step->Rule == EVBoRStepRule::Viewpoint);
 }
 
-bool AVBoRScenarioRunner::CanParticipantConfirm() const
+bool AVBoRScenarioRunner::IsViewpointStep(int32 Index) const
 {
-	const auto* Step = CurrentStep();
-	return bRunning && !bPanelPlacementPending && ConfirmLockRemaining <= 0 && Step && NeedsConfirmation() && Step->ConfirmBy != EVBoRConfirmBy::Operator && RuleSatisfied();
+	return Scenario && Scenario->Steps.IsValidIndex(Index) && Scenario->Steps[Index].Rule == EVBoRStepRule::Viewpoint;
+}
+
+bool AVBoRScenarioRunner::IsAtStepViewpoint() const
+{
+	const auto* View = CommandViewpoint(EVBoRFlowCommand::Viewpoint);
+	return Alignment && IsValid(View) && Alignment->IsAtViewpoint(View->ComponentHasTag(TEXT("Car.DriverView")) ? nullptr : View);
 }
 
 void AVBoRScenarioRunner::EnterStep(int32 Index, bool bNewAttempt)
@@ -701,6 +707,20 @@ void AVBoRScenarioRunner::ProcessFlow(double DeltaSeconds)
 	// Pawn moved earlier this Tick: no pre-move dt for new lock (R1-7)
 	if (!bPawnMovedBeforeFlow) { ConfirmLockRemaining = FMath::Max(0.0, ConfirmLockRemaining - FMath::Max(0.0, DeltaSeconds)); }
 	bPawnMovedBeforeFlow = false;
+	if (SeatAdvanceBeforeSwitch.IsSet() && Alignment && !Alignment->IsSwitching())
+	{
+		const bool bArrived = Alignment->SwitchCompletions > SeatAdvanceBeforeSwitch.GetValue();
+		SeatAdvanceBeforeSwitch.Reset();
+		if (bArrived) { CompleteStep(TEXT("Participant seat advance")); }
+		else
+		{
+			++TransitionDiscards;
+			LastOperatorCommand = TEXT("Advance seat step — discarded (") + Alignment->EnglishReason() + TEXT(")");
+			LastViewRequest = LastOperatorCommand;
+			Record(LastViewRequest);
+		}
+	}
+	if (bFixedPanelWaitingForArrival && IsAtStepViewpoint()) { PlacePanel(); }
 	FTransform Head; const bool bTracked = Alignment && Alignment->ReadWorldHead(Head);
 	SampleHead(bTracked, Head, DeltaSeconds);
 	SampleRoute(bTracked, Head, DeltaSeconds);
@@ -724,10 +744,15 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 	{
 		Alignment->FlowStarted(); bAlignmentIgnored = true; Record(TEXT("Operator start ignoring alignment")); bRunning = true; EnterStep(0, true); return;
 	}
-	if (Command.Action == EVBoRFlowCommand::Viewpoint || Command.Action == EVBoRFlowCommand::Passenger || Command.Action == EVBoRFlowCommand::Rear || Command.Action == EVBoRFlowCommand::ReturnBase)
+	if (Command.Action == EVBoRFlowCommand::Viewpoint || Command.Action == EVBoRFlowCommand::Passenger || Command.Action == EVBoRFlowCommand::Rear || Command.Action == EVBoRFlowCommand::ReturnBase || Command.Action == EVBoRFlowCommand::SeatAdvance)
 	{
-		const bool bAccepted = Command.Action == EVBoRFlowCommand::ReturnBase ? Alignment->ReturnToBase() : Alignment->SwitchViewpoint(CommandViewpoint(Command.Action));
+		const bool bAccepted = ReturnsToBase(Command.Action) ? Alignment->ReturnToBase() : Alignment->SwitchViewpoint(CommandViewpoint(Command.Action));
 		if (!bAccepted) { ++TransitionDiscards; }
+		if (bAccepted && Command.Action == EVBoRFlowCommand::SeatAdvance)
+		{
+			// Complete the step only after the existing seat switch succeeds (R12 B3)
+			SeatAdvanceBeforeSwitch = Alignment->SwitchCompletions;
+		}
 		LastViewRequest = FString::Printf(TEXT("Viewpoint command %s | %s"), bOperator ? TEXT("Operator") : TEXT("Participant"), bAccepted ? TEXT("requested") : TEXT("discarded"));
 		Record(LastViewRequest); return;
 	}
@@ -865,21 +890,36 @@ void AVBoRScenarioRunner::PlacePanel()
 	if (bFixedPanelMode)
 	{
 		USceneComponent* Anchor = bRunning && PanelAnchors.IsValidIndex(StepIndex) ? PanelAnchors[StepIndex].Get() : nullptr;
-		if (Anchor && (!bFixedPanelPlaced || !Panel->GetComponentLocation().Equals(Anchor->GetComponentLocation()) || !Panel->GetComponentQuat().Equals(Anchor->GetComponentQuat())))
+		bFixedPanelWaitingForArrival = Anchor && IsViewpointStep(StepIndex) && !IsAtStepViewpoint();
+		// First step needs its own anchor if no previous step exists (R12 B5)
+		if (bFixedPanelWaitingForArrival && StepIndex != 0) { Anchor = nullptr; }
+		if (Anchor)
 		{
-			const FTransform Pose(Anchor->GetComponentQuat(),Anchor->GetComponentLocation());
-			Panel->SetWorldLocationAndRotation(Pose.GetLocation(),Pose.GetRotation());
-			for (int32 I = 0; I < 2; ++I)
+			const FVector Location = Anchor->GetComponentLocation();
+			FRotator Rotation = Anchor->GetComponentRotation();
+			FTransform Head;
+			if (bPanelFacesParticipant && Alignment && Alignment->ReadWorldHead(Head))
 			{
-				AVBoRPokeButton* Button = I == 0 ? ConfirmButton.Get() : ActionButton.Get(); if (!Button) { continue; }
-				const double Side = PanelButtonSideCm(PanelButtonSizeCm);
-				const FVector Local(0,I == 0 ? -Side : Side,-PanelSizeCm.Y/2-PanelButtonGapCm);
-				// Local +Z press face toward anchor +X; preserve tilt (P5z D4)
-				Button->SetActorLocationAndRotation(Pose.TransformPosition(Local),Pose.GetRotation()*FRotator(-90,0,0).Quaternion());
-				ButtonLabels[I]->SetWorldLocationAndRotation(Pose.TransformPosition(Local+FVector(0,0,PanelLabelUpCm(PanelButtonSizeCm))),Pose.GetRotation());
+				const FVector ToHead = Head.GetLocation() - Location;
+				// Preserve anchor yaw within 10 cm (R12 C3)
+				if (ToHead.SizeSquared2D() >= FMath::Square(10.0)) { Rotation.Yaw = ToHead.Rotation().Yaw; }
 			}
-			bFixedPanelPlaced = true; ConfirmLockRemaining = FMath::Max(0.0f,ConfirmLockSeconds);
-			Record(TEXT("Panel repositioned — confirmation lock"));
+			const FTransform Pose(bPanelFacesParticipant ? Rotation.Quaternion() : Anchor->GetComponentQuat(), Location);
+			if (!bFixedPanelPlaced || !Panel->GetComponentLocation().Equals(Location) || !Panel->GetComponentQuat().Equals(Pose.GetRotation()))
+			{
+				Panel->SetWorldLocationAndRotation(Location, Pose.GetRotation());
+				for (int32 I = 0; I < 2; ++I)
+				{
+					AVBoRPokeButton* Button = I == 0 ? ConfirmButton.Get() : ActionButton.Get(); if (!Button) { continue; }
+					const double Side = PanelButtonSideCm(PanelButtonSizeCm);
+					const FVector Local(0,I == 0 ? -Side : Side,-PanelSizeCm.Y/2-PanelButtonGapCm);
+					// Local +Z press face toward panel +X; preserve tilt (P5z D4)
+					Button->SetActorLocationAndRotation(Pose.TransformPosition(Local),Pose.GetRotation()*FRotator(-90,0,0).Quaternion());
+					ButtonLabels[I]->SetWorldLocationAndRotation(Pose.TransformPosition(Local+FVector(0,0,PanelLabelUpCm(PanelButtonSizeCm))),Pose.GetRotation());
+				}
+				bFixedPanelPlaced = true; ConfirmLockRemaining = FMath::Max(0.0f,ConfirmLockSeconds);
+				Record(TEXT("Panel repositioned — confirmation lock"));
+			}
 		}
 		bPanelPlacementPending = !bFixedPanelPlaced; RefreshPanel(); return;
 	}
@@ -959,11 +999,9 @@ FString AVBoRScenarioRunner::GetOperatorText() const
 	{ Text = ValidationProblems.IsEmpty() ? TEXT("Alignment required — P in operator panel for point alignment or C in P0-c level to save (O: ignore)") : ValidationProblems; }
 	else if (bRunning && CurrentStep())
 	{
-		const auto* Step = CurrentStep();
 		if (NeedsConfirmation()) { Text = RuleSatisfied() ? TEXT("Operator confirm pending — Space") : TEXT("Rule pending — Space when satisfied"); }
 		else { Text = TEXT("Rule pending — → Skip"); }
 		if (Alignment && !Alignment->IsBaseViewpoint()) { Text += TEXT(" | Home to driver seat"); }
-		if (Step->ConfirmBy == EVBoRConfirmBy::Participant) { Text = TEXT("Participant confirm pending — → Skip") + (Alignment && !Alignment->IsBaseViewpoint() ? FString(TEXT(" | Home to driver seat")) : FString()); }
 	}
 	if (!FloorRouteNotice.IsEmpty())
 	{
@@ -982,9 +1020,17 @@ FString AVBoRScenarioRunner::GetOperatorText() const
 
 FString AVBoRScenarioRunner::ActionLabel() const
 {
-	const auto* Step = CurrentStep();
-	if (Step && Step->Rule == EVBoRStepRule::Viewpoint && !RuleSatisfied())
-	{ return Step->TargetTag == TEXT("Car.PassengerView") ? TEXT("Move to passenger seat") : Step->TargetTag == TEXT("Car.RearView") ? TEXT("Move to rear seat") : Step->TargetTag.ToString() + TEXT(" viewpoint"); }
+	if (IsViewpointStep(StepIndex))
+	{
+		const int32 TargetIndex = RuleSatisfied() ? StepIndex + 1 : StepIndex;
+		if (IsViewpointStep(TargetIndex))
+		{
+			const FName Tag = Scenario->Steps[TargetIndex].TargetTag;
+			if (Tag == TEXT("Car.PassengerView")) { return TEXT("Move to passenger seat"); }
+			if (Tag == TEXT("Car.RearView")) { return TEXT("Move to rear seat"); }
+			return Tag.ToString() + TEXT(" viewpoint");
+		}
+	}
 	return TEXT("Return to driver seat");
 }
 
@@ -999,12 +1045,11 @@ void AVBoRScenarioRunner::RefreshPanel()
 	if (OperatorText) { OperatorText->SetText(FText::FromString(Operator)); }
 	Panel->SetHiddenInGame(bPanelPlacementPending || GetPanelText().IsEmpty());
 	OperatorPanel->SetHiddenInGame(true);
-	SetP3ButtonVisible(ConfirmButton, CanParticipantConfirm());
-	const auto* Step = CurrentStep();
+	SetP3ButtonVisible(ConfirmButton, false);
 	const bool bAway = Alignment && !Alignment->IsBaseViewpoint();
-	const bool bNeedsView = Step && Step->Rule == EVBoRStepRule::Viewpoint && !RuleSatisfied();
-	PanelAction = bNeedsView ? EVBoRFlowCommand::Viewpoint : EVBoRFlowCommand::ReturnBase;
-	SetP3ButtonVisible(ActionButton, !bPanelPlacementPending && bRunning && Alignment && !Alignment->IsSwitching() && (bAway || bNeedsView));
+	const bool bSeatStep = IsViewpointStep(StepIndex);
+	PanelAction = !bSeatStep ? EVBoRFlowCommand::ReturnBase : RuleSatisfied() ? EVBoRFlowCommand::SeatAdvance : EVBoRFlowCommand::Viewpoint;
+	SetP3ButtonVisible(ActionButton, !bPanelPlacementPending && bRunning && Alignment && !Alignment->IsSwitching() && (bAway || bSeatStep));
 	for (int32 I = 0; I < 2; ++I)
 	{
 		AVBoRPokeButton* Button = I == 0 ? ConfirmButton.Get() : ActionButton.Get();
@@ -1123,8 +1168,10 @@ void AVBoRScenarioRunner::UnbindKeys()
 }
 void AVBoRScenarioRunner::HandleKeyUnlock(AVBoRKeyFob* Key) { if (FIntPoint* Counts = KeyCounts.Find(Key)) { ++Counts->X; } }
 void AVBoRScenarioRunner::HandleKeyLock(AVBoRKeyFob* Key) { if (FIntPoint* Counts = KeyCounts.Find(Key)) { ++Counts->Y; } }
-void AVBoRScenarioRunner::HandleConfirmPoke(const FIsdkInteractionPointerEvent&) { if (!bFreeMode) { QueueLive(EVBoRFlowCommand::Confirm, EVBoRCommandSource::Participant); } }
-void AVBoRScenarioRunner::HandleActionPoke(const FIsdkInteractionPointerEvent&) { if (!bFreeMode) { QueueLive(PanelAction, EVBoRCommandSource::Participant); } }
+void AVBoRScenarioRunner::HandleActionPoke(const FIsdkInteractionPointerEvent&)
+{
+	if (ActionButton && !ActionButton->IsHidden()) { QueueLive(PanelAction, EVBoRCommandSource::Participant); }
+}
 void AVBoRScenarioRunner::HandleTargetPoke(const FIsdkInteractionPointerEvent& Event)
 {
 	if (UObject* Object = Event.Interactable.GetObject())

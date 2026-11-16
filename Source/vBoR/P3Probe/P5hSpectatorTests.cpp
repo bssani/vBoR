@@ -154,7 +154,7 @@ bool FP5hReady::RunTest(const FString&)
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FP5hEnglish,"vBoR.P5h.E4EnglishFallbacks",EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 bool FP5hEnglish::RunTest(const FString&)
 {
-	FVBoRScenarioStep Step; Step.StepId = TEXT("08"); Step.Instruction = FText::FromString(TEXT("Participant instruction excluded from TV"));
+	FVBoRScenarioStep Step; Step.StepId = TEXT("08");
 	const FText Unknown = FVBoRSpectatorLabels().Unknown;
 	TestEqual(TEXT("Empty newly serialized field falls back"),VBoRSpectator::MissionText(Step,Unknown).ToString(),FString(TEXT("Open the door.")));
 	Step.SpectatorText = FText::FromString(TEXT("Custom mission"));

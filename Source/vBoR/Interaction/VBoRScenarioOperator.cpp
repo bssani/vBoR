@@ -39,12 +39,13 @@ namespace
 	}
 	FString CommandName(EVBoRFlowCommand Action)
 	{
+		if (Action == EVBoRFlowCommand::SeatAdvance) { return TEXT("Advance seat step"); }
 		for (const auto& Shortcut : VBoROperator::Shortcuts())
 		{ if (Shortcut.Button != EVBoROperatorButton::Info && FlowAction(Shortcut.Button) == Action) { return Shortcut.Label; } }
 		return TEXT("Change viewpoint");
 	}
 	bool SeatAction(EVBoRFlowCommand Action)
-	{ return Action == EVBoRFlowCommand::ReturnBase || Action == EVBoRFlowCommand::Viewpoint || Action == EVBoRFlowCommand::Passenger || Action == EVBoRFlowCommand::Rear; }
+	{ return Action == EVBoRFlowCommand::ReturnBase || Action == EVBoRFlowCommand::Viewpoint || Action == EVBoRFlowCommand::Passenger || Action == EVBoRFlowCommand::Rear || Action == EVBoRFlowCommand::SeatAdvance; }
 	EVBoROperatorStyle ButtonStyle(EVBoROperatorButton Button, const FVBoRCommandDecision& Decision, bool bReapplyPrimary, const FString& Badge)
 	{
 		if (!Decision.bAccepted) { return EVBoROperatorStyle::Disabled; }
@@ -54,11 +55,19 @@ namespace
 	}
 }
 
+bool AVBoRScenarioRunner::ReturnsToBase(EVBoRFlowCommand Action) const
+{
+	return Action == EVBoRFlowCommand::ReturnBase || (Action == EVBoRFlowCommand::SeatAdvance && !IsViewpointStep(StepIndex + 1));
+}
+
 UVBoRViewpointComponent* AVBoRScenarioRunner::CommandViewpoint(EVBoRFlowCommand Action) const
 {
 	if (!SeatAction(Action) || Action == EVBoRFlowCommand::ReturnBase) { return nullptr; }
-	if (Action == EVBoRFlowCommand::Viewpoint)
-	{ return CurrentStep() && CurrentStep()->Rule == EVBoRStepRule::Viewpoint && Targets.IsValidIndex(StepIndex) ? Cast<UVBoRViewpointComponent>(Targets[StepIndex]) : nullptr; }
+	if (Action == EVBoRFlowCommand::Viewpoint || Action == EVBoRFlowCommand::SeatAdvance)
+	{
+		const int32 Index = Action == EVBoRFlowCommand::Viewpoint ? StepIndex : StepIndex + 1;
+		return IsViewpointStep(Index) && Targets.IsValidIndex(Index) ? Cast<UVBoRViewpointComponent>(Targets[Index]) : nullptr;
+	}
 	// Use startup validation cache. Null if missing/ambiguous/deleted (P5o)
 	return SeatViews[Action == EVBoRFlowCommand::Passenger ? 0 : 1].Get();
 }
@@ -95,7 +104,7 @@ FVBoRCommandDecision AVBoRScenarioRunner::EvaluateCommand(const FVBoRFlowCommand
 	{ return Reject(EVBoRDiscard::Stale, TEXT("Stale step or generation"), TEXT("Command discarded — stale step or guidance complete")); }
 	const bool bOperator = Command.Source == EVBoRCommandSource::Operator;
 	const auto Action = Command.Action;
-	if (!bOperator && Action != EVBoRFlowCommand::Confirm && Action != EVBoRFlowCommand::Viewpoint && Action != EVBoRFlowCommand::ReturnBase &&
+	if (!bOperator && Action != EVBoRFlowCommand::Confirm && Action != EVBoRFlowCommand::Viewpoint && Action != EVBoRFlowCommand::ReturnBase && Action != EVBoRFlowCommand::SeatAdvance &&
 		!(bFreeMode && (Action == EVBoRFlowCommand::Passenger || Action == EVBoRFlowCommand::Rear)))
 	{ return Reject(EVBoRDiscard::Permission, TEXT("Operator only"), TEXT("Command discarded — confirmation not permitted")); }
 	if (Action == EVBoRFlowCommand::CapturePoint || Action == EVBoRFlowCommand::SavePoints || Action == EVBoRFlowCommand::CancelPoints)
@@ -131,7 +140,7 @@ FVBoRCommandDecision AVBoRScenarioRunner::EvaluateCommand(const FVBoRFlowCommand
 	}
 	if (!bRunning && !bFreeMode && Action != EVBoRFlowCommand::Restart)
 	{ return Reject(EVBoRDiscard::Rule, TEXT("Scenario has not started"), TEXT("Command discarded — not started")); }
-	if (bFreeMode && (Action == EVBoRFlowCommand::Confirm || Action == EVBoRFlowCommand::Next || Action == EVBoRFlowCommand::Previous || Action == EVBoRFlowCommand::EnterFreeMode || Action == EVBoRFlowCommand::Viewpoint))
+	if (bFreeMode && (Action == EVBoRFlowCommand::Confirm || Action == EVBoRFlowCommand::Next || Action == EVBoRFlowCommand::Previous || Action == EVBoRFlowCommand::EnterFreeMode || Action == EVBoRFlowCommand::Viewpoint || Action == EVBoRFlowCommand::SeatAdvance))
 	{ return Reject(EVBoRDiscard::Rule, TEXT("No steps in free mode"), TEXT("Command discarded — no steps in free mode")); }
 	if (Action == EVBoRFlowCommand::ReloadLevel && !bFreeMode)
 	{ return Reject(EVBoRDiscard::Rule, TEXT("Reload is available in free mode only"), TEXT("Command discarded — level reopen only in free mode")); }
@@ -139,9 +148,11 @@ FVBoRCommandDecision AVBoRScenarioRunner::EvaluateCommand(const FVBoRFlowCommand
 	{
 		if (bFreeMode && !bOperator && (!Alignment || !Alignment->IsSwitching()) && (Command.bConfirmLocked || ConfirmLockRemaining > 0 || bPanelPlacementPending))
 		{ return Reject(EVBoRDiscard::Lock, TEXT("Panel placement locked"), TEXT("Seat command discarded — panel placement lock")); }
-		const FString Reason = Alignment ? Alignment->SwitchRejection(Viewpoint, Action == EVBoRFlowCommand::ReturnBase) : FString(TEXT("Alignment component missing"));
+		const FString Reason = Alignment ? Alignment->SwitchRejection(Viewpoint, ReturnsToBase(Action)) : FString(TEXT("Alignment component missing"));
 		if (!Reason.IsEmpty())
 		{ return {false, EVBoRDiscard::Transition, Reason, FString::Printf(TEXT("Viewpoint command %s | discarded"), bOperator ? TEXT("Operator") : TEXT("Participant"))}; }
+		if (Action == EVBoRFlowCommand::SeatAdvance && (bOperator || !IsViewpointStep(StepIndex) || !RuleSatisfied()))
+		{ return Reject(EVBoRDiscard::Rule, TEXT("Seat rule not satisfied"), TEXT("Seat advance discarded — rule unsatisfied")); }
 		return {};
 	}
 	if (Alignment && Alignment->IsSwitching()) { return Reject(EVBoRDiscard::Transition, TEXT("View transition in progress"), TEXT("Command discarded — transitioning")); }
@@ -165,7 +176,7 @@ FVBoRCommandDecision AVBoRScenarioRunner::EvaluateCommand(const FVBoRFlowCommand
 	if (Action == EVBoRFlowCommand::Confirm)
 	{
 		const auto* Step = CurrentStep();
-		if (!Step || !NeedsConfirmation() || (Step->ConfirmBy == EVBoRConfirmBy::Operator && !bOperator) || (Step->ConfirmBy == EVBoRConfirmBy::Participant && bOperator))
+		if (!Step || !NeedsConfirmation() || (Step->ConfirmBy == EVBoRConfirmBy::Operator && !bOperator))
 		{ return Reject(EVBoRDiscard::Permission, TEXT("Confirmation permission required"), TEXT("Command discarded — confirmation not permitted")); }
 		if (!RuleSatisfied()) { return Reject(EVBoRDiscard::Rule, TEXT("Rule not satisfied"), TEXT("Command discarded — rule unsatisfied")); }
 		if (Command.bConfirmLocked || ConfirmLockRemaining > 0 || bPanelPlacementPending)
@@ -198,8 +209,10 @@ void AVBoRScenarioRunner::RecordDecision(const FVBoRFlowCommand& Command, const 
 	{
 		// Keep component request/discard counts too (P5i D3)
 		if (Alignment)
-		{ if (Command.Action == EVBoRFlowCommand::ReturnBase) { Alignment->ReturnToBase(); } else { Alignment->SwitchViewpoint(CommandViewpoint(Command.Action)); } }
-		LastViewRequest = Decision.Record;
+		{ if (ReturnsToBase(Command.Action)) { Alignment->ReturnToBase(); } else { Alignment->SwitchViewpoint(CommandViewpoint(Command.Action)); } }
+		LastViewRequest = Command.Action == EVBoRFlowCommand::SeatAdvance ? Decision.Record + TEXT(" (") + Decision.Reason + TEXT(")") : Decision.Record;
+		Record(LastViewRequest);
+		return;
 	}
 	if (!Decision.Record.IsEmpty()) { Record(Decision.Record); }
 }
@@ -252,7 +265,7 @@ FVBoROperatorStatus AVBoRScenarioRunner::GetOperatorStatus() const
 	S.Title = bFreeMode ? TEXT("Free mode") : bRunning ? FString::Printf(TEXT("Mission %d of %d"), StepIndex + 1, Total) : FString(TEXT("Getting ready"));
 	S.Mission = bFreeMode ? (bFinished ? TEXT("All missions complete") : TEXT("Entered by operator (End)")) : CurrentStep() && bRunning ? CurrentStep()->StepId.ToString() + TEXT(" · ") + VBoRSpectator::MissionText(*CurrentStep(), FText::FromString(TEXT("Mission in progress"))).ToString() : FString(TEXT("Check the setup alignment before starting."));
 	S.Progress = FString::Printf(TEXT("%d of %d complete"), Completed, Total);
-	S.Waiting = bFreeMode ? TEXT("Nothing — participant explores") : !bRunning ? TEXT("Alignment check") : !RuleSatisfied() ? TEXT("Waiting for the rule") : (ConfirmLockRemaining > 0 || bPanelPlacementPending) ? TEXT("Confirm locked") : NeedsConfirmation() ? (CurrentStep()->ConfirmBy == EVBoRConfirmBy::Participant ? TEXT("Waiting for participant confirmation") : TEXT("Operator confirmation needed")) : TEXT("Waiting for the rule");
+	S.Waiting = bFreeMode ? TEXT("Nothing — participant explores") : !bRunning ? TEXT("Alignment check") : !RuleSatisfied() ? TEXT("Waiting for the rule") : (ConfirmLockRemaining > 0 || bPanelPlacementPending) ? TEXT("Confirm locked") : NeedsConfirmation() ? TEXT("Operator confirmation needed") : TEXT("Waiting for the rule");
 	S.bApplied = Alignment && Alignment->State == EVBoRAlignmentState::Applied;
 	S.bNeedsCheck = Alignment && Alignment->State == EVBoRAlignmentState::NeedsCheck;
 	S.Alignment = S.bApplied ? TEXT("Applied") : S.bNeedsCheck ? TEXT("Needs check — ") + Alignment->EnglishReason() : FString(TEXT("No saved alignment"));

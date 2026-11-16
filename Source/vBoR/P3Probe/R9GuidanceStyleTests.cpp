@@ -210,7 +210,7 @@ bool FR9ButtonLabelTest::RunTest(const FString&)
 	TestEqual(TEXT("Graphite emphasis outline"), ConfirmPlate->Background.OutlineSettings.Width, 3.0f);
 	TestEqual(TEXT("Default label font 32"), ConfirmText->GetFont().Size, 32.0f);
 	TestEqual(TEXT("Action label font 32"), ActionText->GetFont().Size, 32.0f);
-	TestFalse(TEXT("Confirm label visible"), Confirm->bHiddenInGame);
+	TestTrue(TEXT("Confirm label hidden"), Confirm->bHiddenInGame);
 	TestTrue(TEXT("Action label hidden"), Action->bHiddenInGame);
 	E.Command(EVBoRFlowCommand::Next);
 	TestEqual(TEXT("Passenger action text"), ActionText->GetText().ToString(), FString(TEXT("Move to passenger seat")));
