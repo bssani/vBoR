@@ -379,8 +379,9 @@ void AVBoRScenarioRunner::CheckSetup()
 		case EVBoRStepRule::PoweredOpen: case EVBoRStepRule::PoweredClosed: Target = Cast<AVBoRPoweredPanel>(P3Actor(Raw)); break;
 		}
 		if (Step.Rule != EVBoRStepRule::Confirm && !Target) { ScenarioProblems += FString::Printf(TEXT("%s: tag %s type mismatch or missing\n"), *Step.StepId.ToString(), *Step.TargetTag.ToString()); }
-		const FString Id = Step.StepId.ToString(); const int32 Number = FCString::Atoi(*Id);
-		if (Number < 1 || Number > 20 || Number == 17 || Id != FString::Printf(TEXT("%02d"), Number)) { ScenarioProblems += TEXT("Original StepId required (01–16, 18–20)\n"); }
+		// Any ID allowed (user 2026-11-16). Empty breaks log/TV labels
+		if (Step.StepId.IsNone() || Step.StepId.ToString().TrimStartAndEnd().IsEmpty())
+		{ ScenarioProblems += FString::Printf(TEXT("Step %d: StepId required\n"), int32(&Step - Scenario->Steps.GetData()) + 1); }
 		UObject* Marker = FindP3Tag(GetWorld(), Step.MarkerTag, ScenarioProblems, &Forecast);
 		USceneComponent* Scene = P3Scene(Marker);
 		if (!Step.MarkerTag.IsNone() && !Scene) { ScenarioProblems += FString::Printf(TEXT("%s: marker tag type mismatch\n"), *Step.StepId.ToString()); }
@@ -487,8 +488,9 @@ bool AVBoRScenarioRunner::InitializeFlow()
 		case EVBoRStepRule::PoweredOpen: case EVBoRStepRule::PoweredClosed: Target = Cast<AVBoRPoweredPanel>(P3Actor(Raw)); break;
 		}
 		if (Step.Rule != EVBoRStepRule::Confirm && !Target) { ValidationProblems += FString::Printf(TEXT("%s: tag %s type mismatch or missing\n"), *Step.StepId.ToString(), *Step.TargetTag.ToString()); }
-		const FString Id = Step.StepId.ToString(); const int32 Number = FCString::Atoi(*Id);
-		if (Number < 1 || Number > 20 || Number == 17 || Id != FString::Printf(TEXT("%02d"), Number)) { ValidationProblems += TEXT("Original StepId required (01–16, 18–20)\n"); }
+		// Any ID allowed (user 2026-11-16). Empty breaks log/TV labels
+		if (Step.StepId.IsNone() || Step.StepId.ToString().TrimStartAndEnd().IsEmpty())
+		{ ValidationProblems += FString::Printf(TEXT("Step %d: StepId required\n"), int32(&Step - Scenario->Steps.GetData()) + 1); }
 		Targets.Add(Target);
 		UObject* Marker = FindP3Tag(GetWorld(), Step.MarkerTag, ValidationProblems);
 		USceneComponent* Scene = P3Scene(Marker); Markers.Add(Scene);
