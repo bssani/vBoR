@@ -4,6 +4,7 @@
 #include "VBoRSoundCue.generated.h"
 
 class UAudioComponent;
+class USceneComponent;
 class USoundBase;
 class USoundAttenuation;
 
@@ -25,6 +26,8 @@ struct VBOR_API FVBoRHeldSoundCue : public FVBoRSoundCue
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound", meta = (Units = "s", ClampMin = "0", ToolTip = "Seconds between requests after the first playback. Zero plays once, including looping assets. Positive values below 0.05 s use 0.05 s.")) float RepeatSeconds = 0;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound", meta = (Units = "s", ClampMin = "0", ToolTip = "Seconds to fade out when the state ends. Zero stops immediately. Reset always stops immediately.")) float FadeOutSeconds = 0;
 };
+
+VBOR_API void VBoREnsureCueAudio(TObjectPtr<UAudioComponent>& Audio, const FVBoRSoundCue& Cue, AActor* Owner, USceneComponent* Parent);
 
 // Keep one slot request only (validate Tick time/request without device/timer, P5r D2/D3)
 struct VBOR_API FVBoRSoundPlayback

@@ -119,7 +119,7 @@ bool AVBoRKnob::BeginHold(int32 Hand, UIsdkGrabberComponent* Grabber)
 void AVBoRKnob::AdvanceGrab()
 {
 	if (Motion.GrabHand == INDEX_NONE) { return; }
-	FTransform Pose; const bool Tracked = ReadGrabPose(Pose), WasPaused = Motion.bPaused; Motion.AdvanceGrab(Tracked,Pose.GetRotation());
+	FTransform Pose; const bool Tracked = ReadGrabPose(Pose), WasPaused = Motion.bPaused; Motion.AdvanceGrab(Tracked,Pose.GetRotation(),SoundStepDeg);
 	if (!Tracked) { bRetainUntilOpen = true; }
 	if (Tracked && WasPaused) { UE_LOG(LogKnob,Log,TEXT("%s recovery discarded %.3f deg | not-tested"),*GetName(),Motion.RecoveryDiscardDeg); }
 }
@@ -168,8 +168,16 @@ void AVBoRKnob::Tick(float DeltaSeconds)
 	// Commit step only in pointer handler (avoid SDK selection array reentry, P5f D4)
 	if (!Motion.bPaused)
 	{
+		const int32 SoundSteps = Motion.PendingSoundSteps;
+		Motion.PendingSoundSteps = 0;
+		for (int32 I = 0; I < SoundSteps; ++I) { PlayStepSound(); }
 		const TArray<int32> Steps = MoveTemp(Motion.PendingSteps);
-		for (int32 Direction : Steps) { PlayStepSound(); OnKnobStep.Broadcast(Direction); if (IsActorBeingDestroyed()) { return; } }
+		for (int32 Direction : Steps)
+		{
+			if (SoundStepDeg <= 0) { PlayStepSound(); }
+			OnKnobStep.Broadcast(Direction);
+			if (IsActorBeingDestroyed()) { return; }
+		}
 	}
 }
 
@@ -189,6 +197,7 @@ void AVBoRKnob::EndPlay(const EEndPlayReason::Type Reason)
 {
 	for (int32 I = 0; I < 1; ++I) { SoundPlayback[I].Reset(SoundAudio[I], false); }
 	Grabbable->GetInteractionPointerEventDelegate().RemoveDynamic(this,&AVBoRKnob::HandlePointer); KnobMesh->SetOverlayMaterial(nullptr);
+	Motion.PendingSoundSteps = 0;
 	Motion.ReleaseGrab(); Motion.PendingSteps.Empty(); HoldingGrabber = nullptr; Hovering.Empty(); Super::EndPlay(Reason);
 }
 

@@ -43,6 +43,12 @@ public:
 	AVBoRKeyFob();
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Key|Sound") FVBoRSoundCue ButtonPressedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Key|Sound") FVBoRSoundCue ButtonReleasedCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Key|Sound", meta=(ToolTip="Unlock sound at the vehicle. Falls back to the key without a vehicle")) FVBoRSoundCue UnlockCarCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Key|Sound", meta=(ToolTip="Lock sound at the vehicle. Falls back to the key without a vehicle")) FVBoRSoundCue LockCarCue;
+#if WITH_DEV_AUTOMATION_TESTS
+	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return CarSoundPlayback[Slot]; }
+	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return CarSoundAudio[Slot]; }
+#endif
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spectator") FText SpectatorName;
 	virtual FText GetSpectatorName() const override { return SpectatorName; }
 	virtual bool IsSpectatorInteracting() const override { return GetHoldingHand() != INDEX_NONE; }
@@ -77,6 +83,13 @@ private:
 	friend class UVBoRKeyGrabbableComponent;
 	friend struct FP4aTestAccess;
 	friend struct FP4cTestAccess;
+#if WITH_DEV_AUTOMATION_TESTS
+	friend struct FR11TestAccess;
+#endif
+	UPROPERTY() TObjectPtr<UAudioComponent> CarSoundAudio[2];
+	FVBoRSoundPlayback CarSoundPlayback[2];
+	uint64 SoundFrame = 0;
+	void QueueCarSound(bool bLock);
 	int32 HoldingHand = INDEX_NONE;
 	TWeakObjectPtr<UObject> HoldingInteractor;
 	TArray<bool> RecentHighFrames;

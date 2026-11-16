@@ -1,7 +1,9 @@
 #include "VBoRVehiclePowerComponent.h"
+#include "Algo/AnyOf.h"
 #include "Components/AudioComponent.h"
 
 #include "VBoRPokeButton.h"
+#include "VBoRParticipantZones.h"
 #include "CoreGlobals.h"
 #include "Components/SceneComponent.h"
 #include "GameFramework/Actor.h"
@@ -21,7 +23,7 @@ TArray<UVBoRVehiclePowerComponent*> PowerComponents(UWorld* World)
 }
 }
 
-UVBoRVehiclePowerComponent::UVBoRVehiclePowerComponent() { PrimaryComponentTick.bCanEverTick = true; PrimaryComponentTick.bStartWithTickEnabled = false; SoundAudio.SetNum(2); }
+UVBoRVehiclePowerComponent::UVBoRVehiclePowerComponent() { PrimaryComponentTick.bCanEverTick = true; PrimaryComponentTick.bStartWithTickEnabled = false; SoundAudio.SetNum(SoundSlotCount); }
 
 UVBoRVehiclePowerComponent* UVBoRVehiclePowerComponent::FindUnique(UWorld* World, int32* Count)
 {
@@ -43,6 +45,7 @@ void UVBoRVehiclePowerComponent::BeginPlay()
 		{ UE_LOG(LogTemp, Warning, TEXT("Vehicle power: expected one component, found %d; power disabled"), Components.Num()); }
 		return;
 	}
+	CabinZone = UVBoRCabinZoneComponent::FindFirst(GetWorld());
 	for (TActorIterator<AVBoRPokeButton> It(GetWorld()); It; ++It)
 	{
 		if (It->ActorHasTag(TEXT("Car.StartButton")))
@@ -53,7 +56,7 @@ void UVBoRVehiclePowerComponent::BeginPlay()
 
 void UVBoRVehiclePowerComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
-	for (int32 I = 0; I < 2; ++I) { SoundPlayback[I].Reset(SoundAudio[I], false); }
+	for (int32 I = 0; I < SoundSlotCount; ++I) { SoundPlayback[I].Reset(SoundAudio[I], false); }
 	for (AVBoRPokeButton* Button : Buttons)
 	{ if (IsValid(Button)) { Button->OnButtonPressed.RemoveDynamic(this, &UVBoRVehiclePowerComponent::HandleStartButton); } }
 	Buttons.Reset(); bAvailable = false;
@@ -77,7 +80,7 @@ void UVBoRVehiclePowerComponent::SetPowerOn(bool bOn, EVBoRPowerSource Source)
 	// R with same off value also clears old delayed requests (P5s D11)
 	if (Source == EVBoRPowerSource::Restart)
 	{
-		for (int32 I = 0; I < 2; ++I) { SoundPlayback[I].Reset(SoundAudio[I], true); }
+		for (int32 I = 0; I < SoundSlotCount; ++I) { SoundPlayback[I].Reset(SoundAudio[I], true); }
 		SetComponentTickEnabled(false);
 	}
 	if (!bAvailable || bPowerOn == bOn) { return; }
@@ -86,26 +89,53 @@ void UVBoRVehiclePowerComponent::SetPowerOn(bool bOn, EVBoRPowerSource Source)
 	UE_LOG(LogTemp, Display, TEXT("Vehicle power: %s | %s"), bOn ? TEXT("on") : TEXT("off"), Who);
 	if (Source != EVBoRPowerSource::Restart)
 	{
-		EnsureSoundAudio(bOn ? 0 : 1);
-		SoundPlayback[bOn ? 0 : 1].Queue(bOn ? PowerOnCue : PowerOffCue, SoundAudio[bOn ? 0 : 1], SoundFrame);
-		SetComponentTickEnabled(SoundPlayback[0].HasPending() || SoundPlayback[1].HasPending());
+		const bool bInside = bOn && CabinZone.IsValid() && CabinZone->IsHeadInside();
+		const ESoundSlot Slot = bOn ? (bInside && PowerOnInsideCue.Sound ? PowerOnInside : PowerOn) : PowerOff;
+		const auto& Cue = Slot == PowerOnInside ? PowerOnInsideCue : (bOn ? PowerOnCue : PowerOffCue);
+		VBoREnsureCueAudio(SoundAudio[Slot], Cue, GetOwner(), GetOwner()->GetRootComponent());
+		SoundPlayback[Slot].Queue(Cue, SoundAudio[Slot], SoundFrame);
+		if (bOn) { BeginIdle(bInside); }
+		else { EndIdle(); }
+		UpdateSoundTick();
 	}
 	OnPowerChanged.Broadcast(bOn);
 }
 
-void UVBoRVehiclePowerComponent::EnsureSoundAudio(int32 Slot)
+void UVBoRVehiclePowerComponent::BeginIdle(bool bInside, bool bSkipDelay)
 {
-	// Create on first request only. Configured sound adds no body components at Play start (preserve P4i E2 Core comparison, P5s R1-1)
-	if (SoundAudio[Slot] || !(Slot == 0 ? PowerOnCue.Sound : PowerOffCue.Sound)) { return; }
-	SoundAudio[Slot] = NewObject<UAudioComponent>(GetOwner());
-	SoundAudio[Slot]->bAutoActivate = false; SoundAudio[Slot]->SetupAttachment(GetOwner()->GetRootComponent());
-	GetOwner()->AddInstanceComponent(SoundAudio[Slot]); SoundAudio[Slot]->RegisterComponent();
+	IdleSlot = bInside && IdleInsideCue.Sound ? IdleInside : Idle;
+	FVBoRHeldSoundCue Cue = IdleSlot == IdleInside ? IdleInsideCue : IdleCue;
+	if (bSkipDelay) { Cue.StartDelaySeconds = 0; }
+	VBoREnsureCueAudio(SoundAudio[IdleSlot], Cue, GetOwner(), GetOwner()->GetRootComponent());
+	SoundPlayback[IdleSlot].BeginHeld(Cue, SoundAudio[IdleSlot], SoundFrame);
+}
+
+void UVBoRVehiclePowerComponent::EndIdle()
+{
+	SoundPlayback[IdleSlot].EndHeld(IdleSlot == IdleInside ? IdleInsideCue : IdleCue, SoundAudio[IdleSlot]);
+}
+
+void UVBoRVehiclePowerComponent::UpdateSoundTick()
+{
+	const bool bCheckCabin = bPowerOn && CabinZone.IsValid() && IdleInsideCue.Sound;
+	SetComponentTickEnabled(bCheckCabin || Algo::AnyOf(SoundPlayback, [](const auto& Slot) { return Slot.HasPending(); }));
 }
 
 void UVBoRVehiclePowerComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction); ++SoundFrame;
-	SoundPlayback[0].Advance(PowerOnCue, SoundAudio[0], DeltaTime, SoundFrame);
-	SoundPlayback[1].Advance(PowerOffCue, SoundAudio[1], DeltaTime, SoundFrame);
-	SetComponentTickEnabled(SoundPlayback[0].HasPending() || SoundPlayback[1].HasPending());
+	SoundPlayback[PowerOn].Advance(PowerOnCue, SoundAudio[PowerOn], DeltaTime, SoundFrame);
+	SoundPlayback[PowerOff].Advance(PowerOffCue, SoundAudio[PowerOff], DeltaTime, SoundFrame);
+	SoundPlayback[PowerOnInside].Advance(PowerOnInsideCue, SoundAudio[PowerOnInside], DeltaTime, SoundFrame);
+	const bool bInside = bPowerOn && IdleInsideCue.Sound && CabinZone.IsValid() && CabinZone->IsHeadInside();
+	if (bPowerOn && (bInside ? IdleInside : Idle) != IdleSlot)
+	{
+		EndIdle();
+		BeginIdle(bInside, true);
+	}
+	else
+	{
+		SoundPlayback[IdleSlot].Advance(IdleSlot == IdleInside ? IdleInsideCue : IdleCue, SoundAudio[IdleSlot], DeltaTime, SoundFrame);
+	}
+	UpdateSoundTick();
 }

@@ -434,6 +434,9 @@ void AVBoRScenarioRunner::CheckSetup()
 	int32 PowerCount = 0; UVBoRVehiclePowerComponent::FindUnique(World, &PowerCount);
 	if (PowerCount == 0) { Notices.Add(TEXT("Vehicle power: no power component; no start-button or mirror integration")); }
 	else if (PowerCount > 1) { Problems.Add(FString::Printf(TEXT("Vehicle power: expected one component, found %d; power disabled"), PowerCount)); }
+	int32 CabinCount = 0;
+	UVBoRCabinZoneComponent::FindFirst(World, &CabinCount);
+	if (CabinCount > 1) { Problems.Add(FString::Printf(TEXT("Cabin zone: found %d; using first"), CabinCount)); }
 	Problems.Append(MirrorProblems);
 	TSet<AVBoRAxisPart*> Claims;
 	for (const AVBoRHingedPanel* PanelActor : Panels)

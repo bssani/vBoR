@@ -1,6 +1,17 @@
 #include "VBoRSoundCue.h"
 
 #include "Components/AudioComponent.h"
+#include "GameFramework/Actor.h"
+
+void VBoREnsureCueAudio(TObjectPtr<UAudioComponent>& Audio, const FVBoRSoundCue& Cue, AActor* Owner, USceneComponent* Parent)
+{
+	if (Audio || !Cue.Sound) { return; }
+	Audio = NewObject<UAudioComponent>(Owner);
+	Audio->bAutoActivate = false;
+	Audio->SetupAttachment(Parent);
+	Owner->AddInstanceComponent(Audio);
+	Audio->RegisterComponent();
+}
 
 void FVBoRSoundPlayback::Play(const FVBoRSoundCue& Cue, UAudioComponent* Audio, int32 Count, uint64 Frame, bool bCoalesce)
 {

@@ -35,6 +35,8 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Sound") FVBoRSoundCue UnlockedCue;
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Sound") FVBoRSoundCue LatchedCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Sound", meta=(ToolTip="Cabin unlock sound. Empty = Unlocked Cue")) FVBoRSoundCue UnlockedInsideCue;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Hinged panel|Sound", meta=(ToolTip="Cabin latch sound. Empty = Latched Cue")) FVBoRSoundCue LatchedInsideCue;
 	// Slot order = property order above (P5s D12)
 #if WITH_DEV_AUTOMATION_TESTS
 	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
@@ -112,9 +114,14 @@ private:
 	friend struct FP5zeTestAccess;
 #endif
 	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
-	FVBoRSoundPlayback SoundPlayback[2];
+	FVBoRSoundPlayback SoundPlayback[4];
+	TWeakObjectPtr<class UVBoRCabinZoneComponent> CabinZone;
 	uint64 SoundFrame = 0;
 	void AdvanceSounds(double Seconds);
+	void QueueLatchSound(bool bLatched);
+#if WITH_DEV_AUTOMATION_TESTS
+	friend struct FR11TestAccess;
+#endif
 
 	friend struct FP2bTestAccess;
 	friend struct FP2cTestAccess;
