@@ -437,6 +437,11 @@ bool FP3AssemblyTest::RunTest(const FString&)
 	TestTrue(TEXT("Default scenario 14 steps validates"),E.Runner->InitializeFlow()); TestEqual(TEXT("Default step count"),E.Runner->Scenario->Steps.Num(),14);
 	TestTrue(TEXT("Car stays fixed by Stage alignment"),E.Car->GetActorTransform().Equals(FTransform::Identity));
 	TestTrue(TEXT("Driver eye default"),E.Car->DriverEye->GetRelativeLocation().Equals(FVector(-20,-37,115)));
+	{
+		TArray<USceneComponent*> EyeChildren; E.Car->DriverEye->GetChildrenComponents(false, EyeChildren);
+		TestFalse(TEXT("Driver eye hidden in game by default"),E.Car->DriverEye->bShowInGame);
+		TestTrue(TEXT("Driver eye arrow hidden in game"),EyeChildren.Num()==1 && EyeChildren[0]->IsA<UArrowComponent>() && EyeChildren[0]->bHiddenInGame);
+	}
 	TestTrue(TEXT("Door hinge faces rear, outside -Y"),E.Car->Door->GetActorForwardVector().Equals(FVector(-1,0,0),0.001) && E.Car->Door->GetActorRightVector().Equals(FVector(0,-1,0),0.001));
 	TestEqual(TEXT("Reach button no enlargement"),E.Car->ReachButton->HitAreaScale,1.0f);
 	TestTrue(TEXT("Panel Slate, world space"),E.Runner->Panel->GetSlateWidget().IsValid() && E.Runner->Panel->GetWidgetSpace()==EWidgetSpace::World);
