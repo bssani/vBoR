@@ -8,6 +8,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
+#include "HAL/IConsoleManager.h"
 #include "InputCoreTypes.h"
 #include "Kismet/GameplayStatics.h"
 #include "Misc/CoreDelegates.h"
@@ -93,6 +94,9 @@ void AM1MarkerAlignProbe::BeginPlay()
 		}
 	}
 
+	if (Alignment.IsValid())
+	{ Alignment->OnPointRecord.AddUObject(this, &AM1MarkerAlignProbe::HandleAlignmentRecord); }
+
 	if (APlayerController* Controller = UGameplayStatics::GetPlayerController(this, 0))
 	{
 		EnableInput(Controller);
@@ -113,6 +117,7 @@ void AM1MarkerAlignProbe::BeginPlay()
 
 void AM1MarkerAlignProbe::EndPlay(EEndPlayReason::Type Reason)
 {
+	if (Alignment.IsValid()) { Alignment->OnPointRecord.RemoveAll(this); }
 	FCoreDelegates::VRHeadsetRecenter.Remove(RecenterHandle);
 	StopCamera();
 	if (UMRUKSubsystem* Subsystem = WorldLockSubsystem.Get())
@@ -538,7 +543,15 @@ void AM1MarkerAlignProbe::SaveFit()
 		Publish(TEXT("Marker save rejected — ") + Failure);
 		return;
 	}
-	Publish(SessionBuck.IsEmpty() ? TEXT("Saved alignment — open L_Main") : TEXT("Saved for buck ") + SessionBuck + TEXT(" — open L_Main"));
+	const auto* AnchorSwitch = IConsoleManager::Get().FindConsoleVariable(TEXT("vBoR.AnchorAlignment"));
+	// AnchorResult supplies wait/success/failure lines; don't invite an early EndPlay
+	if (!AnchorSwitch || AnchorSwitch->GetInt() == 0)
+	{ Publish(SessionBuck.IsEmpty() ? TEXT("Saved alignment — open L_Main") : TEXT("Saved for buck ") + SessionBuck + TEXT(" — open L_Main")); }
+}
+
+void AM1MarkerAlignProbe::HandleAlignmentRecord(const FString& Line)
+{
+	Publish(Line);
 }
 
 void AM1MarkerAlignProbe::CancelForRecenter()

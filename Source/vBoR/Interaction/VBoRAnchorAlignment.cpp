@@ -52,6 +52,7 @@ void UVBoRVehicleAlignmentComponent::SaveAlignmentAnchor(const FString& Path, co
 	LocatedAnchorUuid.Reset();
 	ClearAnchorActors();
 	if (!AnchorAlignmentEnabled() || Candidate.Version != 2) { return; }
+	AnchorResult(TEXT("Saving anchor — wait"));
 #if WITH_DEV_AUTOMATION_TESTS
 	if (AnchorRequestForTest) { AnchorRequestForTest(); return; }
 #endif
@@ -123,8 +124,8 @@ void UVBoRVehicleAlignmentComponent::BeginAnchorDiscovery()
 						EOculusXRSpaceStorageLocation::Local, ATargetPoint::StaticClass(), GetOwner(), nullptr, ESpawnActorCollisionHandlingMethod::AlwaysSpawn);
 					if (Target)
 					{
-						LocatedAnchor = Target->FindComponentByClass<UOculusXRAnchorComponent>();
-						if (LocatedAnchor.IsValid()) { AddTickPrerequisiteComponent(LocatedAnchor.Get()); continue; }
+						if (auto* Anchor = Target->FindComponentByClass<UOculusXRAnchorComponent>())
+						{ UseLocatedAnchor(Anchor); continue; }
 						Target->Destroy();
 					}
 				}
@@ -140,17 +141,33 @@ void UVBoRVehicleAlignmentComponent::BeginAnchorDiscovery()
 	if (bFindingAnchor && !UAnchorLibrary::IsAnchorResultSuccess(Result)) { FinishAnchorDiscovery(nullptr, int32(Result)); }
 }
 
+void UVBoRVehicleAlignmentComponent::UseLocatedAnchor(UOculusXRAnchorComponent* Anchor)
+{
+	LocatedAnchor = Anchor;
+	AnchorActorCreatedFrame = GFrameCounter;
+	AnchorActorInitialWorld = Anchor->GetOwner()->GetActorTransform();
+	AddTickPrerequisiteComponent(Anchor);
+}
+
 void UVBoRVehicleAlignmentComponent::AdvanceAnchorDiscovery()
 {
 	if (!bFindingAnchor) { return; }
 	if (GetWorld()->GetRealTimeSeconds() - AnchorStarted >= 10.0)
 	{ FinishAnchorDiscovery(nullptr, AnchorDiscoveryResult); return; }
 	if (!LocatedAnchor.IsValid() || !AlignmentPawn) { return; }
+	const FTransform AnchorWorld = LocatedAnchor->GetOwner()->GetActorTransform();
+	// Spawn has no pose; wait for the plugin's Link correction Tick (M3b review R1)
+	if (GFrameCounter <= AnchorActorCreatedFrame || AnchorWorld.Equals(AnchorActorInitialWorld)) { return; }
 	FOculusXRAnchorLocationFlags Flags; FTransform Pose;
-	if (UAnchorLibrary::TryGetAnchorTransformByHandle(LocatedAnchor->GetHandle(), Pose, Flags) && Flags.IsValid())
+	const bool bLocated =
+#if WITH_DEV_AUTOMATION_TESTS
+		bAnchorLocationValidForTest ||
+#endif
+		(UAnchorLibrary::TryGetAnchorTransformByHandle(LocatedAnchor->GetHandle(), Pose, Flags) && Flags.IsValid());
+	if (bLocated)
 	{
 		// Owner includes Link head-space correction (M3a); cache Stage before moving Pawn
-		const FTransform Stage = LocatedAnchor->GetOwner()->GetActorTransform().GetRelativeTransform(AlignmentPawn->GetActorTransform());
+		const FTransform Stage = AnchorWorld.GetRelativeTransform(AlignmentPawn->GetActorTransform());
 		FinishAnchorDiscovery(&Stage, int32(EOculusXRAnchorResult::Success));
 	}
 }

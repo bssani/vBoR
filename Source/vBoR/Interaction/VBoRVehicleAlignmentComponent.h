@@ -119,6 +119,7 @@ private:
 	static bool AnchorAlignmentEnabled();
 	void SaveAlignmentAnchor(const FString& Path, const FVBoRBuckSavedAlignment& Candidate);
 	void BeginAnchorDiscovery();
+	void UseLocatedAnchor(UOculusXRAnchorComponent* Anchor);
 	void AdvanceAnchorDiscovery();
 	void FinishAnchorDiscovery(const FTransform* Stage, int32 Result);
 	void ClearAnchorActors();
@@ -129,11 +130,15 @@ private:
 	double AnchorStarted = 0;
 	int32 AnchorDiscoveryResult = 0;
 	uint32 AnchorSaveSerial = 0;
+	uint64 AnchorActorCreatedFrame = 0;
+	FTransform AnchorActorInitialWorld = FTransform::Identity;
 	TWeakObjectPtr<AActor> PendingAnchorActor;
 	TWeakObjectPtr<UOculusXRAnchorComponent> LocatedAnchor;
 #if WITH_DEV_AUTOMATION_TESTS
 	friend struct FM3bTestAccess;
+	friend struct FM2Fixture;
 	TFunction<void()> AnchorRequestForTest;
+	bool bAnchorLocationValidForTest = false;
 #endif
 	void UpdateEyeAlignment();
 	void RestoreBeforeEyeAlignment();

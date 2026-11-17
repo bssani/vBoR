@@ -5,6 +5,7 @@
 #include "../Interaction/VBoREyePointComponent.h"
 #include "../Interaction/VBoRScenarioRunner.h"
 #include "Engine/Engine.h"
+#include "Engine/TargetPoint.h"
 #include "Engine/World.h"
 #include "GameFramework/Pawn.h"
 #include "GameFramework/PlayerController.h"
@@ -14,6 +15,7 @@
 #include "HeadMountedDisplayTypes.h"
 #include "Misc/AutomationTest.h"
 #include "Misc/Paths.h"
+#include "OculusXRAnchorComponent.h"
 
 struct FM3bTestAccess
 {
@@ -24,6 +26,18 @@ struct FM3bTestAccess
 	static void Timeout(UVBoRVehicleAlignmentComponent* A) { A->AnchorStarted = -11; A->AdvanceAnchorDiscovery(); }
 	static void Points(UVBoRVehicleAlignmentComponent* A, const FVBoRBuckSavedAlignment& S)
 	{ A->CapturedPoints = S.Points; A->PointOrigin = S.TrackingOrigin; A->PointPlayArea = S.PlayAreaCm; A->bPointSession = true; }
+	static void Located(UVBoRVehicleAlignmentComponent* A, AActor* Actor)
+	{
+		auto* Anchor = NewObject<UOculusXRAnchorComponent>(Actor);
+		Actor->AddInstanceComponent(Anchor); Anchor->RegisterComponent();
+		A->UseLocatedAnchor(Anchor); A->bAnchorLocationValidForTest = true;
+	}
+	static void Advance(UVBoRVehicleAlignmentComponent* A, bool bAfterCreation)
+	{
+		// Simulate creation timing without changing the engine frame counter
+		A->AnchorActorCreatedFrame = GFrameCounter - (bAfterCreation ? 1 : 0);
+		A->AdvanceAnchorDiscovery();
+	}
 };
 
 namespace
@@ -167,6 +181,30 @@ bool FM3bTimeout::RunTest(const FString&)
 		FM3bTestAccess::Found(W.A, FTransform(FVector(900,900,0)));
 		TestTrue(TEXT("Late result ignored"), W.Pawn->GetActorTransform().Equals(FTransform::Identity, 0.001));
 	}
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FM3bActorPose, "vBoR.M3b.R1WaitForAnchorActorPose", M3bFlags)
+bool FM3bActorPose::RunTest(const FString&)
+{
+	FM3bWorld W; const auto S = W.Value();
+	const FTransform Before(FVector(500,600,0)); W.Pawn->SetActorTransform(Before); W.Start(S, true);
+	AActor* Actor = W.World->SpawnActor<ATargetPoint>();
+	FM3bTestAccess::Located(W.A, Actor);
+	const FTransform Delta(FRotator(0,15,0), FVector(30,-20,0));
+	const FTransform LocatedWorld = S.AnchorStage * Delta * Before;
+	Actor->SetActorTransform(LocatedWorld);
+	FM3bTestAccess::Advance(W.A, false);
+	TestEqual(TEXT("Creation frame never applies an anchor"), W.A->Reason, FString(TEXT("Finding anchor")));
+	TestTrue(TEXT("Creation frame keeps Pawn"), W.Pawn->GetActorTransform().Equals(Before));
+	Actor->SetActorTransform(FTransform::Identity);
+	FM3bTestAccess::Advance(W.A, true);
+	TestEqual(TEXT("Valid handle with untouched Actor still waits"), W.A->Reason, FString(TEXT("Finding anchor")));
+	TestTrue(TEXT("Untouched Actor cannot move Pawn"), W.Pawn->GetActorTransform().Equals(Before));
+	Actor->SetActorTransform(LocatedWorld);
+	FM3bTestAccess::Advance(W.A, true);
+	TestTrue(TEXT("Updated Actor applies the anchor"), W.A->State == EVBoRAlignmentState::Applied);
+	TestTrue(TEXT("Updated Actor gives the E3 compensation"), W.Pawn->GetActorTransform().Equals(Delta.Inverse(), 0.001));
 	return true;
 }
 #endif
