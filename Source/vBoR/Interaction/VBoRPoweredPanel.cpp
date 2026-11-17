@@ -96,6 +96,9 @@ void AVBoRPoweredPanel::BeginPlay()
 {
 	// Super marks HasActorBegunPlay before initial ResetPanel (R3 D4)
 	TGuardValue<bool> InitializingPlay(bInitializingPlay, true);
+	// Pre-R11 BP saved fewer slots and overrides ctor size. New slots stay null until first cue (R11 2nd §1)
+	constexpr int32 Slots = static_cast<int32>(EVBoRPoweredSound::SlotCount);
+	if (SoundAudio.Num() < Slots) { SoundAudio.SetNum(Slots); }
 	Super::BeginPlay();
 	ResetPanel();
 	CollectObstructionBoxes();

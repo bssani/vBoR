@@ -85,6 +85,8 @@ public:
 	const FVBoRSoundPlayback& GetSoundPlaybackForTest(EVBoRPoweredSound Slot) const { return SoundPlayback[static_cast<int32>(Slot)]; }
 	UAudioComponent* GetSoundAudioForTest(EVBoRPoweredSound Slot) const { return SoundAudio[static_cast<int32>(Slot)]; }
 	uint64 GetSoundFrameForTest() const { return SoundFrame; }
+	void ShrinkSoundAudioForTest(int32 Num) { SoundAudio.SetNum(Num); }
+	int32 GetSoundAudioNumForTest() const { return SoundAudio.Num(); }
 #endif
 	double GetWaitRemaining() const { return Motion.WaitRemaining; }
 

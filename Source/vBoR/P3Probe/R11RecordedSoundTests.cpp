@@ -472,4 +472,45 @@ bool FR11Reset::RunTest(const FString&)
 	}
 	return true;
 }
+// Pre-R11 BP saved smaller SoundAudio array over ctor size. BeginPlay must refit (R11 2nd §1)
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FR11OldSlots, "vBoR.R11.E10OldSavedSlots", R11Flags)
+bool FR11OldSlots::RunTest(const FString&)
+{
+	FR11World W;
+	auto* Zone = W.AddCarComponent<UVBoRCabinZoneComponent>();
+	auto* Power = W.AddPower();
+	auto* Door = W.Spawn<AVBoRHingedPanel>();
+	auto* Gate = W.Spawn<AVBoRPoweredPanel>();
+	USoundBase* Sound = Gate->WarningCue.Sound;
+	Door->bUseLatch = true;
+	Door->UnlockedInsideCue.Sound = Door->LatchedInsideCue.Sound = Sound;
+	Power->PowerOnInsideCue.Sound = Power->IdleInsideCue.Sound = Sound;
+	Gate->OpeningCue.Sound = Sound;
+	Door->ShrinkSoundAudioForTest(2);
+	Power->ShrinkSoundAudioForTest(2);
+	Gate->ShrinkSoundAudioForTest(static_cast<int32>(EGateSound::Count));
+	W.Play();
+	TestEqual(TEXT("door slots refit"), Door->GetSoundAudioNumForTest(), 4);
+	TestEqual(TEXT("power slots refit"), Power->GetSoundAudioNumForTest(), 5);
+	TestEqual(TEXT("gate slots refit"), Gate->GetSoundAudioNumForTest(), static_cast<int32>(EGateSound::SlotCount));
+	TestNull(TEXT("new door slot waits for first cue"), Door->GetSoundAudioForTest(3));
+
+	Zone->SampleHead(true, FVector::ZeroVector);
+	Door->Unlock();
+	FR11TestAccess::Latch(Door);
+	Door->Tick(FrameSeconds);
+	TestEqual(TEXT("old door plays inside latch"), Door->GetSoundPlaybackForTest(3).Requests, 1);
+	TestNotNull(TEXT("inside latch audio made on request"), Door->GetSoundAudioForTest(3));
+
+	Power->TogglePower(EVBoRPowerSource::Operator);
+	Power->TickComponent(.6f, LEVELTICK_All, nullptr);
+	TestEqual(TEXT("old power plays inside start"), Power->GetSoundPlaybackForTest(2).Requests, 1);
+	TestEqual(TEXT("old power plays inside idle"), Power->GetSoundPlaybackForTest(4).Requests, 1);
+
+	Gate->RequestOpen();
+	TickUntil(Gate, EVBoRPoweredState::Open);
+	TestEqual(TEXT("old gate plays opening"), Gate->GetSoundPlaybackForTest(EGateSound::Opening).Requests, 1);
+	return true;
+}
+
 #endif

@@ -387,6 +387,9 @@ void AVBoRHingedPanel::PreInitializeComponents()
 
 void AVBoRHingedPanel::BeginPlay()
 {
+	// Pre-R11 BP saved 2 slots and overrides ctor size. New slots stay null until first cue (R11 2nd §1)
+	constexpr int32 Slots = UE_ARRAY_COUNT(SoundPlayback);
+	if (SoundAudio.Num() < Slots) { SoundAudio.SetNum(Slots); }
 	Super::BeginPlay();
 	CabinZone = UVBoRCabinZoneComponent::FindFirst(GetWorld());
 	UMaterialInterface* Material = LoadObject<UMaterialInterface>(nullptr, IsdkContentAssetPaths::Materials::GrabbableDefault);

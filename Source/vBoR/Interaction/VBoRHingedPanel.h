@@ -42,6 +42,8 @@ public:
 	const FVBoRSoundPlayback& GetSoundPlaybackForTest(int32 Slot) const { return SoundPlayback[Slot]; }
 	UAudioComponent* GetSoundAudioForTest(int32 Slot) const { return SoundAudio[Slot]; }
 	uint64 GetSoundFrameForTest() const { return SoundFrame; }
+	void ShrinkSoundAudioForTest(int32 Num) { SoundAudio.SetNum(Num); }
+	int32 GetSoundAudioNumForTest() const { return SoundAudio.Num(); }
 #endif
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Spectator") FText SpectatorName;

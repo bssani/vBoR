@@ -34,6 +34,8 @@ UVBoRVehiclePowerComponent* UVBoRVehiclePowerComponent::FindUnique(UWorld* World
 
 void UVBoRVehiclePowerComponent::BeginPlay()
 {
+	// Pre-R11 BP saved 2 slots and overrides ctor size. New slots stay null until first cue (R11 2nd §1)
+	if (SoundAudio.Num() < SoundSlotCount) { SoundAudio.SetNum(SoundSlotCount); }
 	Super::BeginPlay();
 	bPowerOn = false;
 	const auto Components = PowerComponents(GetWorld());
