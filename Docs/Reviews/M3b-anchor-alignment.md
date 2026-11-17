@@ -36,3 +36,13 @@
 1. 저장할 때마다 새 앵커를 기기에 저장하고 옛 앵커는 지우지 않는다. 명세에 없었다. 쌓여도 동작에는 문제가 없다.
 
 시험 상태: Quest 3 `not-tested`.
+
+## 2회차 (Claude 2026-11-18) — `6254d24`, 통과
+
+- **문제 1 반영 확인:** 앵커 Actor를 만든 frame을 기억한다. 그 뒤 frame에서 Actor가 만든 자리에서 움직였을 때만 Stage를 읽는다(`VBoRAnchorAlignment.cpp` `UseLocatedAnchor`·`AdvanceAnchorDiscovery`). 시험 `vBoR.M3b.R1WaitForAnchorActorPose`가 두 경우를 본다. 만든 frame은 적용하지 않고, 핸들은 유효하지만 Actor가 원점이면 기다린다. Actor가 옮겨지면 E3과 같은 자리다.
+  - 연속 2 frame 안정 검사는 넣지 않았다(제안의 선택 항목). Link 첫 frame 흔들림이 기기에서 보이면 그때 더한다.
+- **문제 2 반영 확인:** 마커 프로브가 `OnPointRecord`를 받아 화면에 띄운다. 스위치가 1이면 S 직후 "Saving anchor — wait"를 띄우고, "open L_Main"은 띄우지 않는다. 성공·실패 줄이 화면에 나온다(`vBoR.M3b.R1MarkerAnchorSaveNotice`).
+- **범위:** 반영 밖 변경 없음. 기존 단언 변경 없음(`M2BuckProfileTests.cpp`는 Fixture 훅과 새 시험만 더함).
+- **빌드·시험(Codex 보고):** non-unity·unity 성공, `vBoR.*` 794/794. 다시 돌리지 않았다.
+
+시험 상태: Quest 3 `not-tested`. 기본 꺼짐.
