@@ -179,8 +179,20 @@ bool FVBoRBuckCaptureWindow::Finish(FVBoRBuckCaptureResult& Out) const
 
 namespace
 {
+	bool ValidAnchor(const FString& Uuid, const FTransform& Stage)
+	{
+		if (Uuid.Len() != 32 || Stage.ContainsNaN()) { return false; }
+		bool bNonzero = false;
+		for (TCHAR Digit : Uuid)
+		{
+			if (!FChar::IsHexDigit(Digit)) { return false; }
+			bNonzero |= Digit != TEXT('0');
+		}
+		return bNonzero;
+	}
 	bool ValidSaved(const FVBoRBuckSavedAlignment& Saved)
 	{
+		if (!Saved.AnchorUuid.IsEmpty() && (Saved.Version != 2 || !ValidAnchor(Saved.AnchorUuid, Saved.AnchorStage))) { return false; }
 		FDateTime Time;
 		if (!FDateTime::ParseIso8601(*Saved.SavedAt, Time) || Saved.TrackingOrigin < 0 || Saved.TrackingOrigin > 4 ||
 			Saved.PlayAreaCm.ContainsNaN() || Saved.PlayAreaCm.X < 0 || Saved.PlayAreaCm.Y < 0) { return false; }
@@ -268,6 +280,17 @@ bool FVBoRBuckAlignmentStore::Load(const FString& Path, FVBoRBuckSavedAlignment&
 		Candidate.Capture.PositionCm = FVector(Position[0],Position[1],Position[2]); Candidate.Capture.UsedFrames = static_cast<int32>(Used);
 	}
 	if (!ValidSaved(Candidate)) { Reason = TEXT("save contains invalid values"); return false; }
+	if (Candidate.Version == 2 && Json->HasField(TEXT("anchor")))
+	{
+		const TSharedPtr<FJsonObject>* Anchor;
+		TArray<double> Position; double Yaw = 0;
+		if (!Json->TryGetObjectField(TEXT("anchor"), Anchor) || !Anchor->IsValid() ||
+			!(*Anchor)->TryGetStringField(TEXT("uuid"), Candidate.AnchorUuid) ||
+			!ReadNumbers(**Anchor, TEXT("stagePositionCm"), 3, Position) || !ReadNumber(**Anchor, TEXT("stageYawDeg"), Yaw))
+		{ Reason = TEXT("save anchor schema invalid"); return false; }
+		Candidate.AnchorStage = FTransform(FRotator(0,Yaw,0), FVector(Position[0],Position[1],Position[2]));
+		if (!ValidAnchor(Candidate.AnchorUuid, Candidate.AnchorStage)) { Reason = TEXT("save anchor values invalid"); return false; }
+	}
 	Out = Candidate; Reason.Reset();
 	return true;
 }
@@ -292,6 +315,15 @@ bool FVBoRBuckAlignmentStore::Save(const FString& Path, const FVBoRBuckSavedAlig
 			Points.Add(MakeShared<FJsonValueObject>(Point));
 		}
 		Json->SetArrayField(TEXT("points"),Points);
+		if (!Candidate.AnchorUuid.IsEmpty())
+		{
+			const auto Anchor = MakeShared<FJsonObject>();
+			const FVector P = Candidate.AnchorStage.GetLocation();
+			Anchor->SetStringField(TEXT("uuid"), Candidate.AnchorUuid);
+			Anchor->SetArrayField(TEXT("stagePositionCm"), Numbers({P.X,P.Y,P.Z}));
+			Anchor->SetNumberField(TEXT("stageYawDeg"), Candidate.AnchorStage.Rotator().Yaw);
+			Json->SetObjectField(TEXT("anchor"), Anchor);
+		}
 	}
 	else
 	{

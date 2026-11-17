@@ -69,7 +69,13 @@ bool UVBoRVehicleAlignmentComponent::BasePawn(FTransform& Out, FString& Failure)
 	if (Saved.Version == 2)
 	{
 		FVBoRPointFit Fit;
-		if (!FitCaptured(Saved.Points,Fit,Failure,ActiveBuckName())) { return false; }
+		auto Points = Saved.Points;
+		if (bAnchorApplied)
+		{
+			for (auto& Point : Points)
+			{ Point.StageCm = LocatedAnchorStage.TransformPosition(Saved.AnchorStage.InverseTransformPosition(Point.StageCm)); }
+		}
+		if (!FitCaptured(Points,Fit,Failure,ActiveBuckName())) { return false; }
 		if (Fit.MaxXYCm > PointFitLimitCm) { Failure = TEXT("alignment points moved"); return false; }
 		Out = Fit.Pawn; return true;
 	}
@@ -169,6 +175,7 @@ bool UVBoRVehicleAlignmentComponent::SavePoints(FString& Failure)
 	FVBoRBuckSavedAlignment Candidate; Candidate.Version = 2; Candidate.SavedAt = FDateTime::UtcNow().ToIso8601();
 	Candidate.TrackingOrigin = PointOrigin; Candidate.PlayAreaCm = PointPlayArea; Candidate.Points = CapturedPoints;
 	if (!FVBoRBuckAlignmentStore::Save(SavedAlignmentPath(),Candidate,Failure)) { PointResult(Failure); return false; }
+	SaveAlignmentAnchor(SavedAlignmentPath(), Candidate);
 	bPointSession = false; bPointCapturing = false;
 	PointResult(TEXT("Points saved — check the markers, then A to start"));
 	return RequestReapply();
@@ -194,6 +201,7 @@ FString UVBoRVehicleAlignmentComponent::PointStatus() const
 {
 	TArray<UVBoRAlignPointComponent*> Points; const FString Failure = FindAlignPoints(Points);
 	FString Text = LastPointResult;
+	if (!AnchorNotice.IsEmpty()) { Text += TEXT("\n") + AnchorNotice; }
 	if (bPointSession && Points.IsValidIndex(CapturedPoints.Num()))
 	{ Text = FString::Printf(TEXT("Point %d/%d — %s\n"),CapturedPoints.Num()+1,Points.Num(),*Points[CapturedPoints.Num()]->Label) + Text; }
 	FVBoRPointFit Fit; FString FitFailure;

@@ -41,6 +41,8 @@ struct VBOR_API FVBoRBuckSavedAlignment
 	static constexpr int32 FormatVersion = 1;
 	int32 Version = FormatVersion;
 	TArray<FVBoRAlignPointSample> Points;
+	FString AnchorUuid;
+	FTransform AnchorStage = FTransform::Identity;
 	FString SavedAt;
 	int32 TrackingOrigin = 0;
 	FVector2D PlayAreaCm = FVector2D::ZeroVector;

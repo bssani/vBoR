@@ -147,6 +147,7 @@ private:
 	uint64 LiveFrame = MAX_uint64, Generation = 0;
 	int32 StepIndex = INDEX_NONE, ButtonBaseline = 0;
 	bool bInitialized = false, bRunning = false, bFinished = false, bRestartPending = false;
+	bool bAnchorStartPending = false;
 	bool bFreeMode = false, bReloadPending = false, bReloadRequested = false;
 	double ReloadRemaining = 0;
 	double StepElapsed = 0;

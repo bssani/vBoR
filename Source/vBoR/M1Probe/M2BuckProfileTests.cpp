@@ -53,6 +53,7 @@ struct FM2Fixture
 	TArray<UVBoRAlignPointComponent*> PointsA, PointsB;
 	IConsoleVariable* Eye = IConsoleManager::Get().FindConsoleVariable(TEXT("vBoR.EyeAlignment"));
 	int32 OriginalEye = Eye->GetInt();
+	int32 AnchorRequests = 0;
 
 	explicit FM2Fixture(const FM2Files& InFiles, bool bProfiles = true) : Files(InFiles)
 	{
@@ -181,6 +182,8 @@ struct FM2Fixture
 	FTransform MarkerPose() const { return Probe->Fit.IsSet() ? Probe->Fit->Pawn : Initial; }
 	void PreviewMarkers() { Probe->ApplyFit(); }
 	void SaveMarkers() { Probe->SaveFit(); }
+	void HookAnchorSave() { Alignment->AnchorRequestForTest = [this] { ++AnchorRequests; }; }
+	void AnchorResult(const FString& Message) { Alignment->AnchorResult(Message); }
 	bool MarkerMessage(const FString& Text) const
 	{
 		return Probe->TestMessages.ContainsByPredicate([&Text](const FString& Message) { return Message.Contains(Text); });
@@ -523,6 +526,29 @@ bool FM2E12::RunTest(const FString&)
 	FVBoRBuckSavedAlignment Saved;
 	TestTrue(TEXT("Legacy marker fit saved to BuckEye.json"), FVBoRBuckAlignmentStore::Load(Files.LegacyPath(),Saved,Failure));
 	TestTrue(TEXT("Legacy marker save does not select a buck"), Files.Active().IsEmpty());
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FM3bMarkerNotice, "vBoR.M3b.R1MarkerAnchorSaveNotice", M2Flags)
+bool FM3bMarkerNotice::RunTest(const FString&)
+{
+	auto* Switch = IConsoleManager::Get().FindConsoleVariable(TEXT("vBoR.AnchorAlignment"));
+	const int32 Previous = Switch->GetInt(); Switch->Set(1, ECVF_SetByCode);
+	{
+		FM2Files Files; FM2Fixture W(Files); W.HookAnchorSave(); W.Start(); W.CaptureMarkers(); W.SaveMarkers();
+		TestEqual(TEXT("Marker save requests an anchor"), W.AnchorRequests, 1);
+		TestTrue(TEXT("Marker screen asks operator to wait"), W.MarkerMessage(TEXT("Saving anchor — wait")));
+		TestFalse(TEXT("Pending save does not ask operator to leave level"), W.MarkerMessage(TEXT("Saved for buck B — open L_Main")));
+		W.AnchorResult(TEXT("anchor saved UUID=test result=0"));
+		TestTrue(TEXT("Asynchronous success reaches marker screen"), W.MarkerMessage(TEXT("anchor saved UUID=test result=0")));
+		W.SaveMarkers();
+		W.AnchorResult(TEXT("anchor save failed result=-1; alignment saved without anchor"));
+		TestTrue(TEXT("Asynchronous failure reaches marker screen"), W.MarkerMessage(TEXT("anchor save failed result=-1")));
+		FVBoRBuckSavedAlignment Saved; FString Failure;
+		TestTrue(TEXT("Point alignment still saved"), FVBoRBuckAlignmentStore::Load(Files.Path(TEXT("B")), Saved, Failure));
+		TestTrue(TEXT("Failed anchor leaves valid point file without anchor"), Saved.AnchorUuid.IsEmpty());
+	}
+	Switch->Set(Previous, ECVF_SetByCode);
 	return true;
 }
 

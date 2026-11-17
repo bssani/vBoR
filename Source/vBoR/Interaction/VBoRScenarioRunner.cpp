@@ -464,6 +464,7 @@ void AVBoRScenarioRunner::CheckSetup()
 bool AVBoRScenarioRunner::InitializeFlow()
 {
 	UnbindKeys(); bStartHeadPending = false;
+	bAnchorStartPending = false;
 	bInitialized = true; bRunning = false; bFinished = false; ValidationProblems.Reset(); Targets.Reset(); Markers.Reset();
 	Routes.Reset(); FloorRouteNotice.Reset(); StartMarker = nullptr;
 	PanelAnchors.Reset(); bFixedPanelMode = false; bFixedPanelPlaced = false; bFixedPanelWaitingForArrival = false;
@@ -567,7 +568,7 @@ bool AVBoRScenarioRunner::InitializeFlow()
 	}
 	if (!ValidationProblems.IsEmpty()) { Record(TEXT("Start blocked:\n") + ValidationProblems); RefreshPanel(); return false; }
 	if (Alignment->State != EVBoRAlignmentState::Applied && !bAlignmentIgnored)
-	{ Record(TEXT("Alignment required — P in operator panel for point alignment or C in P0-c level to save; O to ignore | ") + Alignment->Describe()); RefreshPanel(); return false; }
+	{ bAnchorStartPending = Alignment->IsFindingAnchor(); Record(TEXT("Alignment required — P in operator panel for point alignment or C in P0-c level to save; O to ignore | ") + Alignment->Describe()); RefreshPanel(); return false; }
 	bRunning = true; EnterStep(0, true); RefreshPanel(); return true;
 }
 
@@ -691,6 +692,12 @@ void AVBoRScenarioRunner::Tick(float DeltaSeconds)
 
 void AVBoRScenarioRunner::ProcessFlow(double DeltaSeconds)
 {
+	if (bAnchorStartPending && Alignment && !Alignment->IsFindingAnchor())
+	{
+		bAnchorStartPending = false;
+		if (!bRunning && !bFreeMode && ValidationProblems.IsEmpty() && Alignment->State == EVBoRAlignmentState::Applied)
+		{ Alignment->FlowStarted(); bRunning = true; EnterStep(0, true); }
+	}
 	// Exclude pre-request-frame dt from new blackout (P5g D8, s)
 	if (bReloadPending && !bReloadRequested)
 	{

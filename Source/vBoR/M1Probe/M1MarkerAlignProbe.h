@@ -101,6 +101,7 @@ private:
 	void RecordObservation(int32 Id, const FM1MarkerObservation* Observation, bool bFastHead);
 	void FinishCapture(double Now);
 	void SaveFit();
+	void HandleAlignmentRecord(const FString& Line);
 	void CancelForRecenter();
 	void ApplyFit();
 	void RestorePawn();

@@ -137,7 +137,7 @@ bool UVBoRVehicleAlignmentComponent::SelectNextBuck(FString& Name, FString& Fail
 }
 
 bool UVBoRVehicleAlignmentComponent::SaveMarkerPoints(const FString& BuckName,
-	const TArray<FVBoRAlignPointSample>& Samples, FString& Failure) const
+	const TArray<FVBoRAlignPointSample>& Samples, FString& Failure)
 {
 	const FString ProfileFailure = ValidateBuckProfiles();
 	if (!ProfileFailure.IsEmpty()) { Failure = TEXT("Buck profiles invalid — ") + ProfileFailure; return false; }
@@ -161,6 +161,7 @@ bool UVBoRVehicleAlignmentComponent::SaveMarkerPoints(const FString& BuckName,
 	}
 	Candidate.Points = Samples;
 	const FString Path = Bucks.IsEmpty() ? SavedAlignmentPath() : BuckAlignmentPath(BuckName);
-	return FVBoRBuckAlignmentStore::Save(Path, Candidate, Failure) &&
-		(Bucks.IsEmpty() || WriteActiveBuck(BuckName, Failure));
+	if (!FVBoRBuckAlignmentStore::Save(Path, Candidate, Failure)) { return false; }
+	SaveAlignmentAnchor(Path, Candidate);
+	return Bucks.IsEmpty() || WriteActiveBuck(BuckName, Failure);
 }

@@ -9,6 +9,7 @@ class APawn;
 class UVBoREyePointComponent;
 class UVBoRAlignPointComponent;
 class UVBoRViewpointComponent;
+class UOculusXRAnchorComponent;
 DECLARE_MULTICAST_DELEGATE(FVBoRPawnMoved);
 DECLARE_MULTICAST_DELEGATE_OneParam(FVBoRPointRecord, const FString&);
 
@@ -69,7 +70,8 @@ public:
 	FString BuckStatus() const;
 	FString NextBuckRejection() const;
 	bool SelectNextBuck(FString& Name, FString& Failure) const;
-	bool SaveMarkerPoints(const FString& BuckName, const TArray<FVBoRAlignPointSample>& Samples, FString& Failure) const;
+	bool SaveMarkerPoints(const FString& BuckName, const TArray<FVBoRAlignPointSample>& Samples, FString& Failure);
+	bool IsFindingAnchor() const { return bFindingAnchor; }
 	UPROPERTY(EditAnywhere, Category="Point alignment", meta=(Units="s", ClampMin="0.01")) double PointCaptureSeconds = 1;
 	UPROPERTY(EditAnywhere, Category="Point alignment", meta=(ClampMin="0", ClampMax="1", ToolTip="Index fingertip used for point capture: 0 = left, 1 = right")) int32 PointHand = 0;
 	UPROPERTY(EditAnywhere, Category="Point alignment", meta=(Units="mm", ClampMin="0")) double PointSpreadLimitMm = 10;
@@ -112,8 +114,32 @@ private:
 	FDelegateHandle RecenterHandle;
 	void HandleRecenter();
 	bool RequestSwitch(UVBoRViewpointComponent* Viewpoint);
-	void LoadSetupAlignment();
-	void InitializeSetup(APawn* Pawn, const FVBoRBuckSavedAlignment* Value, int32 Origin, const FVector2D& PlayArea, bool bFromFile);
+	void LoadSetupAlignment(bool bFindAnchor = false);
+	void InitializeSetup(APawn* Pawn, const FVBoRBuckSavedAlignment* Value, int32 Origin, const FVector2D& PlayArea, bool bFromFile, bool bWaitForAnchor = false);
+	static bool AnchorAlignmentEnabled();
+	void SaveAlignmentAnchor(const FString& Path, const FVBoRBuckSavedAlignment& Candidate);
+	void BeginAnchorDiscovery();
+	void UseLocatedAnchor(UOculusXRAnchorComponent* Anchor);
+	void AdvanceAnchorDiscovery();
+	void FinishAnchorDiscovery(const FTransform* Stage, int32 Result);
+	void ClearAnchorActors();
+	void AnchorResult(const FString& Message);
+	bool bFindingAnchor = false, bAnchorApplied = false;
+	FString LocatedAnchorUuid, AnchorNotice;
+	FTransform LocatedAnchorStage;
+	double AnchorStarted = 0;
+	int32 AnchorDiscoveryResult = 0;
+	uint32 AnchorSaveSerial = 0;
+	uint64 AnchorActorCreatedFrame = 0;
+	FTransform AnchorActorInitialWorld = FTransform::Identity;
+	TWeakObjectPtr<AActor> PendingAnchorActor;
+	TWeakObjectPtr<UOculusXRAnchorComponent> LocatedAnchor;
+#if WITH_DEV_AUTOMATION_TESTS
+	friend struct FM3bTestAccess;
+	friend struct FM2Fixture;
+	TFunction<void()> AnchorRequestForTest;
+	bool bAnchorLocationValidForTest = false;
+#endif
 	void UpdateEyeAlignment();
 	void RestoreBeforeEyeAlignment();
 	bool PawnFor(const UVBoRViewpointComponent* Viewpoint, FTransform& Out, FString& Failure) const;
