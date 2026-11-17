@@ -35,7 +35,7 @@ void UVBoRVehicleAlignmentComponent::BeginPlay()
 	AlignmentPawn = UGameplayStatics::GetPlayerPawn(this, 0);
 	if (AlignmentPawn) { BeforeSetupPawn = AlignmentPawn->GetActorTransform(); }
 	bEyeEnabled = CVarEyeAlignment.GetValueOnGameThread() != 0;
-	LoadSetupAlignment();
+	LoadSetupAlignment(true);
 }
 
 FString UVBoRVehicleAlignmentComponent::SavedAlignmentPath() const
@@ -55,8 +55,9 @@ bool UVBoRVehicleAlignmentComponent::PawnFor(const UVBoRViewpointComponent* View
 	return true;
 }
 
-void UVBoRVehicleAlignmentComponent::LoadSetupAlignment()
+void UVBoRVehicleAlignmentComponent::LoadSetupAlignment(bool bFindAnchor)
 {
+	bAnchorApplied = false;
 	const bool bUseBuck = !Bucks.IsEmpty() && CVarEyeAlignment.GetValueOnGameThread() == 0;
 	FString FallbackReason;
 	if (!Bucks.IsEmpty())
@@ -81,7 +82,11 @@ void UVBoRVehicleAlignmentComponent::LoadSetupAlignment()
 	const bool bLoaded = FVBoRBuckAlignmentStore::Load(Path, Loaded, LoadReason);
 	const bool bEyeBlocked = bLoaded && Loaded.Version == 1 && CVarEyeAlignment.GetValueOnGameThread() == 0;
 	int32 Origin; FVector2D Bounds; ReadPointEnvironment(Origin,Bounds);
-	InitializeSetup(AlignmentPawn, bLoaded && !bEyeBlocked ? &Loaded : nullptr, Origin, Bounds, true);
+	const bool bUseAnchor = AnchorAlignmentEnabled() && bLoaded && Loaded.Version == 2 && !Loaded.AnchorUuid.IsEmpty();
+	bAnchorApplied = bUseAnchor && LocatedAnchorUuid == Loaded.AnchorUuid;
+	const bool bWait = bUseAnchor && bFindAnchor && !bAnchorApplied;
+	InitializeSetup(AlignmentPawn, bLoaded && !bEyeBlocked ? &Loaded : nullptr, Origin, Bounds, true, bWait);
+	if (bWait) { BeginAnchorDiscovery(); }
 	if (bEyeBlocked) { Reason = EyeDisabledReason; }
 	if (!bLoaded) { Reason += TEXT(" — ") + LoadReason; }
 	if (bUseBuck)
@@ -101,6 +106,7 @@ void UVBoRVehicleAlignmentComponent::LoadSetupAlignment()
 
 void UVBoRVehicleAlignmentComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	bFindingAnchor = false; ++AnchorSaveSerial; ClearAnchorActors();
 	FCoreDelegates::VRHeadsetRecenter.Remove(RecenterHandle); RecenterHandle.Reset();
 	if (AlignmentPawn)
 	{
@@ -111,9 +117,9 @@ void UVBoRVehicleAlignmentComponent::EndPlay(const EEndPlayReason::Type EndPlayR
 }
 
 void UVBoRVehicleAlignmentComponent::InitializeAlignment(APawn* Pawn, const FVBoRBuckSavedAlignment* Value, int32 Origin, const FVector2D& PlayArea)
-{ InitializeSetup(Pawn, Value, Origin, PlayArea, false); }
+{ bAnchorApplied = false; InitializeSetup(Pawn, Value, Origin, PlayArea, false); }
 
-void UVBoRVehicleAlignmentComponent::InitializeSetup(APawn* Pawn, const FVBoRBuckSavedAlignment* Value, int32 Origin, const FVector2D& PlayArea, bool bFromFile)
+void UVBoRVehicleAlignmentComponent::InitializeSetup(APawn* Pawn, const FVBoRBuckSavedAlignment* Value, int32 Origin, const FVector2D& PlayArea, bool bFromFile, bool bWaitForAnchor)
 {
 	bAlignmentFromFile = bFromFile;
 	bFileEyeAlignment = bFromFile && Value && Value->Version == 1;
@@ -126,7 +132,17 @@ void UVBoRVehicleAlignmentComponent::InitializeSetup(APawn* Pawn, const FVBoRBuc
 	else
 	{
 		Saved = *Value;
-		const auto Decision = FVBoRBuckAlignment::CheckEnvironment(Saved, Origin, PlayArea, PlayAreaToleranceCm);
+		if (bWaitForAnchor) { State = EVBoRAlignmentState::NeedsCheck; Reason = TEXT("Finding anchor"); return; }
+		auto Decision = FVBoRBuckAlignment::CheckEnvironment(Saved, Origin, PlayArea, PlayAreaToleranceCm);
+		if (bAnchorApplied)
+		{
+			if (Origin != EHMDTrackingOrigin::Stage) { Decision.bApply = false; Decision.bNeedsCheck = true; Decision.Reason = TEXT("Stage tracking origin required"); }
+			else
+			{
+				if (!Decision.Reason.IsEmpty()) { AnchorResult(TEXT("anchor: ") + Decision.Reason + TEXT(" (notice only)")); }
+				Decision.bApply = true; Decision.bNeedsCheck = false; Decision.Reason = TEXT("anchor");
+			}
+		}
 		State = EVBoRAlignmentState::NeedsCheck; Reason = Decision.Reason;
 		FTransform Base; FString Failure;
 		if (!AlignmentPawn || (Saved.Version == 1 && !BaseEye) || AlignmentPawn->bUseControllerRotationYaw ||
@@ -150,6 +166,7 @@ void UVBoRVehicleAlignmentComponent::InitializeSetup(APawn* Pawn, const FVBoRBuc
 
 void UVBoRVehicleAlignmentComponent::HandleRecenter()
 {
+	bFindingAnchor = false;
 	CancelPoints(TEXT("Recenter — points cleared"));
 	State = EVBoRAlignmentState::NeedsCheck; Reason = TEXT("Recenter — installation alignment check required");
 	UE_LOG(LogP3Flow, Log, TEXT("Alignment %s; Pawn unchanged"), *Describe());
@@ -159,10 +176,12 @@ void UVBoRVehicleAlignmentComponent::TickComponent(float DeltaTime, ELevelTick T
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 	UpdateEyeAlignment();
+	AdvanceAnchorDiscovery();
 	if (bHasSaved && State == EVBoRAlignmentState::Applied && GEngine && GEngine->XRSystem.IsValid())
 	{
+		// Anchor corrects Stage drift; origin type still required (M3b D3)
 		const auto Check = FVBoRBuckAlignment::CheckEnvironment(Saved, GEngine->XRSystem->GetTrackingOrigin(),
-			UHeadMountedDisplayFunctionLibrary::GetPlayAreaBounds(EHMDTrackingOrigin::Stage), PlayAreaToleranceCm);
+			bAnchorApplied ? Saved.PlayAreaCm : UHeadMountedDisplayFunctionLibrary::GetPlayAreaBounds(EHMDTrackingOrigin::Stage), PlayAreaToleranceCm);
 		if (Check.bNeedsCheck) { State = EVBoRAlignmentState::NeedsCheck; Reason = Check.Reason; UE_LOG(LogP3Flow, Log, TEXT("Alignment %s; Pawn unchanged"), *Describe()); }
 	}
 	AdvancePointCapture();
@@ -243,6 +262,7 @@ FString UVBoRVehicleAlignmentComponent::SwitchRejection(const UVBoRViewpointComp
 
 FString UVBoRVehicleAlignmentComponent::ReapplyRejection() const
 {
+	if (bFindingAnchor) { return TEXT("Finding anchor"); }
 	if (bPointSession) { return TEXT("Point alignment in progress"); }
 	if (bSwitching) { return TEXT("View transition in progress"); }
 	if (!IsBaseViewpoint()) { return TEXT("Return to the driver seat first"); }

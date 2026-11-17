@@ -269,6 +269,7 @@ FVBoROperatorStatus AVBoRScenarioRunner::GetOperatorStatus() const
 	S.bApplied = Alignment && Alignment->State == EVBoRAlignmentState::Applied;
 	S.bNeedsCheck = Alignment && Alignment->State == EVBoRAlignmentState::NeedsCheck;
 	S.Alignment = S.bApplied ? TEXT("Applied") : S.bNeedsCheck ? TEXT("Needs check — ") + Alignment->EnglishReason() : FString(TEXT("No saved alignment"));
+	if (S.bApplied && Alignment->Reason.Contains(TEXT("anchor"))) { S.Alignment += TEXT(" · anchor"); }
 	S.Buck = Alignment ? Alignment->BuckStatus() : FString();
 	if (bAlignmentIgnored) { S.Alignment += TEXT(" · started without alignment"); }
 	S.Seat = Alignment ? Alignment->SeatName() : FString(TEXT("Driver"));
