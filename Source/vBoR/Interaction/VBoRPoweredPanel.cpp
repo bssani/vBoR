@@ -102,8 +102,34 @@ void AVBoRPoweredPanel::BeginPlay()
 	Super::BeginPlay();
 	ResetPanel();
 	CollectObstructionBoxes();
-	OpenButton = CreateButton(OpenButtonFromHinge, OpenButtonClass, TEXT("OpenButtonClass"));
-	CloseButton = CreateButton(CloseButtonFromHinge, CloseButtonClass, TEXT("CloseButtonClass"));
+	OpenButton = nullptr;
+	CloseButton = nullptr;
+	ForEachAttachedActors([&](AActor* Actor)
+	{
+		if (AVBoRPokeButton* Button = Cast<AVBoRPokeButton>(Actor))
+		{
+			if (!OpenButton && Button->ActorHasTag(TEXT("Gate.OpenButton"))) { OpenButton = Button; }
+			if (!CloseButton && Button->ActorHasTag(TEXT("Gate.CloseButton"))) { CloseButton = Button; }
+		}
+		return true;
+	});
+	if (!OpenButton)
+	{
+		OpenButton = CreateButton(OpenButtonFromHinge, OpenButtonClass, TEXT("OpenButtonClass"));
+		bSpawnedOpenButton = OpenButton != nullptr;
+	}
+	if (!CloseButton)
+	{
+		CloseButton = CreateButton(CloseButtonFromHinge, CloseButtonClass, TEXT("CloseButtonClass"));
+		bSpawnedCloseButton = CloseButton != nullptr;
+	}
+	for (AVBoRPokeButton* Button : {OpenButton.Get(), CloseButton.Get()})
+	{
+		if (Button && !Button->GetRootComponent()->IsAttachedTo(HingePivot))
+		{
+			Button->AttachToComponent(HingePivot, FAttachmentTransformRules::KeepWorldTransform);
+		}
+	}
 	if (OpenButton) { OpenButton->OnButtonPressed.AddDynamic(this, &AVBoRPoweredPanel::OpenPressed); }
 	if (CloseButton) { CloseButton->OnButtonPressed.AddDynamic(this, &AVBoRPoweredPanel::ClosePressed); }
 	if (APlayerController* Controller = UGameplayStatics::GetPlayerController(this, 0))
@@ -116,8 +142,20 @@ void AVBoRPoweredPanel::BeginPlay()
 
 void AVBoRPoweredPanel::EndPlay(const EEndPlayReason::Type Reason)
 {
-	if (OpenButton) { OpenButton->Destroy(); }
-	if (CloseButton) { CloseButton->Destroy(); }
+	if (OpenButton)
+	{
+		OpenButton->OnButtonPressed.RemoveDynamic(this, &AVBoRPoweredPanel::OpenPressed);
+		if (bSpawnedOpenButton) { OpenButton->Destroy(); }
+	}
+	if (CloseButton)
+	{
+		CloseButton->OnButtonPressed.RemoveDynamic(this, &AVBoRPoweredPanel::ClosePressed);
+		if (bSpawnedCloseButton) { CloseButton->Destroy(); }
+	}
+	OpenButton = nullptr;
+	CloseButton = nullptr;
+	bSpawnedOpenButton = false;
+	bSpawnedCloseButton = false;
 	for (int32 I = 0; I < SoundAudio.Num(); ++I) { SoundPlayback[I].Reset(SoundAudio[I], false); }
 	Super::EndPlay(Reason);
 }

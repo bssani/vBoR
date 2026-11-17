@@ -144,6 +144,8 @@ private:
 	FVBoRPoweredMotion Motion;
 	bool bPendingCommand = false;
 	bool bInitializingPlay = false;
+	bool bSpawnedOpenButton = false;
+	bool bSpawnedCloseButton = false;
 	UPROPERTY() TArray<TObjectPtr<UAudioComponent>> SoundAudio;
 	FVBoRSoundPlayback SoundPlayback[static_cast<int32>(EVBoRPoweredSound::SlotCount)];
 	uint64 SoundFrame = 0;
