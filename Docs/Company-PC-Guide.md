@@ -45,7 +45,7 @@
   - 근사 차는 이제 `Development/P3/L_P3_Flow`에만 있다. 실제 차는 L_Main의 BP 틀에 CAD 메시를 넣어 만든다([Blueprint-Guide.md](Blueprint-Guide.md) §0·§2-3).
 - **집 시험 도구(콘솔 변수, 기본 꺼짐):**
   - `vBoR.HomeShift`: 키패드로 1 m씩 옮김
-  - `vBoR.RouteIgnorePlayArea`: 플레이 영역 밖이어도 바닥 경로를 그림
+  - `vBoR.RouteIgnorePlayArea`: 플레이 영역 밖이어도 바닥 경로를 그림. **`L_Main`은 Level Blueprint `BeginPlay` → `Execute Console Command` `vBoR.RouteIgnorePlayArea 1`로 항상 켠다**(사용자 2026-11-18). 경로가 지나는 방 자리는 비워 둔다
   - `vBoR.EyeAlignment`: 켜져 있는 동안만 `L_P0c_BuckEye`에서 저장한 눈 위치 정렬을 L_Main에 적용한다(P5u). 끄면 바로 정렬 전 자리로 돌아간다. 꺼져 있으면 L_Main은 4점 정렬 저장값만 쓰고, 4점 저장값이 없으면 정렬 상태가 "No saved value"가 되어 시작이 막힌다(진행자 `O`로 무시하고 시작할 수는 있다).
     - 집 PC에서 계속 켜 두려면 리포 루트에 `Config/UserEngine.ini`를 만들고 `[ConsoleVariables]` 아래 `vBoR.EyeAlignment=1`을 적는다. 이 파일은 git에 올라가지 않는다(`.gitignore`). `Saved/Config/…/Engine.ini`에 적으면 에디터가 지운다.
   - **회사 평가에서는 켜지 않는다.** 회사 PC에 `Config/UserEngine.ini`가 없는지 확인한다.
