@@ -31,3 +31,21 @@
 - `vBoR.*` 발견/완료/Success **798/798/798**, Fail 0, TEST COMPLETE EXIT CODE 0, 프로세스 종료 0. R15 E1·E2·E3·MixedTagDuplicates **4/4** 통과. 전체 시험은 한 번 실행.
 - 로그 `Saved/Logs/R15-nonunity-build.log`, `R15-unity-build.log`, `R15-all-tests.log`, `R15-tests-console.log`; 첫 실패 `R15-nonunity-build-initial.log`. 로컬 도구 StructUtils 폐기 안내 2줄·샘플 InfoCard 누락 2개 등 알려진 잡음 별도 구분. `git diff --check` 통과.
 - 보고 ①–⑤와 엔진 헤더 근거는 커밋 본문. 에디터/MCP·에셋·설정 변경 없음, push·PR·머지 없음. BP/진행자 창/PIE 및 Quest 3 T-05 `not-tested`.
+
+## 1회차 리뷰 (Claude 2026-11-18) — `1566aff`, 통과
+
+`git diff main...codex/R15-seat-sgrp-tags`. 순서: AGENTS.md 제약 → 명세 범위·완료 조건 → 빌드 → 버그.
+
+- **범위:** 명세와 개정 1 안이다. 이동 계산·정렬·좌석 단계 규칙·에셋 변경 없음. 기존 단언 변경은 개정 1의 다섯 줄뿐이다.
+- **확인한 동작:**
+  - 태그 표가 한 곳에 있다(`VBoRSeatTags.h`). 태그 검색(`FindP3Tag`, `ScanSeatView`)은 새 태그와 옛 태그를 같은 자리로 센다. 그래서 새·옛 태그가 같이 있으면 지금의 "하나만" 규칙에 걸리고, 옛 시나리오 태그로 새 태그 점을 찾는 경우도 된다. 좌석이 아닌 태그는 지금처럼 그대로 비교한다.
+  - 진행자 버튼 enum과 단축키 배열은 둘 다 `NextBuck` 뒤에 같은 순서로 더했다(`Shortcut()`이 enum 번호로 배열을 읽는다). `EVBoRFlowCommand`도 끝에 더했다.
+  - 좌석 캐시 `SeatViews[4]` = 동승석·2열 왼쪽·가운데·오른쪽. 시작할 때 한 번 찾는다.
+  - Check setup은 옛 태그마다 "rename to" 알림 한 줄을 띄우고 시작은 막지 않는다.
+- **빌드·시험(Codex 보고):** non-unity·unity 성공, `vBoR.*` 798/798. 다시 돌리지 않았다.
+
+### 문제
+
+없음.
+
+시험 상태: Quest 3 T-05 `not-tested`.
