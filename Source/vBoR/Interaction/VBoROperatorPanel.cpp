@@ -19,7 +19,7 @@ const TArray<FVBoROperatorShortcut>& VBoROperator::Shortcuts()
 		{EVBoROperatorButton::Ignore, EKeys::O, TEXT("Start without alignment"), TEXT("O")},
 		{EVBoROperatorButton::Driver, EKeys::Home, TEXT("Driver seat"), TEXT("Home")},
 		{EVBoROperatorButton::Passenger, EKeys::One, TEXT("Passenger seat"), TEXT("1")},
-		{EVBoROperatorButton::Rear, EKeys::Two, TEXT("Rear seat"), TEXT("2")},
+		{EVBoROperatorButton::Rear, EKeys::Two, TEXT("Rear left seat"), TEXT("2")},
 		{EVBoROperatorButton::Reapply, EKeys::A, TEXT("Re-apply saved alignment"), TEXT("A")},
 		{EVBoROperatorButton::Info, EKeys::I, TEXT("In-VR operator info"), TEXT("I")},
 		{EVBoROperatorButton::Free, EKeys::End, TEXT("Enter free mode"), TEXT("End")},
@@ -30,7 +30,9 @@ const TArray<FVBoROperatorShortcut>& VBoROperator::Shortcuts()
 		{EVBoROperatorButton::SavePoints, EKeys::S, TEXT("Save points"), TEXT("S")},
 		{EVBoROperatorButton::CancelPoints, EKeys::X, TEXT("Cancel points"), TEXT("X")},
 		{EVBoROperatorButton::Power, EKeys::E, TEXT("Power on/off"), TEXT("E")},
-		{EVBoROperatorButton::NextBuck, EKeys::B, TEXT("Next buck"), TEXT("B")}};
+		{EVBoROperatorButton::NextBuck, EKeys::B, TEXT("Next buck"), TEXT("B")},
+		{EVBoROperatorButton::RearCenter, EKeys::Three, TEXT("Rear center seat"), TEXT("3")},
+		{EVBoROperatorButton::RearRight, EKeys::Four, TEXT("Rear right seat"), TEXT("4")}};
 	return Values;
 }
 
@@ -197,7 +199,9 @@ void SVBoROperatorPanel::Construct(const FArguments& Args)
 					[Section(TEXT("Seats"),SNew(SVerticalBox)
 						+ SVerticalBox::Slot().AutoHeight()[Button(EVBoROperatorButton::Driver)]
 						+ SVerticalBox::Slot().AutoHeight().Padding(0,8)[Button(EVBoROperatorButton::Passenger)]
-						+ SVerticalBox::Slot().AutoHeight()[Button(EVBoROperatorButton::Rear)])]
+						+ SVerticalBox::Slot().AutoHeight()[Button(EVBoROperatorButton::Rear)]
+						+ SVerticalBox::Slot().AutoHeight().Padding(0,8)[Button(EVBoROperatorButton::RearCenter)]
+						+ SVerticalBox::Slot().AutoHeight()[Button(EVBoROperatorButton::RearRight)])]
 					+ SHorizontalBox::Slot().FillWidth(1).Padding(8,0,0,0)
 					[Section(TEXT("Alignment and view"),SNew(SVerticalBox)
 						+ SVerticalBox::Slot().AutoHeight()[Button(EVBoROperatorButton::Reapply)]

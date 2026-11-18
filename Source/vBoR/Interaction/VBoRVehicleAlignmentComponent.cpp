@@ -1,6 +1,7 @@
 #include "VBoRVehicleAlignmentComponent.h"
 #include "VBoREyePointComponent.h"
 #include "VBoRViewpointComponent.h"
+#include "VBoRSeatTags.h"
 #include "VBoRParticipantZones.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Engine/Engine.h"
@@ -224,7 +225,7 @@ bool UVBoRVehicleAlignmentComponent::SwitchViewpoint(UVBoRViewpointComponent* Vi
 		++SwitchRequests; ++SwitchDiscards;
 		UE_LOG(LogP3Flow, Log, TEXT("Viewpoint discarded — %s"), !IsValid(Viewpoint) ? TEXT("No target") : bSwitching ? TEXT("Transitioning") : TEXT("Alignment required")); return false;
 	}
-	return RequestSwitch(Viewpoint->ComponentHasTag(TEXT("Car.DriverView")) ? nullptr : Viewpoint);
+	return RequestSwitch(VBoRSeats::Has(Viewpoint->ComponentTags, VBoRSeats::Driver) ? nullptr : Viewpoint);
 }
 
 bool UVBoRVehicleAlignmentComponent::ReturnToBase() { return RequestSwitch(nullptr); }
@@ -292,7 +293,8 @@ FString UVBoRVehicleAlignmentComponent::SeatName() const
 {
 	if (bSwitching) { return TEXT("Switching…"); }
 	if (!CurrentViewpoint) { return TEXT("Driver"); }
-	return CurrentViewpoint->ComponentHasTag(TEXT("Car.PassengerView")) ? TEXT("Passenger") : TEXT("Rear");
+	const auto* Seat = VBoRSeats::Find(CurrentViewpoint->ComponentTags);
+	return Seat ? Seat->Name : TEXT("Rear");
 }
 
 bool UVBoRVehicleAlignmentComponent::RequestSwitch(UVBoRViewpointComponent* Viewpoint)

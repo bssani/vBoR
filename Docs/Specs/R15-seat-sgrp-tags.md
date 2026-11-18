@@ -60,3 +60,11 @@ E1–E3 통과, 두 빌드 성공, `vBoR.*` 전체 통과. 보고 ①–⑤.
 - `BP_Car_Core`의 좌석점 태그를 새 이름으로 바꾸고, 2열 가운데·오른쪽 점을 더한다(SgRP 값). `DA_Main_Scenario`의 좌석 단계 Rule target도 새 태그로 고른다.
 - Check setup에서 "rename" 알림이 없어졌는지 본다. `1`–`4`로 자리를 옮겨 본다.
 - Quest 3 T-05 `not-tested`.
+
+## 개정 1 (Claude 2026-11-18) — Codex Q1·Q2
+
+기존 시험을 다시 훑었다(`Move to … seat` 문구, 좌석 이름, 키 `1`·`2`, `Rear` 명령, 좌석 검색 횟수). 충돌은 아래 두 곳뿐이다. 키 `2` → 2열 왼쪽(`P5gFreeModeTests.cpp:139,155`, `P5zFixedGuidanceTests.cpp:246`), `Move to passenger seat`, 좌석 이름 `Driver`는 그대로 맞는다.
+
+- **Q1 허용:** `P5zFixedGuidanceTests.cpp:326,374,377`의 기대 문구를 `Move to rear left seat`로 바꾼다. 문구만 바꾸고 다른 단언은 그대로 둔다. 옛 태그에만 옛 문구를 남기는 분기는 만들지 않는다.
+- **Q2 허용:** `P5iOperatorPanelTests.cpp:700,715`의 시작·재시작 좌석 검색 횟수를 2 → 4로 바꾼다. 같은 `ScanSeatView` 경로로 네 자리를 검색한다. Play 중 0회 단언은 그대로 둔다.
+- 이 다섯 줄 말고 기존 단언을 바꿔야 하면 다시 질문하고 멈춘다.
