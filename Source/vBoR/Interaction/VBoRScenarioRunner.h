@@ -24,7 +24,7 @@ class UVBoRVehiclePowerComponent;
 class UVBoRGuidanceWidget;
 class UVBoRButtonLabelWidget;
 
-enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel, ReapplyAlignment, FoldSeat, UnfoldSeat, CapturePoint, SavePoints, CancelPoints, Power, NextBuck, SeatAdvance };
+enum class EVBoRFlowCommand : uint8 { Confirm, Next, Previous, Viewpoint, Passenger, Rear, ReturnBase, Restart, IgnoreAlignment, EnterFreeMode, ReloadLevel, ReapplyAlignment, FoldSeat, UnfoldSeat, CapturePoint, SavePoints, CancelPoints, Power, NextBuck, SeatAdvance, RearCenter, RearRight };
 enum class EVBoRCommandSource : uint8 { Participant, Operator };
 struct FVBoRFlowToken { int32 StepIndex = INDEX_NONE; uint64 Generation = 0; };
 struct FVBoRFlowCommand
@@ -112,6 +112,7 @@ private:
 	friend struct FP5qTestAccess;
 	friend struct FP5zTestAccess;
 	friend struct FP5zbTestAccess;
+	friend struct FR15TestAccess;
 	TWeakObjectPtr<UVBoRVehiclePowerComponent> VehiclePower;
 	UPROPERTY() TObjectPtr<UVBoRVehicleAlignmentComponent> Alignment;
 	UPROPERTY() TObjectPtr<UVBoRApproachZoneComponent> Approach;
@@ -171,7 +172,7 @@ private:
 	bool IsAtStepViewpoint() const;
 	bool ReturnsToBase(EVBoRFlowCommand Action) const;
 	// Cache passenger/rear viewpoints once at startup (no per-frame scan of thousands of CAD Actors, P5o)
-	TWeakObjectPtr<UVBoRViewpointComponent> SeatViews[2];
+	TWeakObjectPtr<UVBoRViewpointComponent> SeatViews[4];
 	UVBoRViewpointComponent* ScanSeatView(FName Tag) const;
 #if WITH_DEV_AUTOMATION_TESTS
 	mutable int32 OperatorViewpointScans = 0;
@@ -201,6 +202,7 @@ private:
 	UFUNCTION() void HandleKeyUnlock(AVBoRKeyFob* Key);
 	UFUNCTION() void HandleKeyLock(AVBoRKeyFob* Key);
 	void KeyConfirm(); void KeyNext(); void KeyPrevious(); void KeyPassenger(); void KeyRear(); void KeyReturn(); void KeyRestart(); void KeyIgnore();
+	void KeyRearCenter(); void KeyRearRight();
 	void KeyOperatorInfo();
 	void KeyFreeMode(); void KeyReloadLevel();
 	void KeyNextBuck();

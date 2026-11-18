@@ -127,7 +127,7 @@ L_Main
 |---|---|---|---|---|
 | `VBoR Vehicle Alignment` | 1 | — | `bHeightFromFloor` 켬, **`FloorWorldZCm` = 지면 월드 Z** | 정렬·좌석 전환 |
 | `VBoR Align Point` | 4 | — | 실물 좌석의 단단한 점 4개 CAD 자리. `Order` 1–4, `Label`(진행자 창에 보임) | 4점 정렬(P4h, U-18) |
-| `VBoR Viewpoint` | 3 | `Car.DriverView` / `Car.PassengerView` / `Car.RearView` | 운전석·동승석·2열 **SgRP** | 14·15 좌석 전환 |
+| `VBoR Viewpoint` | 5 | `Car.DriverSgRP` / `Car.PassengerSgRP` / `Car.RearLeftSgRP` / `Car.RearCenterSgRP` / `Car.RearRightSgRP` | 운전석·동승석·2열 왼쪽·가운데·오른쪽 **SgRP** | 좌석 전환 |
 | `VBoR Seat Zone` | 1 | `Car.DriverSeat` | 앉은 머리가 들어오는 상자 | 10번 "좌석에 앉아보세요"(1.5 s) |
 | Box | 1 | `Car.Footprint` | 차체 바닥 윤곽 + 20 cm. **Collision 없음, Hidden in Game** | 바닥 경로가 차를 지나지 않는지 검사 |
 | Scene 또는 작은 메시 | 1 | `Car.Start` | 차 앞 밖, 차를 바라보게 | 시작 위치 기록 |
@@ -135,7 +135,7 @@ L_Main
 | `VBoR Approach Zone` | 0–1 | `Car.Approach` | 차 둘레 | 지금 단계에서는 안 씀 |
 | `VehiclePower` | **정확히 1** | — | 소리 칸만 | 시동 버튼·진행자 `E`·사이드미러(§8.4) |
 
-- **좌석점 셋은 같은 종류의 점이어야 한다**(회사 차는 셋 다 SgRP, 운전석에 `Car.DriverView`). 섞으면 좌석 사이 거리가 틀어진다. `Car.DriverView`도 눈 점도 없으면 좌석 전환이 거절된다.
+- **좌석점 다섯은 같은 종류의 점이어야 한다**(회사 차는 모두 SgRP, 운전석에 `Car.DriverSgRP`). 섞으면 좌석 사이 거리가 틀어진다. 운전석 SgRP도 눈 점도 없으면 좌석 전환이 거절된다. 옛 `Car.DriverView` / `Car.PassengerView` / `Car.RearView`도 각각 운전석·동승석·2열 왼쪽으로 읽으며, Check setup에 새 이름으로 바꾸라는 알림이 뜬다. 새·옛 태그로 서로 다른 점을 중복 지정하지 않는다.
 - 앉음 구역은 머리 기준이다. 넓이는 평가 담당자와 정할 값이다.
 - 정렬 점은 에디터에서는 작은 구와 노란 번호로, 게임에서는 진행자가 `P`를 누를 때만 보인다.
 
@@ -366,7 +366,7 @@ L_Main
 | 11·20 | 문 닫혀 잠김 | `Car.DriverDoor` | 같음 |
 | 12 | 확인 | — | — |
 | 13 | 도달 버튼 누름 | `Car.ReachButton` | `AVBoRPokeButton` |
-| 14·15 | 좌석 시점 | `Car.PassengerView`·`Car.RearView` | `UVBoRViewpointComponent` |
+| 14·15 | 좌석 시점 | `Car.PassengerSgRP`·`Car.RearLeftSgRP` (가운데·오른쪽은 `Car.RearCenterSgRP`·`Car.RearRightSgRP`) | `UVBoRViewpointComponent` |
 
 - 태그가 없거나, 둘 이상이거나, 종류가 다르면 흐름이 시작되지 않는다. Output Log에 `Start blocked:` 아래 `Tag <이름>: found N (need 1)`, `<단계>: tag <이름> type mismatch or missing`으로 보인다. **Play 전에 Runner `Check setup`으로 같은 문구를 본다**(§3-9).
 - 시나리오 에셋은 하나만 쓴다.
@@ -423,7 +423,7 @@ L_Main
    - `Start blocked:`가 없을 것.
 3. **진행자 창**(툴바 `Operator`):
    - **4점 정렬:** 실물 좌석 점 4개를 `P`로 짚고 → 차이(cm)·높이 차이 확인 → `S` 저장 → 다시 짚어 거리 확인 → `A`로 시작. 높이 경고가 뜨면 실물 좌석 높이를 확인한다(U-17).
-   - **좌석 전환:** `1`·`2`로 동승석·2열에 가서 SgRP 차이만큼 옮겨졌는지, `Home`으로 돌아오는지.
+   - **좌석 전환:** `1`–`4`로 동승석·2열 왼쪽·가운데·오른쪽에 가서 SgRP 차이만큼 옮겨졌는지, `Home`으로 돌아오는지.
 4. **부품마다** — 뷰포트 표시(§3-4·§3-5)와 실제가 같은지 본다:
    - 열리는 방향·최대 각, 손잡이·그립·운전석 미러가 문과 같이 도는지, 기어 버튼이 레버를 따라오는지, 리프트게이트 버튼, 2열 F·U, 키 집고 버튼 누르기.
    - **문:** 운전석에서 안쪽 손잡이를 잡으러 갈 때 문이 먼저 밀려 나가지 않는지(§6.4), 바깥 면·안쪽 트림을 밀어 보이는 면에 닿을 때 밀리는지(§6.3). 그립으로 연 문을 밀고 당기는지, 잠긴 동안 그립이 반응하지 않는지.

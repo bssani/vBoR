@@ -1,4 +1,5 @@
 #include "VBoRScenarioAsset.h"
+#include "VBoRSeatTags.h"
 #include "VBoRFloorRoute.h"
 #include "VBoRPanelAnchor.h"
 #include "Components/ActorComponent.h"
@@ -39,8 +40,8 @@ UVBoRScenarioAsset::UVBoRScenarioAsset()
 	Add(TEXT("11"), TEXT("Close the door."), EVBoRStepRule::DoorLatched, TEXT("Car.DriverDoor"), EVBoRConfirmBy::None);
 	Add(TEXT("12"), TEXT("Look around the interior."), EVBoRStepRule::Confirm, TEXT(""), EVBoRConfirmBy::Either);
 	Add(TEXT("13"), TEXT("Reach the farthest button with your finger."), EVBoRStepRule::ButtonPressed, TEXT("Car.ReachButton"), EVBoRConfirmBy::None);
-	Add(TEXT("14"), TEXT("Check from the passenger seat."), EVBoRStepRule::Viewpoint, TEXT("Car.PassengerView"), EVBoRConfirmBy::Either);
-	Add(TEXT("15"), TEXT("Check from the rear seat."), EVBoRStepRule::Viewpoint, TEXT("Car.RearView"), EVBoRConfirmBy::Either);
+	Add(TEXT("14"), TEXT("Check from the passenger seat."), EVBoRStepRule::Viewpoint, VBoRSeats::Table[VBoRSeats::Passenger].Tag, EVBoRConfirmBy::Either);
+	Add(TEXT("15"), TEXT("Check from the rear seat."), EVBoRStepRule::Viewpoint, VBoRSeats::Table[VBoRSeats::RearLeft].Tag, EVBoRConfirmBy::Either);
 	Add(TEXT("18"), TEXT("Open the door to get out."), EVBoRStepRule::DoorOpened, TEXT("Car.DriverDoor"), EVBoRConfirmBy::None);
 	Steps.Last().bRequireBaseViewpoint = true;
 	Add(TEXT("19"), TEXT("Get out of the vehicle."), EVBoRStepRule::Confirm, TEXT(""), EVBoRConfirmBy::Operator);

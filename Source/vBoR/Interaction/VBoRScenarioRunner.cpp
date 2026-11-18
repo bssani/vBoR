@@ -7,6 +7,7 @@
 #include "VBoRParticipantZones.h"
 #include "VBoRVehicleAlignmentComponent.h"
 #include "VBoRViewpointComponent.h"
+#include "VBoRSeatTags.h"
 #include "VBoRHingedDoor.h"
 #include "VBoRPokeButton.h"
 #include "VBoRFloorRoute.h"
@@ -79,13 +80,13 @@ namespace
 		TArray<UObject*> Matches;
 		for (TActorIterator<AActor> It(World); It; ++It)
 		{
-			if (It->ActorHasTag(Tag)) { Matches.Add(*It); }
+			if (VBoRSeats::Matches(It->Tags, Tag)) { Matches.Add(*It); }
 			TArray<UActorComponent*> Components; It->GetComponents(Components);
-			for (UActorComponent* Component : Components) { if (Component->ComponentHasTag(Tag)) { Matches.Add(Component); } }
+			for (UActorComponent* Component : Components) { if (VBoRSeats::Matches(Component->ComponentTags, Tag)) { Matches.Add(Component); } }
 		}
 		if (Forecast) for (const AActor* Default : *Forecast)
 		{
-			if (Default->ActorHasTag(Tag)) { Matches.Add(const_cast<AActor*>(Default)); }
+			if (VBoRSeats::Matches(Default->Tags, Tag)) { Matches.Add(const_cast<AActor*>(Default)); }
 		}
 		if (Matches.Num() != 1) { Problems += FString::Printf(TEXT("Tag %s: found %d (need 1)\n"), *Tag.ToString(), Matches.Num()); return nullptr; }
 		return Matches[0];
@@ -252,6 +253,8 @@ void AVBoRScenarioRunner::BeginPlay()
 		InputComponent->BindKey(EKeys::Left, IE_Pressed, this, &AVBoRScenarioRunner::KeyPrevious);
 		InputComponent->BindKey(EKeys::One, IE_Pressed, this, &AVBoRScenarioRunner::KeyPassenger);
 		InputComponent->BindKey(EKeys::Two, IE_Pressed, this, &AVBoRScenarioRunner::KeyRear);
+		InputComponent->BindKey(EKeys::Three, IE_Pressed, this, &AVBoRScenarioRunner::KeyRearCenter);
+		InputComponent->BindKey(EKeys::Four, IE_Pressed, this, &AVBoRScenarioRunner::KeyRearRight);
 		InputComponent->BindKey(EKeys::Home, IE_Pressed, this, &AVBoRScenarioRunner::KeyReturn);
 		InputComponent->BindKey(EKeys::R, IE_Pressed, this, &AVBoRScenarioRunner::KeyRestart);
 		InputComponent->BindKey(EKeys::End, IE_Pressed, this, &AVBoRScenarioRunner::KeyFreeMode);
@@ -327,8 +330,17 @@ void AVBoRScenarioRunner::CheckSetup()
 	TArray<AVBoRHingedPanel*> Panels;
 	TArray<AVBoRAxisPart*> Handles;
 	TArray<FString> StartProblems, MirrorProblems;
+	auto SeatNotices = [&](const TArray<FName>& SeatTags)
+	{
+		for (const auto& Seat : VBoRSeats::Table)
+		{
+			if (Seat.LegacyTag && SeatTags.Contains(FName(Seat.LegacyTag)))
+			{ Notices.AddUnique(FString::Printf(TEXT("%s: rename to %s"), Seat.LegacyTag, Seat.Tag)); }
+		}
+	};
 	for (TActorIterator<AActor> It(World); It; ++It)
 	{
+		SeatNotices(It->Tags);
 		TArray<UVBoRVehicleAlignmentComponent*> Alignments; It->GetComponents(Alignments); AlignmentCount += Alignments.Num();
 		if (It->ActorHasTag(TEXT("Car.StartButton")))
 		{
@@ -338,6 +350,7 @@ void AVBoRScenarioRunner::CheckSetup()
 		TArray<UActorComponent*> Components; It->GetComponents(Components);
 		for (const UActorComponent* Component : Components)
 		{
+			SeatNotices(Component->ComponentTags);
 			if (Component->ComponentHasTag(TEXT("Car.StartButton")))
 			{ StartProblems.Add(FString::Printf(TEXT("%s.%s: Car.StartButton component tag ignored; put it on a poke button Actor"), *It->GetName(), *Component->GetName())); }
 		}
@@ -484,7 +497,8 @@ bool AVBoRScenarioRunner::InitializeFlow()
 	}
 	if (AlignmentCount != 1) { ValidationProblems += TEXT("Need 1 alignment component\n"); }
 	// Seat viewpoints never spawn/change during Play. Cache here for operator panel/free mode (P5o)
-	SeatViews[0] = ScanSeatView(TEXT("Car.PassengerView")); SeatViews[1] = ScanSeatView(TEXT("Car.RearView"));
+	for (int32 I = 0; I < UE_ARRAY_COUNT(SeatViews); ++I)
+	{ SeatViews[I] = ScanSeatView(VBoRSeats::Table[VBoRSeats::Passenger + I].Tag); }
 	if (!Scenario || Scenario->Steps.IsEmpty()) { ValidationProblems += TEXT("No scenario steps\n"); }
 	else
 	{
@@ -617,7 +631,7 @@ bool AVBoRScenarioRunner::IsViewpointStep(int32 Index) const
 bool AVBoRScenarioRunner::IsAtStepViewpoint() const
 {
 	const auto* View = CommandViewpoint(EVBoRFlowCommand::Viewpoint);
-	return Alignment && IsValid(View) && Alignment->IsAtViewpoint(View->ComponentHasTag(TEXT("Car.DriverView")) ? nullptr : View);
+	return Alignment && IsValid(View) && Alignment->IsAtViewpoint(VBoRSeats::Has(View->ComponentTags, VBoRSeats::Driver) ? nullptr : View);
 }
 
 void AVBoRScenarioRunner::EnterStep(int32 Index, bool bNewAttempt)
@@ -666,7 +680,7 @@ void AVBoRScenarioRunner::QueueCommand(const FVBoRFlowCommand& Command)
 	FVBoRFlowCommand Queued = Command;
 	// Long processing-frame dt never revives input received during lock (R1-1)
 	const bool bSeat = bFreeMode && Command.Source == EVBoRCommandSource::Participant &&
-		(Command.Action == EVBoRFlowCommand::Passenger || Command.Action == EVBoRFlowCommand::Rear || Command.Action == EVBoRFlowCommand::ReturnBase);
+		(Command.Action == EVBoRFlowCommand::Passenger || Command.Action == EVBoRFlowCommand::Rear || Command.Action == EVBoRFlowCommand::RearCenter || Command.Action == EVBoRFlowCommand::RearRight || Command.Action == EVBoRFlowCommand::ReturnBase);
 	Queued.bConfirmLocked = (Command.Action == EVBoRFlowCommand::Confirm || bSeat) && (ConfirmLockRemaining > 0 || bPanelPlacementPending);
 	PendingCommands.Add(Queued);
 }
@@ -751,7 +765,7 @@ void AVBoRScenarioRunner::Dispatch(const FVBoRFlowCommand& Command)
 	{
 		Alignment->FlowStarted(); bAlignmentIgnored = true; Record(TEXT("Operator start ignoring alignment")); bRunning = true; EnterStep(0, true); return;
 	}
-	if (Command.Action == EVBoRFlowCommand::Viewpoint || Command.Action == EVBoRFlowCommand::Passenger || Command.Action == EVBoRFlowCommand::Rear || Command.Action == EVBoRFlowCommand::ReturnBase || Command.Action == EVBoRFlowCommand::SeatAdvance)
+	if (Command.Action == EVBoRFlowCommand::Viewpoint || Command.Action == EVBoRFlowCommand::Passenger || Command.Action == EVBoRFlowCommand::Rear || Command.Action == EVBoRFlowCommand::RearCenter || Command.Action == EVBoRFlowCommand::RearRight || Command.Action == EVBoRFlowCommand::ReturnBase || Command.Action == EVBoRFlowCommand::SeatAdvance)
 	{
 		const bool bAccepted = ReturnsToBase(Command.Action) ? Alignment->ReturnToBase() : Alignment->SwitchViewpoint(CommandViewpoint(Command.Action));
 		if (!bAccepted) { ++TransitionDiscards; }
@@ -1033,8 +1047,7 @@ FString AVBoRScenarioRunner::ActionLabel() const
 		if (IsViewpointStep(TargetIndex))
 		{
 			const FName Tag = Scenario->Steps[TargetIndex].TargetTag;
-			if (Tag == TEXT("Car.PassengerView")) { return TEXT("Move to passenger seat"); }
-			if (Tag == TEXT("Car.RearView")) { return TEXT("Move to rear seat"); }
+			if (const auto* SeatTag = VBoRSeats::Find(Tag)) { return SeatTag->ActionLabel; }
 			return Tag.ToString() + TEXT(" viewpoint");
 		}
 	}
@@ -1192,6 +1205,8 @@ void AVBoRScenarioRunner::KeyNext() { QueueLive(EVBoRFlowCommand::Next, EVBoRCom
 void AVBoRScenarioRunner::KeyPrevious() { QueueLive(EVBoRFlowCommand::Previous, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyPassenger() { QueueLive(EVBoRFlowCommand::Passenger, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyRear() { QueueLive(EVBoRFlowCommand::Rear, EVBoRCommandSource::Operator); }
+void AVBoRScenarioRunner::KeyRearCenter() { QueueLive(EVBoRFlowCommand::RearCenter, EVBoRCommandSource::Operator); }
+void AVBoRScenarioRunner::KeyRearRight() { QueueLive(EVBoRFlowCommand::RearRight, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyReturn() { QueueLive(EVBoRFlowCommand::ReturnBase, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyRestart() { QueueLive(EVBoRFlowCommand::Restart, EVBoRCommandSource::Operator); }
 void AVBoRScenarioRunner::KeyFreeMode() { QueueLive(EVBoRFlowCommand::EnterFreeMode, EVBoRCommandSource::Operator); }

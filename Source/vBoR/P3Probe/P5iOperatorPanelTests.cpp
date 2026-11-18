@@ -697,7 +697,7 @@ bool FP5oSeatViews::RunTest(const FString&)
 {
 	FP5iWorld W;
 	// E1: Find passenger/rear once at startup. No per-frame lookup in operator/free-mode panel
-	TestEqual(TEXT("Start check scans each seat once"),FP5iTestAccess::Scans(W.Runner),2);
+	TestEqual(TEXT("Start check scans each seat once"),FP5iTestAccess::Scans(W.Runner),4);
 	W.Free(); FP5iTestAccess::ResetScans(W.Runner);
 	for (int32 I = 0; I < 5; ++I) { W.Ready(); W.Runner->GetOperatorSnapshot(); }
 	TestEqual(TEXT("Free-mode frames and snapshots do not scan"),FP5iTestAccess::Scans(W.Runner),0);
@@ -712,7 +712,7 @@ bool FP5oSeatViews::RunTest(const FString&)
 	TestEqual(TEXT("Destroyed passenger view"),W.Runner->EvaluateOperatorButton(B::Passenger).Reason,FString(TEXT("Seat not found")));
 	TestFalse(TEXT("Free seat buttons need both seats"),FP5iTestAccess::SeatButtonsShown(W.Runner));
 	W.Runner->InitializeFlow(); W.Ready();
-	TestEqual(TEXT("Next start check scans again"),FP5iTestAccess::Scans(W.Runner),2);
+	TestEqual(TEXT("Next start check scans again"),FP5iTestAccess::Scans(W.Runner),4);
 	TestEqual(TEXT("Duplicate rear seen at the next start check"),W.Runner->EvaluateOperatorButton(B::Rear).Reason,FString(TEXT("Seat not found")));
 	return true;
 }

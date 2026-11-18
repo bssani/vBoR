@@ -3,6 +3,7 @@
 #include "VBoRVehiclePowerComponent.h"
 #include "VBoRVehicleAlignmentComponent.h"
 #include "VBoRViewpointComponent.h"
+#include "VBoRSeatTags.h"
 #include "../Spectator/VBoRSpectatorModel.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -27,6 +28,8 @@ namespace
 		case EVBoROperatorButton::Driver: return EVBoRFlowCommand::ReturnBase;
 		case EVBoROperatorButton::Passenger: return EVBoRFlowCommand::Passenger;
 		case EVBoROperatorButton::Rear: return EVBoRFlowCommand::Rear;
+		case EVBoROperatorButton::RearCenter: return EVBoRFlowCommand::RearCenter;
+		case EVBoROperatorButton::RearRight: return EVBoRFlowCommand::RearRight;
 		case EVBoROperatorButton::Reapply: return EVBoRFlowCommand::ReapplyAlignment;
 		case EVBoROperatorButton::Free: return EVBoRFlowCommand::EnterFreeMode;
 		case EVBoROperatorButton::Reload: return EVBoRFlowCommand::ReloadLevel;
@@ -45,7 +48,7 @@ namespace
 		return TEXT("Change viewpoint");
 	}
 	bool SeatAction(EVBoRFlowCommand Action)
-	{ return Action == EVBoRFlowCommand::ReturnBase || Action == EVBoRFlowCommand::Viewpoint || Action == EVBoRFlowCommand::Passenger || Action == EVBoRFlowCommand::Rear || Action == EVBoRFlowCommand::SeatAdvance; }
+	{ return Action == EVBoRFlowCommand::ReturnBase || Action == EVBoRFlowCommand::Viewpoint || Action == EVBoRFlowCommand::Passenger || Action == EVBoRFlowCommand::Rear || Action == EVBoRFlowCommand::RearCenter || Action == EVBoRFlowCommand::RearRight || Action == EVBoRFlowCommand::SeatAdvance; }
 	EVBoROperatorStyle ButtonStyle(EVBoROperatorButton Button, const FVBoRCommandDecision& Decision, bool bReapplyPrimary, const FString& Badge)
 	{
 		if (!Decision.bAccepted) { return EVBoROperatorStyle::Disabled; }
@@ -69,7 +72,8 @@ UVBoRViewpointComponent* AVBoRScenarioRunner::CommandViewpoint(EVBoRFlowCommand 
 		return IsViewpointStep(Index) && Targets.IsValidIndex(Index) ? Cast<UVBoRViewpointComponent>(Targets[Index]) : nullptr;
 	}
 	// Use startup validation cache. Null if missing/ambiguous/deleted (P5o)
-	return SeatViews[Action == EVBoRFlowCommand::Passenger ? 0 : 1].Get();
+	const int32 Index = Action == EVBoRFlowCommand::Passenger ? 0 : Action == EVBoRFlowCommand::Rear ? 1 : Action == EVBoRFlowCommand::RearCenter ? 2 : 3;
+	return SeatViews[Index].Get();
 }
 
 UVBoRViewpointComponent* AVBoRScenarioRunner::ScanSeatView(FName Tag) const
@@ -82,10 +86,10 @@ UVBoRViewpointComponent* AVBoRScenarioRunner::ScanSeatView(FName Tag) const
 	for (TActorIterator<AActor> It(GetWorld()); It; ++It)
 	{
 		TArray<UVBoRViewpointComponent*> Views; It->GetComponents(Views);
-		if (It->ActorHasTag(Tag)) { ++Matches; Found = Views.Num() == 1 ? Views[0] : nullptr; }
+		if (VBoRSeats::Matches(It->Tags, Tag)) { ++Matches; Found = Views.Num() == 1 ? Views[0] : nullptr; }
 		TArray<UActorComponent*> Components; It->GetComponents(Components);
 		for (UActorComponent* Component : Components)
-		{ if (Component->ComponentHasTag(Tag)) { ++Matches; Found = Cast<UVBoRViewpointComponent>(Component); } }
+		{ if (VBoRSeats::Matches(Component->ComponentTags, Tag)) { ++Matches; Found = Cast<UVBoRViewpointComponent>(Component); } }
 	}
 	return Matches == 1 ? Found : nullptr;
 }
@@ -105,7 +109,7 @@ FVBoRCommandDecision AVBoRScenarioRunner::EvaluateCommand(const FVBoRFlowCommand
 	const bool bOperator = Command.Source == EVBoRCommandSource::Operator;
 	const auto Action = Command.Action;
 	if (!bOperator && Action != EVBoRFlowCommand::Confirm && Action != EVBoRFlowCommand::Viewpoint && Action != EVBoRFlowCommand::ReturnBase && Action != EVBoRFlowCommand::SeatAdvance &&
-		!(bFreeMode && (Action == EVBoRFlowCommand::Passenger || Action == EVBoRFlowCommand::Rear)))
+		!(bFreeMode && (Action == EVBoRFlowCommand::Passenger || Action == EVBoRFlowCommand::Rear || Action == EVBoRFlowCommand::RearCenter || Action == EVBoRFlowCommand::RearRight)))
 	{ return Reject(EVBoRDiscard::Permission, TEXT("Operator only"), TEXT("Command discarded — confirmation not permitted")); }
 	if (Action == EVBoRFlowCommand::CapturePoint || Action == EVBoRFlowCommand::SavePoints || Action == EVBoRFlowCommand::CancelPoints)
 	{
@@ -297,7 +301,7 @@ FString AVBoRScenarioRunner::OperatorButtonBadge(EVBoROperatorButton Button, UVB
 	if (Button == EVBoROperatorButton::Info) { return bOperatorInfo ? TEXT("On") : TEXT("Off"); }
 	if (!Alignment || Alignment->IsSwitching()) { return FString(); }
 	if ((Button == EVBoROperatorButton::Driver && Alignment->IsBaseViewpoint()) ||
-		((Button == EVBoROperatorButton::Passenger || Button == EVBoROperatorButton::Rear) && Alignment->IsAtViewpoint(Viewpoint))) { return TEXT("Current"); }
+		((Button == EVBoROperatorButton::Passenger || Button == EVBoROperatorButton::Rear || Button == EVBoROperatorButton::RearCenter || Button == EVBoROperatorButton::RearRight) && IsValid(Viewpoint) && Alignment->IsAtViewpoint(Viewpoint))) { return TEXT("Current"); }
 	return FString();
 }
 

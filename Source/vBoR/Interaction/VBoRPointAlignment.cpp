@@ -2,6 +2,7 @@
 #include "VBoRAlignPointComponent.h"
 #include "VBoREyePointComponent.h"
 #include "VBoRViewpointComponent.h"
+#include "VBoRSeatTags.h"
 #include "VBoRHandRigPawn.h"
 #include "Engine/Engine.h"
 #include "Engine/World.h"
@@ -39,8 +40,12 @@ USceneComponent* UVBoRVehicleAlignmentComponent::DriverSeatReference(FString& Fa
 	UVBoRViewpointComponent* Driver = nullptr;
 	for (auto* View : Views)
 	{
-		if (!View->ComponentHasTag(TEXT("Car.DriverView"))) { continue; }
-		if (Driver) { Failure = TEXT("Multiple Car.DriverView points"); return nullptr; }
+		if (!VBoRSeats::Has(View->ComponentTags, VBoRSeats::Driver)) { continue; }
+		if (Driver)
+		{
+			const auto& Seat = VBoRSeats::Table[VBoRSeats::Driver];
+			Failure = FString::Printf(TEXT("Multiple %s / %s points"), Seat.Tag, Seat.LegacyTag); return nullptr;
+		}
 		Driver = View;
 	}
 	return Driver ? static_cast<USceneComponent*>(Driver) : BaseEye.Get();

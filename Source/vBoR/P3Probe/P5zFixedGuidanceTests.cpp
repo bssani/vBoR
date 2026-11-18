@@ -323,7 +323,7 @@ bool FR12Consecutive::RunTest(const FString&)
 	TestEqual(TEXT("Arrival alone keeps passenger step"), E.Runner->GetStepIndex(), 1);
 	TestTrue(TEXT("Passenger panel follows arrival"), E.AtAnchor(TEXT("Guide.Passenger")));
 	TestTrue(TEXT("Only action shown at passenger seat"), !Action->IsHidden() && FP5zTestAccess::Button(E.Runner, 0)->IsHidden());
-	TestEqual(TEXT("Passenger button"), FP5zTestAccess::ActionLabel(E.Runner), FString(TEXT("Move to rear seat")));
+	TestEqual(TEXT("Passenger button"), FP5zTestAccess::ActionLabel(E.Runner), FString(TEXT("Move to rear left seat")));
 	E.Action(); E.FinishSwitch();
 	TestEqual(TEXT("Seat advance completes passenger step"), E.Runner->GetStepIndex(), 2);
 	TestTrue(TEXT("Rear seat and panel reached"), E.Car->Alignment->IsAtViewpoint(E.Car->RearView) && E.AtAnchor(TEXT("Guide.Rear")));
@@ -371,10 +371,10 @@ bool FR12Operator::RunTest(const FString&)
 	E.Action(); E.FinishSwitch(); E.Ready(); E.Command(EVBoRFlowCommand::Confirm);
 	TestEqual(TEXT("Operator completed passenger step"), E.Runner->GetStepIndex(), 2);
 	TestTrue(TEXT("Operator confirm leaves participant in passenger seat"), E.Car->Alignment->IsAtViewpoint(E.Car->PassengerView) && E.AtAnchor(TEXT("Guide.Passenger")));
-	TestEqual(TEXT("Next step offers rear move"), FP5zTestAccess::ActionLabel(E.Runner), FString(TEXT("Move to rear seat")));
+	TestEqual(TEXT("Next step offers rear move"), FP5zTestAccess::ActionLabel(E.Runner), FString(TEXT("Move to rear left seat")));
 	E.Command(EVBoRFlowCommand::Previous);
 	TestEqual(TEXT("Previous returns to passenger step"), E.Runner->GetStepIndex(), 1);
-	TestEqual(TEXT("Already seated, action targets next seat"), FP5zTestAccess::ActionLabel(E.Runner), FString(TEXT("Move to rear seat")));
+	TestEqual(TEXT("Already seated, action targets next seat"), FP5zTestAccess::ActionLabel(E.Runner), FString(TEXT("Move to rear left seat")));
 	FP5zTestAccess::NewInputFrame(E.Runner); E.Key(EKeys::Home); E.FinishSwitch();
 	TestEqual(TEXT("Back at driver, action targets current step"), FP5zTestAccess::ActionLabel(E.Runner), FString(TEXT("Move to passenger seat")));
 	return true;
