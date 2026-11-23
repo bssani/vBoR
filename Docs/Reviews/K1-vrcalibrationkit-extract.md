@@ -49,6 +49,25 @@
   - 다시 만든 뒤 인쇄 크기를 확인한다. 300 dpi로 다시 그려 ID 1–4가 인식되고 한 변이 60.0·80.0 mm여야 한다. vBoR 때와 같은 확인이다.
 - **확인할 시험:** 자동 시험 없음. 보고 ⑤에 위 인쇄 크기 확인 결과를 적는다.
 
+### R1-3 코드·리포에 vBoR에서 온 이름이 남아 있다 — 열림 (사용자 2026-11-24 "기능은 같지만 이름은 달라야 한다")
+
+- **문제:** public 리포에 원 프로젝트를 드러내는 이름이 남아 있다.
+  - `README.md:11` 출처 줄. vBoR 링크다.
+  - 저장 파일 이름 `BuckEye.json`: `VRCalAlignmentComponent.cpp:40`, `MarkerTests.cpp:520`, `ProfileTests.cpp:31`·`:393`. 옛 눈 정렬에서 온 이름이다.
+  - 시험 클래스 이름 `FM3b*`·`FM3c*`(`AnchorTests.cpp:17-133`, `ProfileTests.cpp:398`)와 `M2Flags`.
+  - 시험 문구 `"M1 fit"`(`ProfileTests.cpp:360-361`).
+  - vBoR 리뷰 ID를 단 시험 경로: `Anchors.R1WaitForAnchorActorPose`, `Anchors.R1MarkerAnchorSaveNotice`.
+  - 마커 PDF 머리글(R1-2).
+- **제안:**
+  - README 출처 줄을 지운다.
+  - 기본 저장 파일을 `Saved/Calibration/Alignment.json`으로 바꾼다. Buck 프로필 경로 `Bucks/<Name>.json`과 `ActiveBuck.txt`는 그대로 둔다. "buck"은 실물 목업을 뜻하는 일반 용어다.
+  - 시험 클래스와 경로를 기능 이름으로 바꾼다. 예: `FAnchorDisabledTest`, `VRCalibrationKit.Anchors.WaitForAnchorActorPose`.
+  - **파일 형식(v2 필드)은 그대로 둔다.** 기존 파일은 이름만 바꾸면 읽힌다. 명세 §2의 호환은 형식 호환으로 본다.
+  - 설명서 `Docs/Integration-Guide.md`(Claude 작성)가 이 이름(`Alignment.json`)과 R1-1(루트 scale 1)을 이미 쓴다. 이름을 다르게 정하면 설명서도 같이 고친다.
+- **확인할 시험:**
+  - `git grep -n -i -E "vbor|buckeye|M3b|M3c|M2Flags|M1 fit"` 결과가 0줄이어야 한다(PDF 포함, `git grep -a`).
+  - 바꾼 시험 이름으로 전체 시험이 통과해야 한다.
+
 ### 질문
 (없음)
 
