@@ -24,7 +24,7 @@
   - `VRCalibrationKit.*` 45/45 통과, EXIT 0(`Saved/Logs/ClaudeK1Review.log`).
   - 맵 로드는 Codex 보고를 그대로 받았다. Claude는 재현하지 않았다.
 
-### R1-1 차 루트에 크기(scale)가 있으면 Pawn도 같은 크기가 되고, 오류 이유가 엉뚱하다 — 열림
+### R1-1 차 루트에 크기(scale)가 있으면 Pawn도 같은 크기가 되고, 오류 이유가 엉뚱하다 — 반영함 (`0899e10`)
 
 - **문제:**
   - `VRCalAlignmentComponent.cpp` `FitCaptured`는 정렬점을 `GetActorTransform().InverseTransformPosition`으로 차 기준 좌표로 바꾼다. 그래서 차 루트의 scale로 나눈 값이 된다.
@@ -39,7 +39,7 @@
   - 차 루트 scale (2,2,2) → `InitializeAlignment` 뒤 `NeedsCheck`, 이유에 `scale`, Pawn이 붙지 않고 그대로.
   - 같은 상태에서 `SaveMarkerPoints`가 실패하고 이유에 `scale`.
 
-### R1-2 마커 PDF 본문에 "vBoR marker set"이 인쇄된다 — 열림
+### R1-2 마커 PDF 본문에 "vBoR marker set"이 인쇄된다 — 반영함 (`0899e10`)
 
 - **문제:** `Docs/Markers/markers_aruco4x4_ID1-4.pdf`의 각 쪽 머리글이 `vBoR marker set - ArUco DICT_4X4_50, 60 mm`다(PDF 본문 문자열). public 리포의 인쇄물에 private 프로젝트 이름이 찍힌다. 명세 §2의 "출처 표기 예외"는 출처 한 줄을 뜻했고, 인쇄 제목까지 뜻하지 않았다.
 - **제안:**
@@ -49,7 +49,7 @@
   - 다시 만든 뒤 인쇄 크기를 확인한다. 300 dpi로 다시 그려 ID 1–4가 인식되고 한 변이 60.0·80.0 mm여야 한다. vBoR 때와 같은 확인이다.
 - **확인할 시험:** 자동 시험 없음. 보고 ⑤에 위 인쇄 크기 확인 결과를 적는다.
 
-### R1-3 코드·리포에 vBoR에서 온 이름이 남아 있다 — 열림 (사용자 2026-11-24 "기능은 같지만 이름은 달라야 한다")
+### R1-3 코드·리포에 vBoR에서 온 이름이 남아 있다 — 반영함 (`0899e10`) (사용자 2026-11-24 "기능은 같지만 이름은 달라야 한다")
 
 - **문제:** public 리포에 원 프로젝트를 드러내는 이름이 남아 있다.
   - `README.md:11` 출처 줄. vBoR 링크다.
@@ -74,3 +74,15 @@
 ### 참고 (지적 아님)
 - README 출처 줄이 private 리포 `bssani/vBoR`를 링크한다. 다른 사람에게는 404가 뜨고 이름만 보인다. 남길지는 사용자가 정한다.
 - 라이선스 파일이 없다. 명세대로다. 사용자가 정할 일이다.
+
+## 2회차 (2026-11-24, `0899e10`)
+
+**판정: 통과. PR #1을 머지한다.** Quest 3 `not-tested`.
+
+- R1-1: `InitializeSetup`과 `SaveMarkerPoints`가 루트 scale을 축마다 1e-3 허용으로 검사한다. 거부하면 `NeedsCheck`와 이유를 남기고, Pawn을 붙이지 않으며 파일도 만들지 않는다.
+  - `LoadSetupAlignment`는 저장값이 없을 때도 scale 이유를 덮어쓰지 않는다.
+  - `K1.E8RootScale`이 2·0.1·비균일·음수·1.002를 거부하고 1.0005를 허용하는지 확인한다.
+- R1-2: PDF 머리글을 바꿨다. 생성·검증 스크립트 `Scripts/generate_markers.py`가 있다. Codex 보고: 300 dpi에서 ID 1–4가 인식되고 한 변이 60.000·80.000 mm다. 실제 프린터 출력은 사용자가 확인한다.
+- R1-3: `git grep -n -i -a -E "vbor|buckeye|M3b|M3c|M2Flags|M1 fit"` 결과 0줄(Claude 확인). 기본 파일 `Alignment.json`. README의 출처 줄을 빼고 설명서 링크를 넣었다. 설명서에 scale 규칙과 메시지를 반영했다.
+- 재현(Claude): 에디터 빌드 성공. `VRCalibrationKit.*` 46/46 통과, EXIT 0(`Saved/Logs/ClaudeK1Review2.log`).
+- 보고 ③: 이름 검색을 다시 하다가 빌드와 시험을 한 번 더 했다. 이유가 타당하다.
