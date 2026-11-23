@@ -102,6 +102,7 @@ void UVBoRVehicleAlignmentComponent::BeginAnchorDiscovery()
 {
 	bFindingAnchor = true; AnchorStarted = GetWorld()->GetRealTimeSeconds();
 	AnchorDiscoveryResult = int32(EOculusXRAnchorResult::Failure);
+	bAnchorCandidate = false; AnchorPoseChanges = 0;
 #if WITH_DEV_AUTOMATION_TESTS
 	if (AnchorRequestForTest) { AnchorRequestForTest(); return; }
 #endif
@@ -164,12 +165,23 @@ void UVBoRVehicleAlignmentComponent::AdvanceAnchorDiscovery()
 		bAnchorLocationValidForTest ||
 #endif
 		(UAnchorLibrary::TryGetAnchorTransformByHandle(LocatedAnchor->GetHandle(), Pose, Flags) && Flags.IsValid());
-	if (bLocated)
+	if (!bLocated) { bAnchorCandidate = false; return; }
+	// Owner includes Link head-space correction (M3a); cache Stage before moving Pawn
+	const FTransform Stage = AnchorWorld.GetRelativeTransform(AlignmentPawn->GetActorTransform());
+	// Link reports unsettled pose in first frames (L_Main read at +0.03 s was wrong, M3c).
+	// Use only after pose holds within tolerance of window start for AnchorStableSeconds
+	const double Now = GetWorld()->GetRealTimeSeconds();
+	const bool bSame = bAnchorCandidate &&
+		FVector::Dist(Stage.GetLocation(), AnchorCandidateStage.GetLocation()) <= AnchorStableCm &&
+		FMath::RadiansToDegrees(Stage.GetRotation().AngularDistance(AnchorCandidateStage.GetRotation())) <= AnchorStableDeg;
+	if (!bSame)
 	{
-		// Owner includes Link head-space correction (M3a); cache Stage before moving Pawn
-		const FTransform Stage = AnchorWorld.GetRelativeTransform(AlignmentPawn->GetActorTransform());
-		FinishAnchorDiscovery(&Stage, int32(EOculusXRAnchorResult::Success));
+		if (bAnchorCandidate) { ++AnchorPoseChanges; }
+		bAnchorCandidate = true; AnchorCandidateStage = Stage; AnchorStableSince = Now;
+		return;
 	}
+	if (Now - AnchorStableSince < AnchorStableSeconds) { return; }
+	FinishAnchorDiscovery(&Stage, int32(EOculusXRAnchorResult::Success));
 }
 
 void UVBoRVehicleAlignmentComponent::FinishAnchorDiscovery(const FTransform* Stage, int32 Result)
@@ -180,10 +192,20 @@ void UVBoRVehicleAlignmentComponent::FinishAnchorDiscovery(const FTransform* Sta
 	if (Stage) { LocatedAnchorStage = *Stage; LocatedAnchorUuid = Saved.AnchorUuid; }
 	else { LocatedAnchorUuid.Reset(); ClearAnchorActors(); }
 	const auto Value = Saved;
+	FString Found;
+	if (Stage)
+	{
+		// Stage drift = how far room moved in Stage coords since save. Near 0 if headset never slept (M3c)
+		const FVector Move = Stage->GetLocation() - Value.AnchorStage.GetLocation();
+		const double Yaw = FMath::FindDeltaAngleDegrees(Value.AnchorStage.Rotator().Yaw, Stage->Rotator().Yaw);
+		Found = FString::Printf(TEXT("anchor found result=%d after %.2f s, pose changes %d | Stage drift since save XY %.2f cm Z %+.2f cm Yaw %+.2f deg"),
+			Result, GetWorld()->GetRealTimeSeconds() - AnchorStarted, AnchorPoseChanges, Move.Size2D(), Move.Z, Yaw);
+	}
 	int32 Origin; FVector2D Bounds; ReadPointEnvironment(Origin, Bounds);
 	InitializeSetup(AlignmentPawn, &Value, Origin, Bounds, true);
-	AnchorResult(Stage ? FString::Printf(TEXT("anchor found result=%d"), Result) :
-		FString::Printf(TEXT("anchor not found result=%d; using saved Stage points"), Result));
+	AnchorResult(Stage ? Found :
+		// Pose changes > 0 here = anchor seen but never settled within timeout (M3c)
+		FString::Printf(TEXT("anchor not found result=%d, pose changes %d; using saved Stage points"), Result, AnchorPoseChanges));
 	if (Stage && LocatedAnchor.IsValid())
 	{
 		RemoveTickPrerequisiteComponent(LocatedAnchor.Get()); LocatedAnchor->GetOwner()->Destroy(); LocatedAnchor.Reset();

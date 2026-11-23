@@ -81,6 +81,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Alignment") TObjectPtr<UVBoREyePointComponent> BaseEye;
 	UPROPERTY(EditAnywhere, Category="Alignment", meta=(Units="s", ClampMin="0.01")) float FadeSeconds = 0.3;
 	UPROPERTY(EditAnywhere, Category="Home test", meta=(Units="cm", ClampMin="0")) float HomeShiftStepCm = 100;
+	UPROPERTY(EditAnywhere, Category="Anchor alignment", meta=(Units="s", ClampMin="0", ToolTip="Anchor pose must hold still this long before use (Link first frames unsettled, M3c)")) double AnchorStableSeconds = 1;
+	UPROPERTY(EditAnywhere, Category="Anchor alignment", meta=(Units="cm", ClampMin="0")) double AnchorStableCm = 0.5;
+	UPROPERTY(EditAnywhere, Category="Anchor alignment", meta=(Units="deg", ClampMin="0")) double AnchorStableDeg = 0.5;
 	UPROPERTY(EditAnywhere, Category="Alignment", meta=(Units="cm", ClampMin="0")) float PlayAreaToleranceCm = 1;
 	UPROPERTY(EditAnywhere, Category="Alignment", meta=(ToolTip="Pawn height from the virtual floor, not from the saved head height (physical seat at real car height, U-17)")) bool bHeightFromFloor = true;
 	UPROPERTY(EditAnywhere, Category="Alignment", meta=(Units="cm", EditCondition="bHeightFromFloor")) float FloorWorldZCm = 0;
@@ -131,6 +134,10 @@ private:
 	int32 AnchorDiscoveryResult = 0;
 	uint32 AnchorSaveSerial = 0;
 	uint64 AnchorActorCreatedFrame = 0;
+	bool bAnchorCandidate = false;
+	FTransform AnchorCandidateStage = FTransform::Identity;
+	double AnchorStableSince = 0;
+	int32 AnchorPoseChanges = 0;
 	FTransform AnchorActorInitialWorld = FTransform::Identity;
 	TWeakObjectPtr<AActor> PendingAnchorActor;
 	TWeakObjectPtr<UOculusXRAnchorComponent> LocatedAnchor;
