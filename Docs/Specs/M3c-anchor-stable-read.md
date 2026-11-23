@@ -37,14 +37,36 @@ M3b는 "앵커 Actor가 처음 자리에서 한 번 움직이면 바로 읽는�
   - `Stage drift`는 저장 뒤 Stage 원점이 방에 대해 옮겨진 양이다. 헤드셋이 쉬지 않았으면 0에 가까워야 한다.
   - `pose changes`는 기다리는 동안 자세가 튄 횟수다.
   - 10초 안에 못 쓰면 `anchor not found result=…, pose changes <횟수>; using saved Stage points`가 나온다. 횟수가 0보다 크면 앵커는 보였지만 멈추지 않은 것이다.
-- **바꾸지 않은 것:** 앵커 저장, 파일 형식, 진행자 A, 스위치 0일 때의 동작.
+- **D3. 앵커 자세를 Stage(tracking) 좌표로 직접 읽기 (2회차, 집 시험 뒤 추가).**
+  - 불러올 때: 앵커 Actor의 World 자세를 Pawn 기준으로 바꾸던 것을 그만두고, `TryGetAnchorTransformByHandle(..., EOculusXRAnchorSpace::Tracking)`으로 Stage 자세를 바로 읽는다.
+  - 저장할 때: 요청한 자세(점 중심) 대신, 만들어진 앵커의 Stage 자세를 읽어 `AnchorStage`로 적는다. 읽지 못하면 앵커 없이 저장한다(`anchor pose unavailable after save`).
+  - 저장 로그에 `created vs requested XY … cm Z … cm Yaw … deg`를 단다. Link 생성 경로가 앵커를 얼마나 옮겨 만드는지 보는 값이다.
+  - 근거:
+    - 에디터 빌드의 Link 전용 경로는 앵커 Actor 자세를 카메라 관리자 자세와 현재 머리 자세를 섞어 만든다(`Plugins/MetaXR/Source/OculusXRAnchors/Private/OculusXRAnchorComponent.cpp:150-164`, `:188-202`).
+    - 기본 World 값에는 이미 Pawn이 들어 있다(OpenXR `Private/openxr/OculusXRAnchorsXR.cpp:548-556`).
+    - 그래서 읽은 값이 Pawn 자리와 머리 움직임에 따라 달라졌다고 본다(아래 표).
+    - Tracking 값은 `xrLocateSpace`를 tracking(Stage) 공간 기준으로 부른 결과 그대로다(`:529`, `:558-562`).
+    - 앵커를 만드는 쪽도 같은 방식으로 섞는다(`Private/OculusXRAnchorFunctionsOVR.cpp:98-118`). 그래서 요청한 자세를 그대로 믿지 않는다.
+  - 시험(자동)에는 XR 세션이 없다. 그래서 `bAnchorLocationValidForTest`일 때만 예전처럼 Actor 자세로 대신한다. 기기 경로는 Quest에서만 확인된다.
+- **바꾸지 않은 것:** 파일 형식, 진행자 A, 스위치 0일 때의 동작.
+
+**집 시험 (2026-11-23 밤, D1·D2만 있을 때):**
+
+| 시각 | 레벨 | 결과 |
+|---|---|---|
+| 23:06 | L_Main | 고개를 움직임 → `not found … pose changes 91` |
+| 23:09 | L_Main | 고개를 멈춤 → `found after 4.43 s, pose changes 2`, drift XY 67.9 cm |
+| 23:12 | 마커 | **같은 앵커** → drift XY 200 cm, Z +110 cm. `Marker fit vs pawn` dX −187 cm |
+| 23:13 → 23:13:13 | 마커 저장 → L_Main | 저장 8초 뒤, 흔들림 0인데 drift 93 cm, 28° |
+
+같은 앵커를 레벨마다 다르게 읽었다. 그래서 D1(멈춘 뒤 읽기)만으로는 부족하고, 읽는 좌표가 틀렸다고 판단했다(D3).
 
 **현장에서 앵커가 틀렸을 때 되돌리는 법(기존 동작):** `~` 콘솔에 `vBoR.AnchorAlignment 0`을 넣고 진행자 A를 누른다. 저장 좌표만으로 다시 놓는다.
 
 ## 3. 바뀐 파일
 
 - `Source/vBoR/Interaction/VBoRVehicleAlignmentComponent.h`: 설정 3개, 내부 상태 4개
-- `Source/vBoR/Interaction/VBoRAnchorAlignment.cpp`: `BeginAnchorDiscovery`(창 초기화), `AdvanceAnchorDiscovery`(D1), `FinishAnchorDiscovery`(D2)
+- `Source/vBoR/Interaction/VBoRAnchorAlignment.cpp`: `BeginAnchorDiscovery`(창 초기화), `AdvanceAnchorDiscovery`(D1·D3), `FinishAnchorDiscovery`(D2), `SaveAlignmentAnchor` 저장 콜백(D3), `ReadTrackingStage`(D3)
 - `Source/vBoR/M1Probe/M3bAnchorAlignmentTests.cpp`: 아래 시험
 
 ## 4. 시험
@@ -55,13 +77,14 @@ M3b는 "앵커 Actor가 처음 자리에서 한 번 움직이면 바로 읽는�
   - 0.2 cm 흔들림은 창을 유지하지만, 시간이 지나기 전에는 기다린다.
   - 멈춘 뒤에는 E3과 같은 보정을 한다.
   - 기록 줄이 `anchor found result=0`으로 시작하고, `pose changes 1`과 `Yaw +15.00 deg`를 담는다.
-- 나머지 M3b 단언은 바꾸지 않았다.
+- 나머지 M3b 단언은 바꾸지 않았다. D3은 시험을 바꾸지 않았다(기기 API라 자동 시험으로는 확인되지 않는다).
+- **주의:** `Config/UserEngine.ini`에 `vBoR.AnchorAlignment=1`이 있으면 자동 시험에도 적용된다. 그러면 `vBoR.M2.E9MarkerSave`가 실패한다(저장 알림 문구가 앵커 쪽으로 바뀜). 전체 시험은 이 파일을 잠시 치우고 돌린다.
 
 ## 5. Quest 3에서 확인할 것 (`not-tested`)
 
 시험 PC에서 이 브랜치를 받아 빌드한다. `Config/UserEngine.ini`에 `vBoR.AnchorAlignment=1`을 넣는다.
 
-1. 마커 레벨에서 **M → S를 한 번만** 한다. `anchor saved`가 나와야 한다.
+1. 마커 레벨에서 **M → S를 한 번만** 한다. `anchor saved … created vs requested …`가 나와야 한다. 이 값은 기록용이다.
 2. 헤드셋을 쓴 채 `L_Main`을 Play한다.
    - 로그 `anchor found … after 1.xx s … Stage drift since save XY ≈ 0`이 나와야 한다.
    - 차가 실물 좌석에 맞아야 한다.

@@ -23,6 +23,14 @@ namespace
 		const FName Name = GEngine->XRSystem->GetSystemName();
 		return Name == TEXT("OpenXR") || Name == TEXT("OculusXRHMD");
 	}
+	// Anchor pose in tracking (Stage) space, cm. Not the Actor/World pose: editor Link path mixes
+	// camera and head pose there, so it moved with Pawn placement and head motion (M3c D3)
+	bool ReadTrackingStage(const UOculusXRAnchorComponent* Anchor, FTransform& OutStage)
+	{
+		FOculusXRAnchorLocationFlags Flags;
+		return Anchor && UAnchorLibrary::TryGetAnchorTransformByHandle(Anchor->GetHandle(), OutStage, Flags, EOculusXRAnchorSpace::Tracking) &&
+			Flags.IsValid() && !OutStage.ContainsNaN();
+	}
 }
 
 bool UVBoRVehicleAlignmentComponent::AnchorAlignmentEnabled()
@@ -84,11 +92,20 @@ void UVBoRVehicleAlignmentComponent::SaveAlignmentAnchor(const FString& Path, co
 					if (Serial != AnchorSaveSerial) { return; }
 					FString Failure;
 					auto Value = Candidate;
+					FTransform Created;
+					if (UAnchorLibrary::IsAnchorResultSuccess(SavedCode) && !Anchors.IsEmpty() && IsValid(Anchors[0]) &&
+						!ReadTrackingStage(Anchors[0], Created))
+					{ AnchorResult(TEXT("anchor pose unavailable after save; alignment saved without anchor")); ClearAnchorActors(); return; }
 					if (UAnchorLibrary::IsAnchorResultSuccess(SavedCode) && !Anchors.IsEmpty() && IsValid(Anchors[0]))
 					{
-						Value.AnchorUuid = Anchors[0]->GetUUID().ToString(); Value.AnchorStage = Stage;
+						// Store where the anchor really is, not the requested pose (Link create path offsets it, M3c D3)
+						Value.AnchorUuid = Anchors[0]->GetUUID().ToString(); Value.AnchorStage = Created;
+						const FVector Off = Created.GetLocation() - Stage.GetLocation();
 						if (FVBoRBuckAlignmentStore::Save(Path, Value, Failure))
-						{ AnchorResult(FString::Printf(TEXT("anchor saved UUID=%s result=%d"), *Value.AnchorUuid, int32(SavedCode))); }
+						{
+							AnchorResult(FString::Printf(TEXT("anchor saved UUID=%s result=%d | created vs requested XY %.2f cm Z %+.2f cm Yaw %+.2f deg"),
+								*Value.AnchorUuid, int32(SavedCode), Off.Size2D(), Off.Z, FMath::FindDeltaAngleDegrees(Stage.Rotator().Yaw, Created.Rotator().Yaw)));
+						}
 						else { AnchorResult(FString::Printf(TEXT("anchor file save failed result=%d: %s; alignment saved without anchor"), int32(SavedCode), *Failure)); }
 					}
 					else { AnchorResult(FString::Printf(TEXT("anchor save failed result=%d; alignment saved without anchor"), int32(SavedCode))); }
@@ -159,15 +176,15 @@ void UVBoRVehicleAlignmentComponent::AdvanceAnchorDiscovery()
 	const FTransform AnchorWorld = LocatedAnchor->GetOwner()->GetActorTransform();
 	// Spawn has no pose; wait for the plugin's Link correction Tick (M3b review R1)
 	if (GFrameCounter <= AnchorActorCreatedFrame || AnchorWorld.Equals(AnchorActorInitialWorld)) { return; }
-	FOculusXRAnchorLocationFlags Flags; FTransform Pose;
-	const bool bLocated =
+	FTransform Stage;
+	bool bLocated = false;
 #if WITH_DEV_AUTOMATION_TESTS
-		bAnchorLocationValidForTest ||
+	// No XR session in tests: Actor pose relative to Pawn stands in for the tracking read
+	if (bAnchorLocationValidForTest) { Stage = AnchorWorld.GetRelativeTransform(AlignmentPawn->GetActorTransform()); bLocated = true; }
 #endif
-		(UAnchorLibrary::TryGetAnchorTransformByHandle(LocatedAnchor->GetHandle(), Pose, Flags) && Flags.IsValid());
+	// Read in tracking space, same as save (M3c D3). Independent of Pawn and head pose
+	if (!bLocated) { bLocated = ReadTrackingStage(LocatedAnchor.Get(), Stage); }
 	if (!bLocated) { bAnchorCandidate = false; return; }
-	// Owner includes Link head-space correction (M3a); cache Stage before moving Pawn
-	const FTransform Stage = AnchorWorld.GetRelativeTransform(AlignmentPawn->GetActorTransform());
 	// Link reports unsettled pose in first frames (L_Main read at +0.03 s was wrong, M3c).
 	// Use only after pose holds within tolerance of window start for AnchorStableSeconds
 	const double Now = GetWorld()->GetRealTimeSeconds();
