@@ -38,6 +38,8 @@ struct FM3bTestAccess
 		A->AnchorActorCreatedFrame = GFrameCounter - (bAfterCreation ? 1 : 0);
 		A->AdvanceAnchorDiscovery();
 	}
+	// Pretend current candidate pose has held for the whole window (M3c)
+	static void Settle(UVBoRVehicleAlignmentComponent* A) { A->AnchorStableSince -= A->AnchorStableSeconds + 1; }
 };
 
 namespace
@@ -203,8 +205,50 @@ bool FM3bActorPose::RunTest(const FString&)
 	TestTrue(TEXT("Untouched Actor cannot move Pawn"), W.Pawn->GetActorTransform().Equals(Before));
 	Actor->SetActorTransform(LocatedWorld);
 	FM3bTestAccess::Advance(W.A, true);
+	// M3c: first updated pose only starts the stable window
+	TestEqual(TEXT("Updated Actor waits for stable pose"), W.A->Reason, FString(TEXT("Finding anchor")));
+	FM3bTestAccess::Settle(W.A); FM3bTestAccess::Advance(W.A, true);
 	TestTrue(TEXT("Updated Actor applies the anchor"), W.A->State == EVBoRAlignmentState::Applied);
 	TestTrue(TEXT("Updated Actor gives the E3 compensation"), W.Pawn->GetActorTransform().Equals(Delta.Inverse(), 0.001));
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FM3cStablePose, "vBoR.M3c.StableAnchorPose", M3bFlags)
+bool FM3cStablePose::RunTest(const FString&)
+{
+	FM3bWorld W; const auto S = W.Value();
+	TArray<FString> Lines; W.A->OnPointRecord.AddLambda([&Lines](const FString& Line) { Lines.Add(Line); });
+	const FTransform Before(FVector(500,600,0)); W.Pawn->SetActorTransform(Before); W.Start(S, true);
+	AActor* Actor = W.World->SpawnActor<ATargetPoint>();
+	FM3bTestAccess::Located(W.A, Actor);
+	const FTransform Delta(FRotator(0,15,0), FVector(30,-20,0));
+	const FTransform LocatedWorld = S.AnchorStage * Delta * Before;
+
+	// Unsettled first pose 3 cm off, then the true pose: window restarts
+	Actor->SetActorTransform(FTransform(FVector(3,0,0)) * LocatedWorld);
+	FM3bTestAccess::Advance(W.A, true);
+	FM3bTestAccess::Settle(W.A);
+	Actor->SetActorTransform(LocatedWorld);
+	FM3bTestAccess::Advance(W.A, true);
+	TestEqual(TEXT("Pose change restarts window even after long wait"), W.A->Reason, FString(TEXT("Finding anchor")));
+	TestTrue(TEXT("Pawn held while unsettled"), W.Pawn->GetActorTransform().Equals(Before));
+
+	// Small jitter inside tolerance keeps window; no time passed yet
+	Actor->SetActorTransform(FTransform(FVector(0.2,0,0)) * LocatedWorld);
+	FM3bTestAccess::Advance(W.A, true);
+	TestEqual(TEXT("Waits until window passes"), W.A->Reason, FString(TEXT("Finding anchor")));
+
+	Actor->SetActorTransform(LocatedWorld);
+	FM3bTestAccess::Settle(W.A); FM3bTestAccess::Advance(W.A, true);
+	TestTrue(TEXT("Stable pose applies anchor"), W.A->State == EVBoRAlignmentState::Applied);
+	TestTrue(TEXT("Stable pose gives E3 compensation"), W.Pawn->GetActorTransform().Equals(Delta.Inverse(), 0.001));
+	const FString* Found = Lines.FindByPredicate([](const FString& L) { return L.StartsWith(TEXT("anchor found result=0")); });
+	TestNotNull(TEXT("Found line keeps old prefix"), Found);
+	if (Found)
+	{
+		TestTrue(TEXT("Pose change count logged"), Found->Contains(TEXT("pose changes 1")));
+		TestTrue(TEXT("Stage drift Yaw logged"), Found->Contains(TEXT("Yaw +15.00 deg")));
+	}
 	return true;
 }
 #endif
